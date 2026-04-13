@@ -9,24 +9,35 @@ export function OrderForm() {
   async function onSubmit(formData: FormData) {
     setLoading(true);
     setMessage("");
-    const payload = {
-      customerName: String(formData.get("customerName") || ""),
-      email: String(formData.get("email") || ""),
-      phone: String(formData.get("phone") || ""),
-      billingAddress: String(formData.get("billingAddress") || ""),
-      deliveryAddress: String(formData.get("deliveryAddress") || ""),
-      quantity: Number(formData.get("quantity") || 1),
-      paymentMethod: String(formData.get("paymentMethod") || "COD"),
-    };
+    try {
+      const payload = {
+        customerName: String(formData.get("customerName") || ""),
+        email: String(formData.get("email") || ""),
+        phone: String(formData.get("phone") || ""),
+        billingAddress: String(formData.get("billingAddress") || ""),
+        deliveryAddress: String(formData.get("deliveryAddress") || ""),
+        quantity: Number(formData.get("quantity") || 1),
+        paymentMethod: String(formData.get("paymentMethod") || "COD"),
+      };
 
-    const res = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    setMessage(data.message || "A aparut o eroare.");
-    setLoading(false);
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("invalid_response");
+      }
+
+      const data = await res.json();
+      setMessage(data.message || "A aparut o eroare.");
+    } catch {
+      setMessage("A aparut o eroare la trimiterea comenzii. Va rugam sa incercati din nou.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

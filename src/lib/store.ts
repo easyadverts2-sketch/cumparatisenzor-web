@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { Order, OrderStatus, Store } from "./types";
+import { sendEmail } from "./email";
 
 const storeFile = path.join(process.cwd(), "data", "store.json");
 
@@ -41,52 +42,72 @@ export async function createOrder(input: {
   quantity: number;
   paymentMethod: "COD" | "BANK_TRANSFER";
 }): Promise<{ ok: boolean; order?: Order; message: string }> {
-  const store = await readStore();
-  const shippingPrice = input.quantity >= 4 ? 0 : store.shipping;
-  const totalPrice = input.quantity * store.price + shippingPrice;
+  try {
+    const store = await readStore();
+    const shippingPrice = input.quantity >= 4 ? 0 : store.shipping;
+    const totalPrice = input.quantity * store.price + shippingPrice;
 
-  if (input.quantity > store.inventory) {
+    if (input.quantity > store.inventory) {
+      const subject = "Stoc indisponibil momentan";
+      const body =
+        "Momentan nu avem stoc suficient. Va vom contacta imediat ce produsul este disponibil din nou.";
+      store.notifications.unshift({
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        type: "OUT_OF_STOCK",
+        to: input.email,
+        subject,
+        body,
+      });
+      await sendEmail({ to: input.email, subject, text: body }).catch(() => undefined);
+      await writeStore(store);
+      return { ok: false, message: "Stoc insuficient. V-am trimis o informare." };
+    }
+
+    const order: Order = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      customerName: input.customerName,
+      email: input.email,
+      phone: input.phone,
+      billingAddress: input.billingAddress,
+      deliveryAddress: input.deliveryAddress,
+      quantity: input.quantity,
+      paymentMethod: input.paymentMethod,
+      shippingPrice,
+      itemPrice: store.price,
+      totalPrice,
+      status: input.paymentMethod === "BANK_TRANSFER" ? "ORDERED_NOT_PAID" : "WAITING_FOR_SHIPPING",
+    };
+
+    store.orders.unshift(order);
+
+    const subject = "Confirmare comanda FreeStyle Libre 2 Plus";
+    const body = `Comanda ${order.id} a fost inregistrata. Metoda plata: ${
+      input.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"
+    }. ${
+      input.paymentMethod === "BANK_TRANSFER"
+        ? "Plata trebuie confirmata in maximum 5 zile."
+        : "Comanda va fi procesata pentru expediere."
+    }`;
     store.notifications.unshift({
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      type: "OUT_OF_STOCK",
+      type: "ORDER_CONFIRMATION",
       to: input.email,
-      subject: "Stoc indisponibil momentan",
-      body: "Momentan nu avem stoc suficient. Va vom contacta imediat ce produsul este disponibil din nou.",
+      subject,
+      body,
     });
+    await sendEmail({ to: input.email, subject, text: body }).catch(() => undefined);
+
     await writeStore(store);
-    return { ok: false, message: "Stoc insuficient. V-am trimis o informare." };
+    return { ok: true, order, message: "Comanda a fost inregistrata." };
+  } catch {
+    return {
+      ok: false,
+      message: "Comanda nu a putut fi procesata momentan. Va rugam sa incercati din nou.",
+    };
   }
-
-  const order: Order = {
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    customerName: input.customerName,
-    email: input.email,
-    phone: input.phone,
-    billingAddress: input.billingAddress,
-    deliveryAddress: input.deliveryAddress,
-    quantity: input.quantity,
-    paymentMethod: input.paymentMethod,
-    shippingPrice,
-    itemPrice: store.price,
-    totalPrice,
-    status: input.paymentMethod === "BANK_TRANSFER" ? "ORDERED_NOT_PAID" : "WAITING_FOR_SHIPPING",
-  };
-
-  store.orders.unshift(order);
-
-  store.notifications.unshift({
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    type: "ORDER_CONFIRMATION",
-    to: input.email,
-    subject: "Confirmare comanda FreeStyle Libre 2 Plus",
-    body: `Comanda ${order.id} a fost inregistrata. Metoda plata: ${input.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"}.`,
-  });
-
-  await writeStore(store);
-  return { ok: true, order, message: "Comanda a fost inregistrata." };
 }
 
 export async function autoCancelExpiredOrders() {

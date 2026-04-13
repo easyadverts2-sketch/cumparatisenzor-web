@@ -1,7 +1,11 @@
 import { readStore, writeStore } from "@/lib/store";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { isAdminRequest } from "@/lib/admin-guard";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  if (!isAdminRequest(request)) {
+    return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
+  }
   const body = await request.json();
   const value = Number(body.inventory);
   if (!Number.isFinite(value) || value < 0) {

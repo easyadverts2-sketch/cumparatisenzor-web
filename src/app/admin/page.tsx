@@ -1,6 +1,8 @@
 import { autoCancelExpiredOrders, readStore, updateOrderStatus, writeStore } from "@/lib/store";
 import { ORDER_STATUSES } from "@/lib/types";
 import { revalidatePath } from "next/cache";
+import { clearAdminSessionCookie } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 async function updateStatus(formData: FormData) {
   "use server";
@@ -23,6 +25,12 @@ async function updateInventory(formData: FormData) {
   revalidatePath("/admin");
 }
 
+async function logoutAction() {
+  "use server";
+  clearAdminSessionCookie();
+  redirect("/admin/login");
+}
+
 export default async function AdminPage() {
   await autoCancelExpiredOrders();
   const store = await readStore();
@@ -30,6 +38,9 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-bold">Administrare comenzi</h1>
+      <form action={logoutAction} className="mt-3">
+        <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">Logout</button>
+      </form>
       <p className="mt-2">Stoc curent: {store.inventory} buc.</p>
 
       <form action={updateInventory} className="mt-4 flex max-w-sm gap-2">
