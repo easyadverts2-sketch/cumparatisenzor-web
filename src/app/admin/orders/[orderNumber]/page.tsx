@@ -1,4 +1,10 @@
-import { autoCancelExpiredOrders, getOrderByNumber, updateOrderStatus } from "@/lib/store";
+import {
+  autoCancelExpiredOrders,
+  formatPaymentMethodLabel,
+  formatShippingLine,
+  getOrderByNumber,
+  updateOrderStatus,
+} from "@/lib/store";
 import { ORDER_STATUSES, OrderStatus } from "@/lib/types";
 import { formatOrderNumber } from "@/lib/order-format";
 import { revalidatePath } from "next/cache";
@@ -66,8 +72,10 @@ export default async function AdminOrderDetailPage({
             <strong className="text-[#0a2624]">Cantitate:</strong> {order.quantity}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Plata:</strong>{" "}
-            {order.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"}
+            <strong className="text-[#0a2624]">Plata:</strong> {formatPaymentMethodLabel(order.paymentMethod)}
+          </p>
+          <p className="text-[#1a4d47]">
+            <strong className="text-[#0a2624]">Curier:</strong> {formatShippingLine(order)}
           </p>
           <p className="text-[#1a4d47]">
             <strong className="text-[#0a2624]">Total:</strong> {order.totalPrice} RON

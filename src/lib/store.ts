@@ -1,7 +1,8 @@
-import { Order, OrderStatus, Store } from "./types";
+import { Order, OrderStatus, ShippingCarrier, Store } from "./types";
 import { sendEmail } from "./email";
 import { getSql } from "./db";
 import { formatOrderNumber } from "./order-format";
+import { createStripeCheckoutSession, getStripe } from "./stripe-checkout";
 
 const defaults = {
   inventory: 98,
@@ -18,6 +19,12 @@ function toOrder(row: Row): Order {
     row.order_number !== undefined && row.order_number !== null
       ? Number(row.order_number)
       : 0;
+  const carrierRaw = row.shipping_carrier != null ? String(row.shipping_carrier) : "PPL";
+  const shippingCarrier = (
+    carrierRaw === "PPL" || carrierRaw === "PACKETA" || carrierRaw === "OTHER"
+      ? carrierRaw
+      : "PPL"
+  ) as ShippingCarrier;
   return {
     id: String(row.id),
     orderNumber: Number.isFinite(orderNumber) ? orderNumber : 0,
@@ -29,11 +36,29 @@ function toOrder(row: Row): Order {
     deliveryAddress: String(row.delivery_address),
     quantity: Number(row.quantity),
     paymentMethod: String(row.payment_method) as Order["paymentMethod"],
+    shippingCarrier,
+    shippingCarrierOther:
+      row.shipping_carrier_other != null && String(row.shipping_carrier_other).trim() !== ""
+        ? String(row.shipping_carrier_other)
+        : null,
     shippingPrice: Number(row.shipping_price),
     itemPrice: Number(row.item_price),
     totalPrice: Number(row.total_price),
     status: String(row.status) as OrderStatus,
   };
+}
+
+export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
+  if (pm === "COD") return "Ramburs";
+  if (pm === "BANK_TRANSFER") return "Transfer bancar";
+  return "Card (online)";
+}
+
+export function formatShippingLine(order: Pick<Order, "shippingCarrier" | "shippingCarrierOther">): string {
+  if (order.shippingCarrier === "PPL") return "PPL";
+  if (order.shippingCarrier === "PACKETA") return "Packeta";
+  const o = order.shippingCarrierOther?.trim();
+  return o ? `Alt curier: ${o}` : "Alt curier";
 }
 
 async function migrateOrderNumber(sql: SqlClient) {
@@ -55,6 +80,18 @@ async function migrateOrderNumber(sql: SqlClient) {
   await sql`alter table orders alter column order_number set default nextval('orders_number_seq')`;
   await sql`alter table orders alter column order_number set not null`;
   await sql`create unique index if not exists orders_order_number_unique on orders(order_number)`;
+}
+
+async function migrateShippingCarrier(sql: SqlClient) {
+  const col = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'shipping_carrier'
+  `;
+  if (col.length > 0) {
+    return;
+  }
+  await sql`alter table orders add column shipping_carrier text not null default 'PPL'`;
+  await sql`alter table orders add column shipping_carrier_other text`;
 }
 
 async function ensureSchema(sql: SqlClient) {
@@ -102,6 +139,7 @@ async function ensureSchema(sql: SqlClient) {
   `;
 
   await migrateOrderNumber(sql);
+  await migrateShippingCarrier(sql);
 }
 
 async function getSettingNumber(sql: SqlClient, key: string, fallback: number) {
@@ -159,16 +197,33 @@ export async function createOrder(input: {
   billingAddress: string;
   deliveryAddress: string;
   quantity: number;
-  paymentMethod: "COD" | "BANK_TRANSFER";
-}): Promise<{ ok: boolean; order?: Order; message: string }> {
+  paymentMethod: Order["paymentMethod"];
+  shippingCarrier: ShippingCarrier;
+  shippingCarrierOther?: string | null;
+  appBaseUrl?: string;
+}): Promise<{ ok: boolean; order?: Order; message: string; checkoutUrl?: string }> {
   try {
     const sql = getSql();
     await ensureSchema(sql);
+
+    if (input.paymentMethod === "CARD_STRIPE" && !getStripe()) {
+      return {
+        ok: false,
+        message:
+          "Plata cu cardul nu este activata pe server. Alegeti alta metoda sau incercati mai tarziu.",
+      };
+    }
+
     const inventory = await getSettingNumber(sql, "inventory", defaults.inventory);
     const price = await getSettingNumber(sql, "price", defaults.price);
     const shipping = await getSettingNumber(sql, "shipping", defaults.shipping);
     const shippingPrice = input.quantity >= 4 ? 0 : shipping;
     const totalPrice = input.quantity * price + shippingPrice;
+
+    const carrierOther =
+      input.shippingCarrier === "OTHER"
+        ? (input.shippingCarrierOther?.trim() || null)
+        : null;
 
     if (input.quantity > inventory) {
       const subject = "Stoc indisponibil momentan";
@@ -184,17 +239,21 @@ export async function createOrder(input: {
 
     const orderId = crypto.randomUUID();
     const status: OrderStatus =
-      input.paymentMethod === "BANK_TRANSFER" ? "ORDERED_NOT_PAID" : "WAITING_FOR_SHIPPING";
+      input.paymentMethod === "BANK_TRANSFER" || input.paymentMethod === "CARD_STRIPE"
+        ? "ORDERED_NOT_PAID"
+        : "WAITING_FOR_SHIPPING";
 
     const inserted = await sql`
       insert into orders (
         id, customer_name, email, phone, billing_address, delivery_address,
-        quantity, payment_method, shipping_price, item_price, total_price, status
+        quantity, payment_method, shipping_price, item_price, total_price, status,
+        shipping_carrier, shipping_carrier_other
       ) values (
         ${orderId}, ${input.customerName}, ${input.email}, ${input.phone},
         ${input.billingAddress}, ${input.deliveryAddress},
         ${input.quantity}, ${input.paymentMethod}, ${shippingPrice},
-        ${price}, ${totalPrice}, ${status}
+        ${price}, ${totalPrice}, ${status},
+        ${input.shippingCarrier}, ${carrierOther}
       )
       returning *
     `;
@@ -202,13 +261,15 @@ export async function createOrder(input: {
 
     const nr = formatOrderNumber(order.orderNumber);
     const subject = "Confirmare comanda FreeStyle Libre 2 Plus";
-    const body = `Comanda #${nr} a fost inregistrata. Metoda plata: ${
-      input.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"
-    }. ${
+    const payHint =
       input.paymentMethod === "BANK_TRANSFER"
         ? "Plata trebuie confirmata in maximum 5 zile."
-        : "Comanda va fi procesata pentru expediere."
-    }`;
+        : input.paymentMethod === "CARD_STRIPE"
+          ? "Urmeaza sa fiti redirectionat catre plata securizata cu cardul. Daca inchideti pagina inainte de plata, comanda ramane in asteptare."
+          : "Comanda va fi procesata pentru expediere.";
+    const body = `Comanda #${nr} a fost inregistrata. Metoda plata: ${formatPaymentMethodLabel(
+      input.paymentMethod
+    )}. Curier / livrare: ${formatShippingLine(order)}. ${payHint}`;
     await sql`
       insert into notifications (id, type, recipient, subject, body)
       values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${subject}, ${body})
@@ -223,8 +284,9 @@ export async function createOrder(input: {
         `Email: ${order.email}`,
         `Telefon: ${order.phone}`,
         `Cantitate: ${order.quantity}`,
+        `Livrare: ${formatShippingLine(order)}`,
         `Total: ${order.totalPrice} RON`,
-        `Plata: ${input.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"}`,
+        `Plata: ${formatPaymentMethodLabel(input.paymentMethod)}`,
         `Status: ${order.status}`,
       ].join("\n");
       await sendEmail({
@@ -234,7 +296,21 @@ export async function createOrder(input: {
       }).catch(() => undefined);
     }
 
-    return { ok: true, order, message: "Comanda a fost inregistrata." };
+    let checkoutUrl: string | undefined;
+    if (input.paymentMethod === "CARD_STRIPE") {
+      const url = await createStripeCheckoutSession(order, input.appBaseUrl);
+      if (!url) {
+        return {
+          ok: false,
+          order,
+          message:
+            "Comanda a fost inregistrata, dar sesiunea de plata nu s-a putut crea. Va rugam sa ne contactati cu numarul comenzii.",
+        };
+      }
+      checkoutUrl = url;
+    }
+
+    return { ok: true, order, message: "Comanda a fost inregistrata.", checkoutUrl };
   } catch {
     return {
       ok: false,
@@ -249,7 +325,7 @@ export async function autoCancelExpiredOrders() {
   await sql`
     update orders
     set status = 'CANCELLED_BY_US'
-    where payment_method = 'BANK_TRANSFER'
+    where payment_method in ('BANK_TRANSFER', 'CARD_STRIPE')
       and status = 'ORDERED_NOT_PAID'
       and created_at < now() - interval '5 days'
   `;
@@ -262,6 +338,16 @@ export async function getOrderByNumber(orderNumber: number): Promise<Order | nul
     return null;
   }
   const rows = await sql`select * from orders where order_number = ${orderNumber} limit 1`;
+  if (rows.length === 0) {
+    return null;
+  }
+  return toOrder(rows[0] as unknown as Row);
+}
+
+export async function getOrderById(orderId: string): Promise<Order | null> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql`select * from orders where id = ${orderId} limit 1`;
   if (rows.length === 0) {
     return null;
   }
@@ -281,11 +367,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     const invRows = await tx`select value from app_settings where key = 'inventory' limit 1`;
     const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
 
-    if (
-      status === "ORDERED_PAID_NOT_SHIPPED" &&
-      order.paymentMethod === "BANK_TRANSFER" &&
-      order.status === "ORDERED_NOT_PAID"
-    ) {
+    const prepaid =
+      order.paymentMethod === "BANK_TRANSFER" || order.paymentMethod === "CARD_STRIPE";
+    if (status === "ORDERED_PAID_NOT_SHIPPED" && prepaid && order.status === "ORDERED_NOT_PAID") {
       if (inventory < order.quantity) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;

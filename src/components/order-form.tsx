@@ -2,24 +2,46 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { PaymentMethod } from "@/lib/types";
+import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 
 type ApiOk = {
   ok: true;
   message?: string;
   orderId: string;
   orderNumber: number;
-  paymentMethod: "COD" | "BANK_TRANSFER";
+  paymentMethod: PaymentMethod;
+  checkoutUrl?: string;
 };
+
+function parsePaymentMethod(raw: string): PaymentMethod {
+  if (raw === "BANK_TRANSFER") return "BANK_TRANSFER";
+  if (raw === "CARD_STRIPE") return "CARD_STRIPE";
+  return "COD";
+}
+
+function parseShippingCarrier(raw: string): ShippingCarrier {
+  const u = raw.toUpperCase();
+  if (u === "PPL" || u === "PACKETA" || u === "OTHER") {
+    return u;
+  }
+  return "PPL";
+}
 
 export function OrderForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [carrier, setCarrier] = useState<ShippingCarrier>("PPL");
 
   async function onSubmit(formData: FormData) {
     setLoading(true);
     setError("");
     try {
+      const shippingCarrier = parseShippingCarrier(String(formData.get("shippingCarrier") || "PPL"));
+      const shippingCarrierOther =
+        shippingCarrier === "OTHER" ? String(formData.get("shippingCarrierOther") || "").trim() : "";
+
       const payload = {
         customerName: String(formData.get("customerName") || ""),
         email: String(formData.get("email") || ""),
@@ -27,7 +49,9 @@ export function OrderForm() {
         billingAddress: String(formData.get("billingAddress") || ""),
         deliveryAddress: String(formData.get("deliveryAddress") || ""),
         quantity: Number(formData.get("quantity") || 1),
-        paymentMethod: String(formData.get("paymentMethod") || "COD"),
+        paymentMethod: parsePaymentMethod(String(formData.get("paymentMethod") || "COD")),
+        shippingCarrier,
+        shippingCarrierOther: shippingCarrier === "OTHER" ? shippingCarrierOther : "",
       };
 
       const res = await fetch("/api/orders", {
@@ -41,13 +65,19 @@ export function OrderForm() {
         throw new Error("invalid_response");
       }
 
-      const data = (await res.json()) as ApiOk | { ok: false; message?: string };
+      const data = (await res.json()) as ApiOk | { ok: false; message?: string; checkoutUrl?: string };
       if (!data.ok || !("orderNumber" in data)) {
         setError(data.message || "A aparut o eroare.");
         return;
       }
 
       const nr = String(data.orderNumber);
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
       if (data.paymentMethod === "BANK_TRANSFER") {
         router.push(`/comanda/plata?nr=${encodeURIComponent(nr)}`);
       } else {
@@ -75,9 +105,10 @@ export function OrderForm() {
         <h3 className="text-lg font-semibold text-[#0a2624]">Metoda de plata</h3>
         <p className="mt-1 text-sm text-[#1a4d47]">
           Alegeti cum doriti sa platiti. La ramburs platiti curierului la livrare. La transfer
-          bancar, expedem dupa ce plata este inregistrata in contul nostru.
+          bancar, expedem dupa ce plata este inregistrata. La card, veti fi redirectionat catre o
+          pagina securizata (Stripe) dupa trimiterea comenzii.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
             <input
               type="radio"
@@ -89,7 +120,7 @@ export function OrderForm() {
             <span>
               <span className="font-semibold text-[#0a2624]">Ramburs (la livrare)</span>
               <span className="mt-1 block text-sm text-[#1a4d47]">
-                Platiti curierului cand primiti coletul. Comanda intra in procesare imediat.
+                Platiti curierului cand primiti coletul.
               </span>
             </span>
           </label>
@@ -98,12 +129,68 @@ export function OrderForm() {
             <span>
               <span className="font-semibold text-[#0a2624]">Transfer bancar</span>
               <span className="mt-1 block text-sm text-[#1a4d47]">
-                Expediem dupa ce primim plata. Detaliile de plata le vedeti dupa trimiterea
-                formularului si in e-mail.
+                Expediem dupa ce primim plata in cont.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
+            <input type="radio" name="paymentMethod" value="CARD_STRIPE" className="mt-1 accent-[#0d9488]" />
+            <span>
+              <span className="font-semibold text-[#0a2624]">Card bancar</span>
+              <span className="mt-1 block text-sm text-[#1a4d47]">
+                Plata online securizata (Stripe). Disponibil cand serviciul este activat.
               </span>
             </span>
           </label>
         </div>
+      </div>
+
+      <div className="md:col-span-2">
+        <h3 className="text-lg font-semibold text-[#0a2624]">Curier / livrare</h3>
+        <p className="mt-1 text-sm text-[#1a4d47]">
+          Selectati firma de curierat. Lista poate fi extinsa ulterior cu alti parteneri.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {SHIPPING_CARRIERS.map((c) => (
+            <label
+              key={c}
+              className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]"
+            >
+              <input
+                type="radio"
+                name="shippingCarrier"
+                value={c}
+                checked={carrier === c}
+                onChange={() => setCarrier(c)}
+                className="mt-1 accent-[#0d9488]"
+              />
+              <span>
+                <span className="font-semibold text-[#0a2624]">
+                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "Packeta" : "Alt curier"}
+                </span>
+                {c === "OTHER" ? (
+                  <span className="mt-1 block text-sm text-[#1a4d47]">
+                    Specificati numele curierului mai jos (ex. GLS, DPD, Fan Courier).
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-sm text-[#1a4d47]">
+                    {c === "PPL" ? "Livrare prin reteaua PPL." : "Livrare prin puncte Packeta / Z-Box etc."}
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+        {carrier === "OTHER" ? (
+          <input
+            name="shippingCarrierOther"
+            placeholder="Nume curier sau detalii livrare"
+            required
+            className="mt-4 w-full rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
+          />
+        ) : (
+          <input type="hidden" name="shippingCarrierOther" value="" />
+        )}
       </div>
 
       <input
