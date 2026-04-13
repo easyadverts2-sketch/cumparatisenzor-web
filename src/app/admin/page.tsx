@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { clearAdminSessionCookie } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 async function updateStatus(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");

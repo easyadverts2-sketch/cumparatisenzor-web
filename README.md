@@ -14,6 +14,7 @@ Set at least:
 
 - `ADMIN_PASSWORD`
 - `ADMIN_SESSION_SECRET`
+- `DATABASE_URL`
 
 Run development server:
 
