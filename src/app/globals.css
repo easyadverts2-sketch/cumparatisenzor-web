@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-[#f0fdf9] text-[#0a2624] antialiased;
 }
 a {
-  @apply text-emerald-700 hover:text-emerald-800;
+  @apply text-[#0f766e] underline-offset-2 hover:text-[#115e59];
 }

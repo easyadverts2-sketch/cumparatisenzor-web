@@ -18,24 +18,37 @@ export default function RootLayout({
   return (
     <html lang="ro">
       <body className={inter.className}>
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <Link href="/" className="text-lg font-semibold text-emerald-700">
+        <header className="border-b-2 border-[#0d9488]/20 bg-[#042f2c] text-white shadow-md">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+            <Link href="/" className="text-lg font-bold tracking-tight text-white no-underline hover:text-[#a7f3d0]">
               Senzori Libre Romania
             </Link>
-            <nav className="flex gap-4 text-sm">
-              <Link href="/despre-libre">Despre Libre 2 Plus</Link>
-              <Link href="/despre-noi">Despre noi</Link>
-              <Link href="/termeni-si-conditii">Termeni</Link>
-              <Link href="/gdpr">GDPR</Link>
-              <Link href="/admin">Admin</Link>
+            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium">
+              <Link href="/despre-libre" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+                Despre Libre 2 Plus
+              </Link>
+              <Link href="/despre-noi" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+                Despre noi
+              </Link>
+              <Link href="/comanda" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+                Comanda
+              </Link>
+              <Link href="/termeni-si-conditii" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+                Termeni
+              </Link>
+              <Link href="/gdpr" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+                GDPR
+              </Link>
+              <Link href="/admin" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+                Admin
+              </Link>
             </nav>
           </div>
         </header>
         {children}
-        <footer className="mt-16 border-t border-slate-200 bg-white">
-          <div className="mx-auto max-w-6xl px-6 py-8 text-sm text-slate-600">
-            <p>Operator magazin: Česká maloobchodní s.r.o.</p>
+        <footer className="mt-16 border-t-2 border-[#0d9488]/20 bg-[#042f2c] text-white">
+          <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#d1fae5]">
+            <p className="font-medium text-white">Operator magazin: Česká maloobchodní s.r.o.</p>
             <p>Adresa: Braunerova 563/7, Libeň (Praha 8), 180 00 Praha</p>
             <p>ID: 23504463</p>
           </div>

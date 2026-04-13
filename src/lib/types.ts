@@ -14,6 +14,8 @@ export type PaymentMethod = "COD" | "BANK_TRANSFER";
 
 export type Order = {
   id: string;
+  /** Numar afisat clientului, ex. 0000001 */
+  orderNumber: number;
   createdAt: string;
   customerName: string;
   email: string;

@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const store = await readStore();
 
   const header = [
+    "order_number",
     "order_id",
     "created_at",
     "name",
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
     "delivery_address",
   ];
   const rows = store.orders.map((o) => [
+    String(o.orderNumber).padStart(7, "0"),
     o.id,
     o.createdAt,
     o.customerName,

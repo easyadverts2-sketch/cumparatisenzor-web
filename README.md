@@ -45,3 +45,14 @@ If SMTP is not configured, order notifications are stored in admin but not sent 
 
 - Deploy on Vercel
 - Add environment variables from `.env.example`
+
+## DNS stabil (site-ul sa nu „pice” pe hosting gol)
+
+- **Nu** setati `A @` catre IP-ul de shared hosting (ex. pagina „Index of /”) daca site-ul este pe Vercel.
+- Pentru web: `A @ -> 76.76.21.21` **sau** inregistrari `ALIAS`/`CNAME` conform Vercel pentru domeniu.
+- Pentru e-mail: pastrati `MX` catre serverul de mail (ex. `mail.domeniu`) si `A mail -> IP mail` — **fara** a suprascrie `A @` cu IP-ul de mail.
+- Evitati schimbarea nameserverilor inainte si dupa: alegeti **fie** NS Vercel **fie** NS la registrar si editati doar zona DNS, dar **nu le schimbati des**.
+
+## Numar comanda
+
+- Comenzile au numar secvential afisat (ex. `0000001`), stocat in coloana `order_number`.

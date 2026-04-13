@@ -1,6 +1,7 @@
 import { Order, OrderStatus, Store } from "./types";
 import { sendEmail } from "./email";
 import { getSql } from "./db";
+import { formatOrderNumber } from "./order-format";
 
 const defaults = {
   inventory: 98,
@@ -13,8 +14,13 @@ type Row = Record<string, unknown>;
 type SqlClient = ReturnType<typeof getSql>;
 
 function toOrder(row: Row): Order {
+  const orderNumber =
+    row.order_number !== undefined && row.order_number !== null
+      ? Number(row.order_number)
+      : 0;
   return {
     id: String(row.id),
+    orderNumber: Number.isFinite(orderNumber) ? orderNumber : 0,
     createdAt: new Date(String(row.created_at)).toISOString(),
     customerName: String(row.customer_name),
     email: String(row.email),
@@ -28,6 +34,27 @@ function toOrder(row: Row): Order {
     totalPrice: Number(row.total_price),
     status: String(row.status) as OrderStatus,
   };
+}
+
+async function migrateOrderNumber(sql: SqlClient) {
+  const col = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'order_number'
+  `;
+  if (col.length > 0) {
+    return;
+  }
+  await sql`alter table orders add column order_number integer`;
+  await sql`
+    update orders o set order_number = r.rn from (
+      select id, row_number() over (order by created_at asc)::int as rn from orders
+    ) r where o.id = r.id
+  `;
+  await sql`create sequence if not exists orders_number_seq`;
+  await sql`select setval('orders_number_seq', coalesce((select max(order_number) from orders), 0)::bigint)`;
+  await sql`alter table orders alter column order_number set default nextval('orders_number_seq')`;
+  await sql`alter table orders alter column order_number set not null`;
+  await sql`create unique index if not exists orders_order_number_unique on orders(order_number)`;
 }
 
 async function ensureSchema(sql: SqlClient) {
@@ -73,6 +100,8 @@ async function ensureSchema(sql: SqlClient) {
       ('shipping', ${String(defaults.shipping)})
     on conflict (key) do nothing
   `;
+
+  await migrateOrderNumber(sql);
 }
 
 async function getSettingNumber(sql: SqlClient, key: string, fallback: number) {
@@ -153,35 +182,27 @@ export async function createOrder(input: {
       return { ok: false, message: "Stoc insuficient. V-am trimis o informare." };
     }
 
-    const order: Order = {
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      customerName: input.customerName,
-      email: input.email,
-      phone: input.phone,
-      billingAddress: input.billingAddress,
-      deliveryAddress: input.deliveryAddress,
-      quantity: input.quantity,
-      paymentMethod: input.paymentMethod,
-      shippingPrice,
-      itemPrice: price,
-      totalPrice,
-      status: input.paymentMethod === "BANK_TRANSFER" ? "ORDERED_NOT_PAID" : "WAITING_FOR_SHIPPING",
-    };
-    await sql`
+    const orderId = crypto.randomUUID();
+    const status: OrderStatus =
+      input.paymentMethod === "BANK_TRANSFER" ? "ORDERED_NOT_PAID" : "WAITING_FOR_SHIPPING";
+
+    const inserted = await sql`
       insert into orders (
         id, customer_name, email, phone, billing_address, delivery_address,
         quantity, payment_method, shipping_price, item_price, total_price, status
       ) values (
-        ${order.id}, ${order.customerName}, ${order.email}, ${order.phone},
-        ${order.billingAddress}, ${order.deliveryAddress},
-        ${order.quantity}, ${order.paymentMethod}, ${order.shippingPrice},
-        ${order.itemPrice}, ${order.totalPrice}, ${order.status}
+        ${orderId}, ${input.customerName}, ${input.email}, ${input.phone},
+        ${input.billingAddress}, ${input.deliveryAddress},
+        ${input.quantity}, ${input.paymentMethod}, ${shippingPrice},
+        ${price}, ${totalPrice}, ${status}
       )
+      returning *
     `;
+    const order = toOrder(inserted[0] as unknown as Row);
 
+    const nr = formatOrderNumber(order.orderNumber);
     const subject = "Confirmare comanda FreeStyle Libre 2 Plus";
-    const body = `Comanda ${order.id} a fost inregistrata. Metoda plata: ${
+    const body = `Comanda #${nr} a fost inregistrata. Metoda plata: ${
       input.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"
     }. ${
       input.paymentMethod === "BANK_TRANSFER"
@@ -193,6 +214,26 @@ export async function createOrder(input: {
       values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${subject}, ${body})
     `;
     await sendEmail({ to: input.email, subject, text: body }).catch(() => undefined);
+
+    const internal = process.env.INTERNAL_ORDER_EMAIL;
+    if (internal) {
+      const internalText = [
+        `Comanda noua #${nr}`,
+        `Client: ${order.customerName}`,
+        `Email: ${order.email}`,
+        `Telefon: ${order.phone}`,
+        `Cantitate: ${order.quantity}`,
+        `Total: ${order.totalPrice} RON`,
+        `Plata: ${input.paymentMethod === "COD" ? "Ramburs" : "Transfer bancar"}`,
+        `Status: ${order.status}`,
+      ].join("\n");
+      await sendEmail({
+        to: internal,
+        subject: `Comanda noua #${nr} - cumparatisenzor.ro`,
+        text: internalText,
+      }).catch(() => undefined);
+    }
+
     return { ok: true, order, message: "Comanda a fost inregistrata." };
   } catch {
     return {
@@ -212,6 +253,19 @@ export async function autoCancelExpiredOrders() {
       and status = 'ORDERED_NOT_PAID'
       and created_at < now() - interval '5 days'
   `;
+}
+
+export async function getOrderByNumber(orderNumber: number): Promise<Order | null> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  if (!Number.isFinite(orderNumber) || orderNumber < 1) {
+    return null;
+  }
+  const rows = await sql`select * from orders where order_number = ${orderNumber} limit 1`;
+  if (rows.length === 0) {
+    return null;
+  }
+  return toOrder(rows[0] as unknown as Row);
 }
 
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {

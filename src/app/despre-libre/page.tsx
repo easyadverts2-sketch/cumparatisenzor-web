@@ -1,19 +1,30 @@
 export default function DespreLibrePage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-3xl font-bold">Despre FreeStyle Libre 2 Plus</h1>
-      <p className="mt-4 text-slate-700">
-        FreeStyle Libre 2 Plus este un sistem de monitorizare continua a glucozei (CGM), cu
-        senzori purtati pe brat si posibilitate de alerte pentru valori ridicate sau scazute.
+    <main className="mx-auto max-w-4xl px-6 py-14">
+      <h1 className="text-4xl font-bold text-[#042f2c]">Despre FreeStyle Libre 2 Plus</h1>
+      <p className="mt-4 text-lg leading-relaxed text-[#14534d]">
+        FreeStyle Libre 2 Plus este un sistem de monitorizare continua a glucozei (CGM): purtati un senzor pe
+        brat si puteti vedea valorile pe telefon (compatibil) sau pe cititorul dedicat. Senzorul poate fi purtat
+        pana la aproximativ <strong className="text-[#042f2c]">15 zile</strong>, oferind o imagine mai clara a
+        evolutiei glicemiei decat masuratorile ocazionale in deget.
       </p>
-      <ul className="mt-4 list-disc space-y-2 pl-5 text-slate-700">
-        <li>Monitorizare usoara pe parcursul intregii zile.</li>
-        <li>Vizualizare tendinte ale glucozei in timp.</li>
-        <li>Ajuta la decizii mai rapide privind rutina zilnica.</li>
+      <ul className="mt-6 space-y-2 text-[#14534d]">
+        <li className="flex gap-2">
+          <span className="text-[#0d9488]">•</span>
+          Monitorizare pe parcursul zilei, cu tendinte si istoric in aplicatie.
+        </li>
+        <li className="flex gap-2">
+          <span className="text-[#0d9488]">•</span>
+          Alerte optionale pentru valori prea mari sau prea mici (conform setarilor).
+        </li>
+        <li className="flex gap-2">
+          <span className="text-[#0d9488]">•</span>
+          Consultati mereu medicul pentru interpretarea datelor si tratament.
+        </li>
       </ul>
 
-      <h2 className="mt-10 text-2xl font-semibold">Video explicativ</h2>
-      <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-black">
+      <h2 className="mt-12 text-2xl font-semibold text-[#042f2c]">Video explicativ</h2>
+      <div className="mt-4 overflow-hidden rounded-2xl border-2 border-[#0d9488]/25 bg-black shadow-lg">
         <iframe
           width="100%"
           height="460"
@@ -21,15 +32,18 @@ export default function DespreLibrePage() {
           title="FreeStyle Libre 2 Plus"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
+          className="aspect-video w-full"
         />
       </div>
 
-      <h2 className="mt-10 text-2xl font-semibold">Instructiuni produs (PDF)</h2>
-      <p className="mt-2 text-slate-700">
-        Descarca ghidul oficial:
-        {" "}
-        <a href="https://www.freestyle.abbott/content/dam/adc/freestyle/ie/documents/legacy/ADC-54128_RUM_WEB_Foreign_Language_LP_Digital_(1).pdf">
-          leaflet FreeStyle Libre 2 Plus
+      <h2 className="mt-12 text-2xl font-semibold text-[#042f2c]">Instructiuni produs (PDF)</h2>
+      <p className="mt-2 text-[#14534d]">
+        Descarcati ghidul oficial:{" "}
+        <a
+          href="https://www.freestyle.abbott/content/dam/adc/freestyle/ie/documents/legacy/ADC-54128_RUM_WEB_Foreign_Language_LP_Digital_(1).pdf"
+          className="font-semibold text-[#0f766e] underline"
+        >
+          leaflet FreeStyle Libre 2 Plus (PDF)
         </a>
       </p>
     </main>
