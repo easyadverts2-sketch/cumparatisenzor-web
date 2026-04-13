@@ -1,9 +1,27 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { JsonLdSite } from "@/components/json-ld-site";
+import { SEO_DEFAULT_DESCRIPTION, SITE_NAME } from "@/lib/seo-config";
+import { getPublicSiteUrl } from "@/lib/site-url";
+
+const homeUrl = getPublicSiteUrl();
+
+export const metadata: Metadata = {
+  title: { absolute: `${SITE_NAME} — FreeStyle Libre 2 Plus · Livrare in Romania` },
+  description: SEO_DEFAULT_DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    url: homeUrl,
+    title: SITE_NAME,
+    description: SEO_DEFAULT_DESCRIPTION,
+  },
+};
 
 export default function Home() {
   return (
     <main className="pb-20">
+      <JsonLdSite />
       <section className="relative overflow-hidden bg-gradient-to-br from-[#042f2c] via-[#0a5c52] to-[#0d9488] text-white">
         <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.06\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-40" />
         <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2 lg:items-center lg:py-20">

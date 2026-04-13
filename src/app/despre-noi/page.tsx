@@ -1,4 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { SITE_NAME } from "@/lib/seo-config";
+import { getPublicSiteUrl } from "@/lib/site-url";
+
+export const metadata: Metadata = {
+  title: "Despre noi — echipa din comunitate",
+  description:
+    "Cine suntem: o echipa apropiata comunitatii cu diabet din Romania. Magazin pentru senzori FreeStyle Libre 2 Plus.",
+  alternates: { canonical: "/despre-noi" },
+  openGraph: {
+    url: `${getPublicSiteUrl()}/despre-noi`,
+    title: `Despre noi | ${SITE_NAME}`,
+    description: "O echipa din comunitate, pentru comunitate — livrare senzori Libre in Romania.",
+  },
+};
 
 export default function DespreNoiPage() {
   return (

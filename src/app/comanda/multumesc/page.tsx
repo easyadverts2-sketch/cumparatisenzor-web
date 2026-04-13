@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { NOINDEX_PAGE } from "@/lib/seo-config";
 
-export const metadata = {
-  title: "Multumim | Senzori Libre Romania",
+export const metadata: Metadata = {
+  title: "Multumim pentru comanda",
+  robots: NOINDEX_PAGE,
 };
 
 export default function MultumescPage({

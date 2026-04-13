@@ -1,3 +1,19 @@
+import type { Metadata } from "next";
+import { SITE_NAME } from "@/lib/seo-config";
+import { getPublicSiteUrl } from "@/lib/site-url";
+
+export const metadata: Metadata = {
+  title: "Politica de confidentialitate (GDPR)",
+  description:
+    "Prelucrarea datelor personale la cumparatisenzor.ro: operator, drepturi, contact conform GDPR.",
+  alternates: { canonical: "/gdpr" },
+  openGraph: {
+    url: `${getPublicSiteUrl()}/gdpr`,
+    title: `GDPR | ${SITE_NAME}`,
+    description: "Politica de confidentialitate si prelucrare date personale.",
+  },
+};
+
 export default function GdprPage() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-14">

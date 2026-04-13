@@ -1,9 +1,20 @@
+import type { Metadata } from "next";
 import { OrderForm } from "@/components/order-form";
 import Image from "next/image";
 import Link from "next/link";
+import { SITE_NAME } from "@/lib/seo-config";
+import { getPublicSiteUrl } from "@/lib/site-url";
 
-export const metadata = {
-  title: "Comanda | Senzori Libre Romania",
+export const metadata: Metadata = {
+  title: "Comanda online",
+  description:
+    "Comanda senzor FreeStyle Libre 2 Plus: pret 350 RON, livrare in Romania, plata ramburs, transfer sau card.",
+  alternates: { canonical: "/comanda" },
+  openGraph: {
+    url: `${getPublicSiteUrl()}/comanda`,
+    title: `Comanda FreeStyle Libre 2 Plus | ${SITE_NAME}`,
+    description: "Formular comanda — pret, livrare, metode de plata.",
+  },
 };
 
 export default function ComandaPage() {

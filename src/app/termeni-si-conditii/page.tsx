@@ -1,3 +1,19 @@
+import type { Metadata } from "next";
+import { SITE_NAME } from "@/lib/seo-config";
+import { getPublicSiteUrl } from "@/lib/site-url";
+
+export const metadata: Metadata = {
+  title: "Termeni si conditii",
+  description:
+    "Termeni si conditii de utilizare a magazinului online Senzori Libre Romania, livrare si plata.",
+  alternates: { canonical: "/termeni-si-conditii" },
+  openGraph: {
+    url: `${getPublicSiteUrl()}/termeni-si-conditii`,
+    title: `Termeni si conditii | ${SITE_NAME}`,
+    description: "Conditii comerciale si utilizare site.",
+  },
+};
+
 export default function TermeniPage() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-14">

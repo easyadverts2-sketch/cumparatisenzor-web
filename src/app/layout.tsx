@@ -1,16 +1,58 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { HeaderContactInline } from "@/components/header-contact-inline";
 import { SiteContactBar } from "@/components/site-contact-bar";
+import { SEO_DEFAULT_DESCRIPTION, SEO_DEFAULT_OG_IMAGE_PATH, SITE_NAME } from "@/lib/seo-config";
+import { getMetadataBase, getPublicSiteUrl } from "@/lib/site-url";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const siteUrl = getPublicSiteUrl();
+const ogImageUrl = `${siteUrl}${SEO_DEFAULT_OG_IMAGE_PATH}`;
+
 export const metadata: Metadata = {
-  title: "Senzori Libre Romania",
-  description: "Magazin pentru FreeStyle Libre 2 Plus in Romania",
+  metadataBase: getMetadataBase(),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SEO_DEFAULT_DESCRIPTION,
+  applicationName: SITE_NAME,
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  openGraph: {
+    type: "website",
+    locale: "ro_RO",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SEO_DEFAULT_DESCRIPTION,
+    images: [
+      {
+        url: SEO_DEFAULT_OG_IMAGE_PATH,
+        width: 1200,
+        height: 630,
+        alt: `${SITE_NAME} — FreeStyle Libre 2 Plus`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SEO_DEFAULT_DESCRIPTION,
+    images: [ogImageUrl],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#042f2c",
 };
 
 export default function RootLayout({

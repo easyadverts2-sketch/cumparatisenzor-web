@@ -1,3 +1,20 @@
+import type { Metadata } from "next";
+import { SITE_NAME } from "@/lib/seo-config";
+import { getPublicSiteUrl } from "@/lib/site-url";
+
+export const metadata: Metadata = {
+  title: "FreeStyle Libre 2 Plus — CGM, 15 zile",
+  description:
+    "Ce este FreeStyle Libre 2 Plus: monitorizare continua a glucozei (CGM), alarme, aplicatie. Informatii pentru pacienti din Romania.",
+  alternates: { canonical: "/despre-libre" },
+  openGraph: {
+    url: `${getPublicSiteUrl()}/despre-libre`,
+    title: `FreeStyle Libre 2 Plus | ${SITE_NAME}`,
+    description:
+      "Sistem CGM purtat pe brat, valori pe telefon sau cititor, pana la aproximativ 15 zile de utilizare.",
+  },
+};
+
 export default function DespreLibrePage() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-14">
