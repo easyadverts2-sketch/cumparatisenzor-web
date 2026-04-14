@@ -2,7 +2,7 @@ import { Order, OrderStatus, ShippingCarrier, Store } from "./types";
 import { sendEmail } from "./email";
 import { getSql } from "./db";
 import { formatOrderNumber } from "./order-format";
-import { createStripeCheckoutSession, getStripe } from "./stripe-checkout";
+import { getStripe } from "./stripe-checkout";
 
 const defaults = {
   inventory: 98,
@@ -204,8 +204,7 @@ export async function createOrder(input: {
   paymentMethod: Order["paymentMethod"];
   shippingCarrier: ShippingCarrier;
   shippingCarrierOther?: string | null;
-  appBaseUrl?: string;
-}): Promise<{ ok: boolean; order?: Order; message: string; checkoutUrl?: string }> {
+}): Promise<{ ok: boolean; order?: Order; message: string }> {
   try {
     const sql = getSql();
     await ensureSchema(sql);
@@ -307,21 +306,7 @@ export async function createOrder(input: {
       }).catch(() => undefined);
     }
 
-    let checkoutUrl: string | undefined;
-    if (input.paymentMethod === "CARD_STRIPE") {
-      const url = await createStripeCheckoutSession(order, input.appBaseUrl);
-      if (!url) {
-        return {
-          ok: false,
-          order,
-          message:
-            "Comanda a fost inregistrata, dar sesiunea de plata nu s-a putut crea. Va rugam sa ne contactati cu numarul comenzii.",
-        };
-      }
-      checkoutUrl = url;
-    }
-
-    return { ok: true, order, message: "Comanda a fost inregistrata.", checkoutUrl };
+    return { ok: true, order, message: "Comanda a fost inregistrata." };
   } catch {
     return {
       ok: false,

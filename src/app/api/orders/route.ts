@@ -3,19 +3,6 @@ import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 import type { Order } from "@/lib/types";
 import { NextResponse } from "next/server";
 
-function resolveAppBaseUrl(request: Request): string | undefined {
-  const env = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (env) {
-    return env.replace(/\/$/, "");
-  }
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
-  const proto = request.headers.get("x-forwarded-proto") || "https";
-  if (host) {
-    return `${proto}://${host}`;
-  }
-  return undefined;
-}
-
 function parsePaymentMethod(raw: unknown): Order["paymentMethod"] {
   const s = String(raw || "");
   if (s === "BANK_TRANSFER") return "BANK_TRANSFER";
@@ -53,7 +40,6 @@ export async function POST(request: Request) {
       paymentMethod: parsePaymentMethod(body.paymentMethod),
       shippingCarrier,
       shippingCarrierOther: shippingCarrier === "OTHER" ? otherRaw : null,
-      appBaseUrl: resolveAppBaseUrl(request),
     });
 
     if (result.ok && result.order) {
@@ -64,7 +50,6 @@ export async function POST(request: Request) {
           orderId: result.order.id,
           orderNumber: result.order.orderNumber,
           paymentMethod: result.order.paymentMethod,
-          checkoutUrl: result.checkoutUrl,
         },
         { status: 200 }
       );

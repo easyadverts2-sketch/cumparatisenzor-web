@@ -27,19 +27,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const orderId = session.metadata?.orderId || session.client_reference_id;
+  if (event.type === "payment_intent.succeeded") {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    const orderId = intent.metadata?.orderId;
     if (!orderId || typeof orderId !== "string") {
       return NextResponse.json({ received: true });
     }
 
     const order = await getOrderById(orderId);
     if (!order || order.paymentMethod !== "CARD_STRIPE" || order.status !== "ORDERED_NOT_PAID") {
-      return NextResponse.json({ received: true });
-    }
-
-    if (session.payment_status !== "paid") {
       return NextResponse.json({ received: true });
     }
 
