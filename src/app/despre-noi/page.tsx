@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { SITE_NAME } from "@/lib/seo-config";
 import { getPublicSiteUrl } from "@/lib/site-url";
@@ -49,12 +50,58 @@ export default function DespreNoiPage() {
         </div>
 
         <div className="mt-12 rounded-2xl border-2 border-[#a6445f]/15 bg-[#fff4ec] p-8">
-          <h2 className="text-xl font-bold text-[#042f2c]">Ce putem imbunatati impreuna</h2>
+          <h2 className="text-xl font-bold text-[#042f2c]">Resurse utile pentru viata cu diabet</h2>
           <p className="mt-3 text-[#14534d]">
-            Daca doriti, putem adauga aici: fotografie de echipa (cu acord), povesti scurte ale clientilor,
-            parteneriate cu asociatii de diabet sau link-uri catre resurse educationale verificate. Spuneti-ne
-            ce ati vrea sa vada vizitatorii — construim pagina impreuna.
+            Am selectat cateva surse in limba romana care pot ajuta in viata de zi cu zi: educatie
+            despre diabet, monitorizare glicemica si recomandari practice.
           </p>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {[
+              {
+                title: "Centrul Antidiabetic - Scoala Pacientilor",
+                url: "https://www.centrulantidiabetic.scoalapacientilor.ro/",
+                desc: "Informatii educative pentru pacienti despre controlul diabetului si prevenirea complicatiilor.",
+              },
+              {
+                title: "Rodiabet - Ghid CGM",
+                url: "https://www.rodiabet.ro/",
+                desc: "Portal romanesc cu articole despre tipuri de diabet, viata cu diabet, alimentatie si monitorizare.",
+              },
+              {
+                title: "Ines Nerina - Diabetes Lifestyle Blog",
+                url: "https://inesnerina.com/",
+                desc: "Perspectiva personala despre viata cu diabet tip 1: rutina zilnica, tehnologie, sport si echilibru emotional.",
+              },
+              {
+                title: "DiabetZaharat.ro - Regim alimentar",
+                url: "http://www.diabetzaharat.ro/pacienti.htm",
+                desc: "Resurse pentru pacienti despre alimentatie, rutina zilnica si managementul glicemiei in practica.",
+              },
+            ].map((item) => (
+              <a
+                key={item.url}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-xl border border-[#de6a44]/25 bg-white p-4 no-underline shadow-sm transition hover:border-[#be3f6f]/40 hover:shadow-md"
+              >
+                <div className="flex items-start gap-3">
+                  <Image
+                    src={`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(item.url)}`}
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="mt-0.5 h-8 w-8 rounded"
+                  />
+                  <div>
+                    <h3 className="font-semibold text-[#3a1d2d]">{item.title}</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-[#5c3046]">{item.desc}</p>
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
         </div>
 
         <h2 className="mt-14 text-2xl font-bold text-[#042f2c]">Etape planificate</h2>

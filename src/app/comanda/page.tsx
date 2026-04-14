@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function ComandaPage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
+    <main className="mx-auto max-w-6xl px-6 py-12">
       <Link href="/" className="text-sm font-medium text-[#0f766e] hover:underline">
         ← Inapoi la pagina principala
       </Link>
@@ -30,8 +30,8 @@ export default function ComandaPage() {
         <strong className="text-[#0a2624]">10 RON</strong>, gratuita de la 4 bucati.
       </p>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-2 lg:items-start">
-        <div className="rounded-2xl border-2 border-[#0d4f4a]/10 bg-white p-4 shadow-sm">
+      <div className="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
+        <div className="rounded-2xl border-2 border-[#0d4f4a]/10 bg-white p-4 shadow-sm lg:col-span-5">
           <Image
             src="/libre-product.png"
             alt="FreeStyle Libre 2 Plus"
@@ -40,6 +40,18 @@ export default function ComandaPage() {
             className="h-auto w-full rounded-xl object-cover"
           />
         </div>
+        <div className="rounded-2xl border border-[#de6a44]/25 bg-[#fff4ec] p-5 lg:col-span-7">
+          <h2 className="text-lg font-semibold text-[#3a1d2d]">Comanda rapida si sigura</h2>
+          <ul className="mt-3 grid gap-2 text-sm text-[#5c3046] sm:grid-cols-2">
+            <li>✓ Confirmare imediata pe e-mail</li>
+            <li>✓ Plata ramburs, transfer sau card</li>
+            <li>✓ Curieri multipli (PPL, Packeta, Fineship)</li>
+            <li>✓ Formular securizat, proces simplu</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-8">
         <OrderForm />
       </div>
     </main>
