@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PaymentMethod } from "@/lib/types";
 import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 
@@ -22,7 +22,7 @@ function parsePaymentMethod(raw: string): PaymentMethod {
 
 function parseShippingCarrier(raw: string): ShippingCarrier {
   const u = raw.toUpperCase();
-  if (u === "PPL" || u === "PACKETA" || u === "OTHER") {
+  if (u === "PPL" || u === "PACKETA" || u === "FINESHIP" || u === "OTHER") {
     return u;
   }
   return "PPL";
@@ -33,6 +33,15 @@ export function OrderForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [carrier, setCarrier] = useState<ShippingCarrier>("PPL");
+  const [quantity, setQuantity] = useState(1);
+
+  const fineshipAllowed = quantity >= 6;
+
+  useEffect(() => {
+    if (!fineshipAllowed && carrier === "FINESHIP") {
+      setCarrier("PPL");
+    }
+  }, [carrier, fineshipAllowed]);
 
   async function onSubmit(formData: FormData) {
     setLoading(true);
@@ -150,11 +159,13 @@ export function OrderForm() {
         <p className="mt-1 text-sm text-[#1a4d47]">
           Selectati firma de curierat. Lista poate fi extinsa ulterior cu alti parteneri.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
           {SHIPPING_CARRIERS.map((c) => (
             <label
               key={c}
-              className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]"
+              className={`flex gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4] ${
+                c === "FINESHIP" && !fineshipAllowed ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+              }`}
             >
               <input
                 type="radio"
@@ -162,15 +173,26 @@ export function OrderForm() {
                 value={c}
                 checked={carrier === c}
                 onChange={() => setCarrier(c)}
+                disabled={c === "FINESHIP" && !fineshipAllowed}
                 className="mt-1 accent-[#0d9488]"
               />
               <span>
                 <span className="font-semibold text-[#0a2624]">
-                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "Packeta" : "Alt curier"}
+                  {c === "PPL"
+                    ? "PPL"
+                    : c === "PACKETA"
+                      ? "Packeta"
+                      : c === "FINESHIP"
+                        ? "Fineship"
+                        : "Alt curier"}
                 </span>
                 {c === "OTHER" ? (
                   <span className="mt-1 block text-sm text-[#1a4d47]">
                     Specificati numele curierului mai jos (ex. GLS, DPD, Fan Courier).
+                  </span>
+                ) : c === "FINESHIP" ? (
+                  <span className="mt-1 block text-sm text-[#1a4d47]">
+                    Disponibil de la 6 bucati. Cost livrare: 200 RON.
                   </span>
                 ) : (
                   <span className="mt-1 block text-sm text-[#1a4d47]">
@@ -191,6 +213,11 @@ export function OrderForm() {
         ) : (
           <input type="hidden" name="shippingCarrierOther" value="" />
         )}
+        {!fineshipAllowed ? (
+          <p className="mt-2 text-xs text-[#7a3f54]">
+            Pentru Fineship este necesara cantitatea minima de 6 senzori.
+          </p>
+        ) : null}
       </div>
 
       <input
@@ -216,7 +243,8 @@ export function OrderForm() {
         name="quantity"
         type="number"
         min={1}
-        defaultValue={1}
+        value={quantity}
+        onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
         required
         className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
       />

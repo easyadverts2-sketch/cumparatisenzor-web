@@ -22,7 +22,7 @@ export default function Home() {
   return (
     <main className="pb-20">
       <JsonLdSite />
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#042f2c] via-[#0a5c52] to-[#0d9488] text-white">
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#6f2147] via-[#b23962] to-[#ee7a32] text-white">
         <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.06\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-40" />
         <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2 lg:items-center lg:py-20">
           <div>
@@ -38,7 +38,7 @@ export default function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/comanda"
-                className="rounded-xl bg-white px-6 py-3.5 font-semibold text-[#065f56] shadow-lg no-underline hover:bg-[#ecfdf5]"
+                className="rounded-xl bg-white px-6 py-3.5 font-semibold text-[#8f2c53] shadow-lg no-underline hover:bg-[#fff1e6]"
               >
                 Comanda acum
               </Link>
@@ -64,7 +64,7 @@ export default function Home() {
       </section>
 
       <section className="relative -mt-8 mx-auto max-w-6xl px-6">
-        <div className="rounded-3xl border-2 border-[#0d9488]/20 bg-white p-8 shadow-xl md:p-10">
+        <div className="rounded-3xl border-2 border-[#de6a44]/25 bg-white p-8 shadow-xl md:p-10">
           <h2 className="text-2xl font-bold text-[#042f2c] md:text-3xl">Ce este FreeStyle Libre 2 Plus?</h2>
           <p className="mt-4 text-lg leading-relaxed text-[#14534d]">
             Este un sistem de monitorizare continua a glucozei (CGM): un senzor mic purtat pe brat care, pana la{" "}
@@ -80,27 +80,34 @@ export default function Home() {
           <div className="mt-10 grid gap-4 sm:grid-cols-2">
             {[
               {
+                icon: "🔔",
                 title: "Alarme pentru hipere si hipo",
                 text: "Puteti primi alerte cand valorile sunt prea mari sau prea mici (conform setarilor).",
               },
               {
+                icon: "📱",
                 title: "Citire rapida",
                 text: "Scanati cu telefonul compatibil sau folositi cititorul dedicat.",
               },
               {
+                icon: "📈",
                 title: "Tendinte in aplicatie",
                 text: "Vedeti evolutia si istoricul pentru decizii mai clare in timpul zilei.",
               },
               {
+                icon: "🩹",
                 title: "Mai putina durere zilnica",
                 text: "Fara intepaturi repetate in degete pentru fiecare masuratoare.",
               },
             ].map((item) => (
               <div
                 key={item.title}
-                className="rounded-2xl border border-[#0d9488]/25 bg-gradient-to-br from-[#f0fdfa] to-white p-5 shadow-sm"
+                className="rounded-2xl border border-[#de6a44]/30 bg-gradient-to-br from-[#fff4ec] to-white p-5 shadow-sm"
               >
-                <h3 className="font-semibold text-[#042f2c]">{item.title}</h3>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f8d9c4] text-lg">
+                  {item.icon}
+                </span>
+                <h3 className="mt-3 font-semibold text-[#042f2c]">{item.title}</h3>
                 <p className="mt-2 text-[#14534d]">{item.text}</p>
               </div>
             ))}
@@ -109,7 +116,7 @@ export default function Home() {
       </section>
 
       <section className="mx-auto mt-14 max-w-6xl px-6">
-        <div className="rounded-3xl border-2 border-[#0d4f4a]/10 bg-[#f0fdfa] p-8 md:p-10">
+        <div className="rounded-3xl border-2 border-[#a6445f]/15 bg-[#fff4ec] p-8 md:p-10">
           <h2 className="text-2xl font-bold text-[#042f2c]">Cum cumperi in 4 pasi</h2>
           <ol className="mt-6 grid gap-4 md:grid-cols-2">
             {[
@@ -120,9 +127,9 @@ export default function Home() {
             ].map((step, i) => (
               <li
                 key={step}
-                className="flex gap-3 rounded-2xl border border-[#0d9488]/20 bg-white p-4 text-[#14534d] shadow-sm"
+                className="flex gap-3 rounded-2xl border border-[#de6a44]/25 bg-white p-4 text-[#14534d] shadow-sm"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d9488] text-sm font-bold text-white">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#be3f6f] text-sm font-bold text-white">
                   {i + 1}
                 </span>
                 <span>{step}</span>
@@ -132,7 +139,7 @@ export default function Home() {
           <div className="mt-8 text-center">
             <Link
               href="/comanda"
-              className="inline-flex rounded-xl bg-[#0d9488] px-8 py-3.5 font-semibold text-white no-underline shadow-md hover:bg-[#0f766e]"
+              className="inline-flex rounded-xl bg-[#be3f6f] px-8 py-3.5 font-semibold text-white no-underline shadow-md hover:bg-[#9d2f56]"
             >
               Mergi la comanda
             </Link>
@@ -149,7 +156,7 @@ export default function Home() {
           </p>
           <p className="mt-4 text-[#14534d]">
             Materialul din pachet poate sa nu fie in limba romana; pentru utilizare, consultati sectiunea{" "}
-            <Link href="/despre-libre" className="font-semibold text-[#0f766e] underline">
+            <Link href="/despre-libre" className="font-semibold text-[#be3f6f] underline">
               Despre Libre 2 Plus
             </Link>
             .

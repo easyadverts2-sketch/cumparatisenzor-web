@@ -21,7 +21,10 @@ function toOrder(row: Row): Order {
       : 0;
   const carrierRaw = row.shipping_carrier != null ? String(row.shipping_carrier) : "PPL";
   const shippingCarrier = (
-    carrierRaw === "PPL" || carrierRaw === "PACKETA" || carrierRaw === "OTHER"
+    carrierRaw === "PPL" ||
+    carrierRaw === "PACKETA" ||
+    carrierRaw === "FINESHIP" ||
+    carrierRaw === "OTHER"
       ? carrierRaw
       : "PPL"
   ) as ShippingCarrier;
@@ -57,6 +60,7 @@ export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
 export function formatShippingLine(order: Pick<Order, "shippingCarrier" | "shippingCarrierOther">): string {
   if (order.shippingCarrier === "PPL") return "PPL";
   if (order.shippingCarrier === "PACKETA") return "Packeta";
+  if (order.shippingCarrier === "FINESHIP") return "Fineship";
   const o = order.shippingCarrierOther?.trim();
   return o ? `Alt curier: ${o}` : "Alt curier";
 }
@@ -217,7 +221,14 @@ export async function createOrder(input: {
     const inventory = await getSettingNumber(sql, "inventory", defaults.inventory);
     const price = await getSettingNumber(sql, "price", defaults.price);
     const shipping = await getSettingNumber(sql, "shipping", defaults.shipping);
-    const shippingPrice = input.quantity >= 4 ? 0 : shipping;
+    if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
+      return {
+        ok: false,
+        message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
+      };
+    }
+    const shippingPrice =
+      input.shippingCarrier === "FINESHIP" ? 200 : input.quantity >= 4 ? 0 : shipping;
     const totalPrice = input.quantity * price + shippingPrice;
 
     const carrierOther =

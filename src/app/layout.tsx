@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import Image from "next/image";
 import Link from "next/link";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { HeaderContactInline } from "@/components/header-contact-inline";
@@ -52,7 +53,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#042f2c",
+  themeColor: "#be3f6f",
 };
 
 export default function RootLayout({
@@ -66,28 +67,29 @@ export default function RootLayout({
     <html lang="ro">
       <body className={inter.className}>
         <GoogleAnalytics measurementId={gaId} />
-        <header className="border-b-2 border-[#0d9488]/20 bg-[#042f2c] text-white shadow-md">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-            <Link href="/" className="text-lg font-bold tracking-tight text-white no-underline hover:text-[#a7f3d0]">
-              Senzori Libre Romania
+        <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
+            <Link href="/" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-white no-underline hover:text-[#ffe2c8]">
+              <Image src="/brand-logo.png" alt="Logo Senzori Libre Romania" width={34} height={34} className="h-[34px] w-[34px] rounded-full bg-white/90 p-0.5" />
+              <span>Senzori Libre Romania</span>
             </Link>
             <nav className="flex flex-1 flex-wrap gap-x-5 gap-y-2 text-sm font-medium lg:justify-center">
-              <Link href="/despre-libre" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+              <Link href="/despre-libre" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Despre Libre 2 Plus
               </Link>
-              <Link href="/despre-noi" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+              <Link href="/despre-noi" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Despre noi
               </Link>
-              <Link href="/comanda" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+              <Link href="/comanda" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Comanda
               </Link>
-              <Link href="/termeni-si-conditii" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+              <Link href="/termeni-si-conditii" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Termeni
               </Link>
-              <Link href="/gdpr" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+              <Link href="/gdpr" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 GDPR
               </Link>
-              <Link href="/admin" className="text-white/95 no-underline hover:text-[#a7f3d0]">
+              <Link href="/admin" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Admin
               </Link>
             </nav>
@@ -95,8 +97,12 @@ export default function RootLayout({
           </div>
         </header>
         {children}
-        <footer className="mt-16 border-t-2 border-[#0d9488]/20 bg-[#042f2c] text-white">
-          <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#d1fae5]">
+        <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
+          <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#ffe7d6]">
+            <div className="mb-5 inline-flex items-center gap-2 text-base font-semibold text-white">
+              <Image src="/brand-logo.png" alt="Logo Senzori Libre Romania" width={28} height={28} className="h-7 w-7 rounded-full bg-white/90 p-0.5" />
+              <span>Senzori Libre Romania</span>
+            </div>
             <p className="font-medium text-white">Operator magazin: Česká maloobchodní s.r.o.</p>
             <p>Adresa: Braunerova 563/7, Libeň (Praha 8), 180 00 Praha</p>
             <p>ID: 23504463</p>

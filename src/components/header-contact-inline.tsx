@@ -12,15 +12,15 @@ function WhatsAppGlyph({ className }: { className?: string }) {
 
 export function HeaderContactInline() {
   return (
-    <div className="hidden flex-col items-end gap-1 border-l border-white/20 pl-4 text-xs text-[#d1fae5] lg:flex">
-      <a href={`mailto:${EMAIL}`} className="font-medium hover:text-white">
+    <div className="hidden flex-col items-end gap-1 border-l border-white/25 pl-4 text-xs text-[#ffe7d6] lg:flex">
+      <a href={`mailto:${EMAIL}`} className="font-medium hover:text-[#ffe2c8]">
         {EMAIL}
       </a>
       <a
         href={WA}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 hover:text-white"
+        className="inline-flex items-center gap-1.5 hover:text-[#ffe2c8]"
       >
         <span className="text-[#25D366]">
           <WhatsAppGlyph className="h-4 w-4" />

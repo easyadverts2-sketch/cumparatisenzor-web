@@ -24,24 +24,15 @@ function FacebookIcon({ className }: { className?: string }) {
   );
 }
 
-function MetaMarkIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden xmlns="http://www.w3.org/2000/svg">
-      <path d="M6.915 4.03c-1.073 0-2.059.68-2.519 1.698L.095 17.845c-.495 1.07-.09 2.35.91 2.95l8.5 5.2c.95.58 2.15.58 3.1 0l8.5-5.2c1-.6 1.405-1.88.91-2.95l-4.3-9.117c-.46-1.018-1.446-1.698-2.519-1.698H6.915zm1.85 3.05h6.47c.35 0 .67.2.82.52l2.15 4.55H5.615l2.15-4.55c.15-.32.47-.52.82-.52z" />
-    </svg>
-  );
-}
-
 export function SiteContactBar() {
-  const fb = process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK_URL || "#";
-  const meta = process.env.NEXT_PUBLIC_SOCIAL_META_URL || "#";
+  const fb = "https://www.facebook.com/profile.php?id=61568911460380";
 
   return (
     <div className="mt-8 flex flex-col gap-6 border-t border-white/10 pt-8 md:flex-row md:flex-wrap md:items-center md:justify-between">
       <div className="flex flex-col gap-2 text-sm">
         <a
           href={`mailto:${EMAIL}`}
-          className="font-medium text-white transition hover:text-[#a7f3d0]"
+          className="font-medium text-white transition hover:text-[#ffe2c8]"
         >
           {EMAIL}
         </a>
@@ -49,7 +40,7 @@ export function SiteContactBar() {
           href={`https://wa.me/${PHONE_E164}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 font-medium text-[#d1fae5] transition hover:text-[#a7f3d0]"
+          className="inline-flex items-center gap-2 font-medium text-[#d1fae5] transition hover:text-[#ffe2c8]"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm">
             <WhatsAppIcon className="h-5 w-5" />
@@ -59,7 +50,7 @@ export function SiteContactBar() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-[#a7f3d0]/80">
+        <span className="text-xs font-medium uppercase tracking-wide text-[#ffd2af]/90">
           Urmariti-ne
         </span>
         <div className="flex items-center gap-3">
@@ -67,24 +58,14 @@ export function SiteContactBar() {
             href={fb}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/30"
             aria-label="Facebook"
             title="Facebook"
           >
             <FacebookIcon className="h-5 w-5" />
           </a>
-          <a
-            href={meta}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[#0668E1] to-[#0084FF] text-white shadow-sm transition hover:opacity-90"
-            aria-label="Meta"
-            title="Meta"
-          >
-            <MetaMarkIcon className="h-6 w-6" />
-          </a>
         </div>
-        <p className="max-w-xs text-xs text-[#a7f3d0]/70">
+        <p className="max-w-xs text-xs text-[#ffd8be]/80">
           Link-urile vor fi actualizate cand paginile sunt gata.
         </p>
       </div>

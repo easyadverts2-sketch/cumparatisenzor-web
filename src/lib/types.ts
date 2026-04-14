@@ -10,7 +10,7 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-export const SHIPPING_CARRIERS = ["PPL", "PACKETA", "OTHER"] as const;
+export const SHIPPING_CARRIERS = ["PPL", "PACKETA", "FINESHIP", "OTHER"] as const;
 export type ShippingCarrier = (typeof SHIPPING_CARRIERS)[number];
 
 export type PaymentMethod = "COD" | "BANK_TRANSFER" | "CARD_STRIPE";

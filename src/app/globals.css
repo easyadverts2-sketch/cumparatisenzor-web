@@ -2,9 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-[#f0fdf9] text-[#0a2624] antialiased;
+:root {
+  --brand-bg: #fff7f4;
+  --brand-text: #3a1d2d;
+  --brand-link: #be3f6f;
+  --brand-link-hover: #9d2f56;
 }
+
+body {
+  @apply antialiased;
+  background: var(--brand-bg);
+  color: var(--brand-text);
+  position: relative;
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(40rem 32rem at -8% 18%, rgba(240, 135, 58, 0.12), transparent 65%),
+    radial-gradient(36rem 30rem at 108% 24%, rgba(190, 63, 111, 0.12), transparent 65%),
+    radial-gradient(32rem 28rem at -12% 76%, rgba(166, 68, 95, 0.1), transparent 65%),
+    radial-gradient(30rem 24rem at 110% 82%, rgba(223, 91, 66, 0.1), transparent 65%);
+}
+
 a {
-  @apply text-[#0f766e] underline-offset-2 hover:text-[#115e59];
+  color: var(--brand-link);
+  @apply underline-offset-2;
+}
+
+a:hover {
+  color: var(--brand-link-hover);
 }
