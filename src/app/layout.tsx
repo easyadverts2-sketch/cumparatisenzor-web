@@ -80,6 +80,9 @@ export default function RootLayout({
               <Link href="/despre-noi" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Despre noi
               </Link>
+              <Link href="/instalare-librelink" className="text-white/95 no-underline hover:text-[#ffe2c8]">
+                Instalare app
+              </Link>
               <Link href="/comanda" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Comanda
               </Link>

@@ -63,6 +63,17 @@ export default function DespreLibrePage() {
           leaflet FreeStyle Libre 2 Plus (PDF)
         </a>
       </p>
+
+      <div className="mt-8 rounded-2xl border border-[#de6a44]/25 bg-[#fff4ec] p-5">
+        <h3 className="text-lg font-semibold text-[#3a1d2d]">Instalare aplicatie LibreLink (Romania)</h3>
+        <p className="mt-2 text-[#5c3046]">
+          Am pregatit un ghid simplu pentru iOS si Android, inclusiv pasii de schimbare a regiunii
+          si revenire la setarile initiale.
+        </p>
+        <a href="/instalare-librelink" className="mt-3 inline-block font-semibold text-[#be3f6f] underline">
+          Vezi ghidul complet de instalare
+        </a>
+      </div>
     </main>
   );
 }

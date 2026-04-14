@@ -23,8 +23,7 @@ function toOrder(row: Row): Order {
   const shippingCarrier = (
     carrierRaw === "PPL" ||
     carrierRaw === "PACKETA" ||
-    carrierRaw === "FINESHIP" ||
-    carrierRaw === "OTHER"
+    carrierRaw === "FINESHIP"
       ? carrierRaw
       : "PPL"
   ) as ShippingCarrier;
@@ -61,8 +60,7 @@ export function formatShippingLine(order: Pick<Order, "shippingCarrier" | "shipp
   if (order.shippingCarrier === "PPL") return "PPL";
   if (order.shippingCarrier === "PACKETA") return "Packeta";
   if (order.shippingCarrier === "FINESHIP") return "Fineship";
-  const o = order.shippingCarrierOther?.trim();
-  return o ? `Alt curier: ${o}` : "Alt curier";
+  return "PPL";
 }
 
 async function migrateOrderNumber(sql: SqlClient) {
@@ -219,21 +217,16 @@ export async function createOrder(input: {
 
     const inventory = await getSettingNumber(sql, "inventory", defaults.inventory);
     const price = await getSettingNumber(sql, "price", defaults.price);
-    const shipping = await getSettingNumber(sql, "shipping", defaults.shipping);
     if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
       return {
         ok: false,
         message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
       };
     }
-    const shippingPrice =
-      input.shippingCarrier === "FINESHIP" ? 200 : input.quantity >= 4 ? 0 : shipping;
+    const shippingPrice = input.shippingCarrier === "FINESHIP" ? 200 : input.quantity >= 5 ? 0 : 70;
     const totalPrice = input.quantity * price + shippingPrice;
 
-    const carrierOther =
-      input.shippingCarrier === "OTHER"
-        ? (input.shippingCarrierOther?.trim() || null)
-        : null;
+    const carrierOther = null;
 
     if (input.quantity > inventory) {
       const subject = "Stoc indisponibil momentan";

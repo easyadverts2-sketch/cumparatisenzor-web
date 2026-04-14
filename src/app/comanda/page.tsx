@@ -26,8 +26,9 @@ export default function ComandaPage() {
       <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">Comanda FreeStyle Libre 2 Plus</h1>
       <p className="mt-2 max-w-2xl text-[#1a4d47]">
         Pret: <strong className="text-[#0a2624]">350 RON</strong> / pachet · SKU{" "}
-        <strong className="text-[#0a2624]">5021791006694</strong> · Livrare{" "}
-        <strong className="text-[#0a2624]">10 RON</strong>, gratuita de la 4 bucati.
+        <strong className="text-[#0a2624]">5021791006694</strong> · Livrare PPL/Packeta{" "}
+        <strong className="text-[#0a2624]">70 RON</strong> (gratuita de la 5 bucati) · Fineship{" "}
+        <strong className="text-[#0a2624]">200 RON</strong> (de la 6 bucati).
       </p>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">

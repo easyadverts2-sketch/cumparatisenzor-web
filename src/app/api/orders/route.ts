@@ -6,7 +6,6 @@ import { NextResponse } from "next/server";
 function parsePaymentMethod(raw: unknown): Order["paymentMethod"] {
   const s = String(raw || "");
   if (s === "BANK_TRANSFER") return "BANK_TRANSFER";
-  if (s === "CARD_STRIPE") return "CARD_STRIPE";
   return "COD";
 }
 
@@ -18,28 +17,118 @@ function parseShippingCarrier(raw: unknown): ShippingCarrier | null {
   return null;
 }
 
+type AddressPayload = {
+  street: string;
+  city: string;
+  postalCode: string;
+  county: string;
+  country?: string;
+};
+
+function toSafe(v: unknown): string {
+  return String(v || "").trim();
+}
+
+function validateAddress(addr: AddressPayload): string | null {
+  if (addr.street.length < 5) return "Strada este prea scurta.";
+  if (addr.city.length < 2) return "Orasul este obligatoriu.";
+  if (!/^\d{6}$/.test(addr.postalCode)) return "Codul postal trebuie sa aiba 6 cifre.";
+  if (addr.county.length < 2) return "Judetul este obligatoriu.";
+  return null;
+}
+
+function formatAddress(addr: AddressPayload): string {
+  return `${addr.street}, ${addr.city}, ${addr.postalCode}, jud. ${addr.county}, Romania`;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const shippingCarrier = parseShippingCarrier(body.shippingCarrier) ?? "PPL";
-    const otherRaw = String(body.shippingCarrierOther || "").trim();
-    if (shippingCarrier === "OTHER" && !otherRaw) {
+    const customerName = toSafe(body.customerName);
+    const email = toSafe(body.email);
+    const phone = toSafe(body.phone).replace(/\s+/g, "");
+    const quantity = Number(body.quantity || 1);
+    const delivery: AddressPayload = {
+      street: toSafe(body.delivery?.street),
+      city: toSafe(body.delivery?.city),
+      postalCode: toSafe(body.delivery?.postalCode),
+      county: toSafe(body.delivery?.county),
+      country: "RO",
+    };
+    const billingDifferent = Boolean(body.billing?.different);
+    const billing: AddressPayload = {
+      street: toSafe(body.billing?.street),
+      city: toSafe(body.billing?.city),
+      postalCode: toSafe(body.billing?.postalCode),
+      county: toSafe(body.billing?.county),
+      country: "RO",
+    };
+    const billingCompanyName = toSafe(body.billing?.companyName);
+    const billingTaxId = toSafe(body.billing?.taxId);
+    const billingTradeRegNo = toSafe(body.billing?.tradeRegNo);
+
+    if (customerName.split(/\s+/).length < 2) {
+      return NextResponse.json({ ok: false, message: "Introduceti nume si prenume valide." }, { status: 400 });
+    }
+    if (!email.includes("@")) {
+      return NextResponse.json({ ok: false, message: "E-mail invalid." }, { status: 400 });
+    }
+    if (!/^\+?[0-9]{9,15}$/.test(phone)) {
+      return NextResponse.json({ ok: false, message: "Telefon invalid." }, { status: 400 });
+    }
+
+    const deliveryErr = validateAddress(delivery);
+    if (deliveryErr) {
       return NextResponse.json(
-        { ok: false, message: "Completati numele curierului pentru optiunea „Alt curier”." },
+        { ok: false, message: `Adresa de livrare este incompleta: ${deliveryErr}` },
         { status: 400 }
       );
     }
 
+    if (billingDifferent) {
+      if (!billingCompanyName || !billingTaxId || !billingTradeRegNo) {
+        return NextResponse.json(
+          { ok: false, message: "Pentru facturare diferita sunt obligatorii Nume entitate, CUI/CIF si Nr. Reg. Com." },
+          { status: 400 }
+        );
+      }
+      const billingErr = validateAddress(billing);
+      if (billingErr) {
+        return NextResponse.json(
+          { ok: false, message: `Adresa de facturare este incompleta: ${billingErr}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    const deliveryAddress = [
+      `Destinatar: ${customerName}`,
+      formatAddress(delivery),
+    ].join("\n");
+
+    const billingAddress = billingDifferent
+      ? [
+          `Entitate: ${billingCompanyName}`,
+          `CUI/CIF: ${billingTaxId}`,
+          `Nr. Reg. Com.: ${billingTradeRegNo}`,
+          formatAddress(billing),
+        ].join("\n")
+      : [
+          `Persoana fizica: ${customerName}`,
+          formatAddress(delivery),
+        ].join("\n");
+
     const result = await createOrder({
-      customerName: String(body.customerName || ""),
-      email: String(body.email || ""),
-      phone: String(body.phone || ""),
-      billingAddress: String(body.billingAddress || ""),
-      deliveryAddress: String(body.deliveryAddress || ""),
-      quantity: Number(body.quantity || 1),
+      customerName,
+      email,
+      phone,
+      billingAddress,
+      deliveryAddress,
+      quantity,
       paymentMethod: parsePaymentMethod(body.paymentMethod),
       shippingCarrier,
-      shippingCarrierOther: shippingCarrier === "OTHER" ? otherRaw : null,
+      shippingCarrierOther: null,
     });
 
     if (result.ok && result.order) {

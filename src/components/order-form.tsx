@@ -15,13 +15,12 @@ type ApiOk = {
 
 function parsePaymentMethod(raw: string): PaymentMethod {
   if (raw === "BANK_TRANSFER") return "BANK_TRANSFER";
-  if (raw === "CARD_STRIPE") return "CARD_STRIPE";
   return "COD";
 }
 
 function parseShippingCarrier(raw: string): ShippingCarrier {
   const u = raw.toUpperCase();
-  if (u === "PPL" || u === "PACKETA" || u === "FINESHIP" || u === "OTHER") {
+  if (u === "PPL" || u === "PACKETA" || u === "FINESHIP") {
     return u;
   }
   return "PPL";
@@ -29,7 +28,7 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
 
 export function OrderForm() {
   const UNIT_PRICE = 350;
-  const STANDARD_SHIPPING = 10;
+  const STANDARD_SHIPPING = 70;
   const FINESHIP_SHIPPING = 200;
 
   const router = useRouter();
@@ -38,12 +37,23 @@ export function OrderForm() {
   const [carrier, setCarrier] = useState<ShippingCarrier>("PPL");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [quantity, setQuantity] = useState(1);
-  const [customerName, setCustomerName] = useState("");
+  const [deliveryFullName, setDeliveryFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [billingAddress, setBillingAddress] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [shippingCarrierOther, setShippingCarrierOther] = useState("");
+  const [deliveryStreet, setDeliveryStreet] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("");
+  const [deliveryPostalCode, setDeliveryPostalCode] = useState("");
+  const [deliveryCounty, setDeliveryCounty] = useState("");
+  const [billingDifferent, setBillingDifferent] = useState(false);
+  const [billingCompanyName, setBillingCompanyName] = useState("");
+  const [billingTaxId, setBillingTaxId] = useState("");
+  const [billingTradeRegNo, setBillingTradeRegNo] = useState("");
+  const [billingStreet, setBillingStreet] = useState("");
+  const [billingCity, setBillingCity] = useState("");
+  const [billingPostalCode, setBillingPostalCode] = useState("");
+  const [billingCounty, setBillingCounty] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeGdpr, setAgreeGdpr] = useState(false);
 
   const fineshipAllowed = quantity >= 6;
 
@@ -54,36 +64,61 @@ export function OrderForm() {
   }, [carrier, fineshipAllowed]);
 
   const shippingPrice =
-    carrier === "FINESHIP" ? FINESHIP_SHIPPING : quantity >= 4 ? 0 : STANDARD_SHIPPING;
+    carrier === "FINESHIP" ? FINESHIP_SHIPPING : quantity >= 5 ? 0 : STANDARD_SHIPPING;
   const productsTotal = quantity * UNIT_PRICE;
   const orderTotal = productsTotal + shippingPrice;
+  const postalRegex = /^\d{6}$/;
   const customerStepReady =
-    customerName.trim().length >= 3 &&
+    deliveryFullName.trim().split(/\s+/).length >= 2 &&
     email.includes("@") &&
     /^\+?[0-9]{9,15}$/.test(phone.replace(/\s+/g, "")) &&
-    billingAddress.trim().length >= 8 &&
-    deliveryAddress.trim().length >= 8;
-  const shippingStepReady =
-    carrier !== "OTHER" ? true : shippingCarrierOther.trim().length >= 2;
-  const paymentStepReady = paymentMethod === "COD" || paymentMethod === "BANK_TRANSFER" || paymentMethod === "CARD_STRIPE";
+    deliveryStreet.trim().length >= 5 &&
+    deliveryCity.trim().length >= 2 &&
+    postalRegex.test(deliveryPostalCode) &&
+    deliveryCounty.trim().length >= 2;
+  const shippingStepReady = carrier === "PPL" || carrier === "PACKETA" || carrier === "FINESHIP";
+  const billingStepReady = !billingDifferent
+    ? true
+    : billingCompanyName.trim().length >= 2 &&
+      billingTaxId.trim().length >= 2 &&
+      billingTradeRegNo.trim().length >= 2 &&
+      billingStreet.trim().length >= 5 &&
+      billingCity.trim().length >= 2 &&
+      postalRegex.test(billingPostalCode) &&
+      billingCounty.trim().length >= 2;
 
   async function onSubmit(formData: FormData) {
     setLoading(true);
     setError("");
     try {
       const shippingCarrier = parseShippingCarrier(String(formData.get("shippingCarrier") || "PPL"));
-      const shippingCarrierOther =
-        shippingCarrier === "OTHER" ? String(formData.get("shippingCarrierOther") || "").trim() : "";
-      const customerName = String(formData.get("customerName") || "").trim();
+      const customerName = String(formData.get("deliveryFullName") || "").trim();
       const email = String(formData.get("email") || "").trim();
       const phone = String(formData.get("phone") || "").replace(/\s+/g, "");
-      const billingAddress = String(formData.get("billingAddress") || "").trim();
-      const deliveryAddress = String(formData.get("deliveryAddress") || "").trim();
       const quantityInput = Math.max(1, Number(formData.get("quantity") || 1));
       const paymentMethodInput = parsePaymentMethod(String(formData.get("paymentMethod") || "COD"));
+      const delivery = {
+        fullName: customerName,
+        street: String(formData.get("deliveryStreet") || "").trim(),
+        city: String(formData.get("deliveryCity") || "").trim(),
+        postalCode: String(formData.get("deliveryPostalCode") || "").trim(),
+        county: String(formData.get("deliveryCounty") || "").trim(),
+        country: "RO",
+      };
+      const billing = {
+        different: String(formData.get("billingDifferent") || "") === "on",
+        companyName: String(formData.get("billingCompanyName") || "").trim(),
+        taxId: String(formData.get("billingTaxId") || "").trim(),
+        tradeRegNo: String(formData.get("billingTradeRegNo") || "").trim(),
+        street: String(formData.get("billingStreet") || "").trim(),
+        city: String(formData.get("billingCity") || "").trim(),
+        postalCode: String(formData.get("billingPostalCode") || "").trim(),
+        county: String(formData.get("billingCounty") || "").trim(),
+        country: "RO",
+      };
 
-      if (customerName.length < 3) {
-        setError("Numele complet trebuie sa aiba minimum 3 caractere.");
+      if (delivery.fullName.split(/\s+/).length < 2) {
+        setError("Introduceti nume si prenume pentru livrare.");
         setLoading(false);
         return;
       }
@@ -97,13 +132,13 @@ export function OrderForm() {
         setLoading(false);
         return;
       }
-      if (billingAddress.length < 8 || deliveryAddress.length < 8) {
-        setError("Adresele trebuie completate mai detaliat.");
-        setLoading(false);
-        return;
-      }
-      if (shippingCarrier === "OTHER" && shippingCarrierOther.length < 2) {
-        setError("Specificati numele curierului pentru optiunea „Alt curier”.");
+      if (
+        delivery.street.length < 5 ||
+        delivery.city.length < 2 ||
+        !postalRegex.test(delivery.postalCode) ||
+        delivery.county.length < 2
+      ) {
+        setError("Completati corect adresa de livrare din Romania (strada, oras, cod postal 6 cifre, judet).");
         setLoading(false);
         return;
       }
@@ -112,17 +147,35 @@ export function OrderForm() {
         setLoading(false);
         return;
       }
+      if (
+        billing.different &&
+        (!billing.companyName ||
+          !billing.taxId ||
+          !billing.tradeRegNo ||
+          billing.street.length < 5 ||
+          billing.city.length < 2 ||
+          !postalRegex.test(billing.postalCode) ||
+          billing.county.length < 2)
+      ) {
+        setError("Completati toate datele de facturare ale companiei (inclusiv CUI/CIF si Nr. Reg. Com.).");
+        setLoading(false);
+        return;
+      }
+      if (!agreeTerms || !agreeGdpr) {
+        setError("Trebuie sa fiti de acord cu Termenii si conditiile si GDPR.");
+        setLoading(false);
+        return;
+      }
 
       const payload = {
-        customerName,
+        customerName: delivery.fullName,
         email,
         phone,
-        billingAddress,
-        deliveryAddress,
+        delivery,
+        billing,
         quantity: quantityInput,
         paymentMethod: paymentMethodInput,
         shippingCarrier,
-        shippingCarrierOther: shippingCarrier === "OTHER" ? shippingCarrierOther : "",
       };
 
       const res = await fetch("/api/orders", {
@@ -143,13 +196,6 @@ export function OrderForm() {
       }
 
       const nr = String(data.orderNumber);
-
-      if (data.paymentMethod === "CARD_STRIPE") {
-        router.push(
-          `/comanda/plata-card?nr=${encodeURIComponent(nr)}&orderId=${encodeURIComponent(data.orderId)}`
-        );
-        return;
-      }
 
       if (data.paymentMethod === "BANK_TRANSFER") {
         router.push(`/comanda/plata?nr=${encodeURIComponent(nr)}`);
@@ -194,10 +240,10 @@ export function OrderForm() {
             </div>
             <div
               className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                paymentStepReady ? "bg-[#e6f7f4] text-[#0f766e]" : "bg-white text-[#7a3f54]"
+                billingStepReady ? "bg-[#e6f7f4] text-[#0f766e]" : "bg-white text-[#7a3f54]"
               }`}
             >
-              3. Plata {paymentStepReady ? "✓" : ""}
+              3. Facturare {billingStepReady ? "✓" : ""}
             </div>
           </div>
         </div>
@@ -205,10 +251,9 @@ export function OrderForm() {
         <h3 className="text-lg font-semibold text-[#0a2624]">Metoda de plata</h3>
         <p className="mt-1 text-sm text-[#1a4d47]">
           Alegeti cum doriti sa platiti. La ramburs platiti curierului la livrare. La transfer
-          bancar, expedem dupa ce plata este inregistrata. La card, veti fi redirectionat catre o
-          pagina securizata (Stripe) dupa trimiterea comenzii.
+          bancar, expedem dupa ce plata este inregistrata.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
             <input
               type="radio"
@@ -241,22 +286,6 @@ export function OrderForm() {
               </span>
             </span>
           </label>
-          <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="CARD_STRIPE"
-              checked={paymentMethod === "CARD_STRIPE"}
-              onChange={() => setPaymentMethod("CARD_STRIPE")}
-              className="mt-1 accent-[#0d9488]"
-            />
-            <span>
-              <span className="font-semibold text-[#0a2624]">Card bancar</span>
-              <span className="mt-1 block text-sm text-[#1a4d47]">
-                Plata online securizata (Stripe). Disponibil cand serviciul este activat.
-              </span>
-            </span>
-          </label>
         </div>
       </div>
 
@@ -284,29 +313,19 @@ export function OrderForm() {
               />
               <span className="min-w-0">
                 <span className="block font-semibold text-[#0a2624]">
-                  {c === "PPL"
-                    ? "PPL"
-                    : c === "PACKETA"
-                      ? "Packeta"
-                      : c === "FINESHIP"
-                        ? "Fineship"
-                        : "Alt curier"}
+                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "Packeta" : "Fineship"}
                 </span>
-                {c === "OTHER" ? (
+                {c === "FINESHIP" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Specificati numele curierului mai jos (ex. GLS, DPD, Fan Courier).
-                  </span>
-                ) : c === "FINESHIP" ? (
-                  <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Livrare premium pentru comenzi mari.
+                    Livrare premium rapida, 1-3 zile de la comanda.
                   </span>
                 ) : c === "PPL" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Livrare standard prin reteaua PPL.
+                    Livrare standard prin reteaua PPL, 3-4 zile.
                   </span>
                 ) : (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Livrare prin puncte Packeta / Z-Box etc.
+                    Livrare prin puncte Packeta / Z-Box, 3-4 zile.
                   </span>
                 )}
 
@@ -314,23 +333,16 @@ export function OrderForm() {
                   <span className="mt-2 inline-flex rounded-full bg-[#f8d9c4] px-2.5 py-1 text-xs font-medium text-[#7a3f54]">
                     Min. 6 bucati • 200 RON
                   </span>
-                ) : null}
+                ) : (
+                  <span className="mt-2 inline-flex rounded-full bg-[#e9f7f4] px-2.5 py-1 text-xs font-medium text-[#155e57]">
+                    70 RON • Gratuit de la 5 bucati
+                  </span>
+                )}
               </span>
             </label>
           ))}
         </div>
-        {carrier === "OTHER" ? (
-          <input
-            name="shippingCarrierOther"
-            placeholder="Nume curier sau detalii livrare"
-            required
-            value={shippingCarrierOther}
-            onChange={(e) => setShippingCarrierOther(e.target.value)}
-            className="mt-4 w-full rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
-          />
-        ) : (
-          <input type="hidden" name="shippingCarrierOther" value="" />
-        )}
+        <input type="hidden" name="shippingCarrierOther" value="" />
         {!fineshipAllowed ? (
           <p className="mt-2 text-xs text-[#7a3f54]">
             Pentru Fineship este necesara cantitatea minima de 6 senzori.
@@ -339,11 +351,11 @@ export function OrderForm() {
       </div>
 
       <input
-        name="customerName"
-        placeholder="Nume complet"
+        name="deliveryFullName"
+        placeholder="Nume si prenume (livrare)"
         required
-        value={customerName}
-        onChange={(e) => setCustomerName(e.target.value)}
+        value={deliveryFullName}
+        onChange={(e) => setDeliveryFullName(e.target.value)}
         className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
       />
       <input
@@ -372,24 +384,114 @@ export function OrderForm() {
         required
         className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
       />
-      <textarea
-        name="billingAddress"
-        placeholder="Adresa facturare"
+      <input
+        name="deliveryStreet"
+        placeholder="Strada si numar (livrare)"
         required
-        value={billingAddress}
-        onChange={(e) => setBillingAddress(e.target.value)}
-        className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80 md:col-span-2"
-        rows={3}
+        value={deliveryStreet}
+        onChange={(e) => setDeliveryStreet(e.target.value)}
+        className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
       />
-      <textarea
-        name="deliveryAddress"
-        placeholder="Adresa livrare"
+      <input
+        name="deliveryCity"
+        placeholder="Oras (livrare)"
         required
-        value={deliveryAddress}
-        onChange={(e) => setDeliveryAddress(e.target.value)}
-        className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80 md:col-span-2"
-        rows={3}
+        value={deliveryCity}
+        onChange={(e) => setDeliveryCity(e.target.value)}
+        className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
       />
+      <input
+        name="deliveryPostalCode"
+        placeholder="Cod postal (6 cifre)"
+        required
+        pattern="\d{6}"
+        value={deliveryPostalCode}
+        onChange={(e) => setDeliveryPostalCode(e.target.value)}
+        className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
+      />
+      <input
+        name="deliveryCounty"
+        placeholder="Judet (livrare)"
+        required
+        value={deliveryCounty}
+        onChange={(e) => setDeliveryCounty(e.target.value)}
+        className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
+      />
+
+      <div className="md:col-span-2 rounded-2xl border border-[#de6a44]/25 bg-white p-4">
+        <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">
+          <input
+            type="checkbox"
+            name="billingDifferent"
+            checked={billingDifferent}
+            onChange={(e) => setBillingDifferent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[#be3f6f]"
+          />
+          <span>Adresa de facturare este diferita de adresa de livrare.</span>
+        </label>
+      </div>
+
+      {billingDifferent ? (
+        <>
+          <input
+            name="billingCompanyName"
+            placeholder="Nume entitate / firma"
+            required
+            value={billingCompanyName}
+            onChange={(e) => setBillingCompanyName(e.target.value)}
+            className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+          <input
+            name="billingTaxId"
+            placeholder="CUI / CIF"
+            required
+            value={billingTaxId}
+            onChange={(e) => setBillingTaxId(e.target.value)}
+            className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+          <input
+            name="billingTradeRegNo"
+            placeholder="Nr. Reg. Com."
+            required
+            value={billingTradeRegNo}
+            onChange={(e) => setBillingTradeRegNo(e.target.value)}
+            className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+          <input
+            name="billingStreet"
+            placeholder="Strada si numar (facturare)"
+            required
+            value={billingStreet}
+            onChange={(e) => setBillingStreet(e.target.value)}
+            className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+          <input
+            name="billingCity"
+            placeholder="Oras (facturare)"
+            required
+            value={billingCity}
+            onChange={(e) => setBillingCity(e.target.value)}
+            className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+          <input
+            name="billingPostalCode"
+            placeholder="Cod postal facturare (6 cifre)"
+            required
+            pattern="\d{6}"
+            value={billingPostalCode}
+            onChange={(e) => setBillingPostalCode(e.target.value)}
+            className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+          <input
+            name="billingCounty"
+            placeholder="Judet (facturare)"
+            required
+            value={billingCounty}
+            onChange={(e) => setBillingCounty(e.target.value)}
+            className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+          />
+        </>
+      ) : null}
 
       <div className="md:col-span-2 rounded-2xl border-2 border-[#de6a44]/25 bg-[#fff4ec] p-5">
         <h4 className="text-base font-semibold text-[#3a1d2d]">Sumar comanda</h4>
@@ -399,7 +501,7 @@ export function OrderForm() {
             <dd className="font-medium">{productsTotal} RON</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt>Livrare ({carrier === "PPL" ? "PPL" : carrier === "PACKETA" ? "Packeta" : carrier === "FINESHIP" ? "Fineship" : "Alt curier"})</dt>
+            <dt>Livrare ({carrier === "PPL" ? "PPL" : carrier === "PACKETA" ? "Packeta" : "Fineship"})</dt>
             <dd className="font-medium">{shippingPrice} RON</dd>
           </div>
           <div className="flex items-center justify-between border-t border-[#de6a44]/30 pt-2 text-base text-[#3a1d2d]">
@@ -408,8 +510,43 @@ export function OrderForm() {
           </div>
         </dl>
         <p className="mt-3 text-xs text-[#6b3b4d]">
-          Dupa trimiterea comenzii primiti confirmare pe e-mail. Pentru plata cu cardul veti continua pe formularul securizat Stripe.
+          Dupa trimiterea comenzii primiti confirmare pe e-mail cu detaliile de livrare si plata.
         </p>
+      </div>
+
+      <div className="md:col-span-2 space-y-3 rounded-2xl border border-[#de6a44]/25 bg-white p-4">
+        <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">
+          <input
+            type="checkbox"
+            checked={agreeTerms}
+            onChange={(e) => setAgreeTerms(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[#be3f6f]"
+            required
+          />
+          <span>
+            Sunt de acord cu{" "}
+            <a href="/termeni-si-conditii" className="font-semibold text-[#be3f6f] underline">
+              Termeni si conditii
+            </a>
+            .
+          </span>
+        </label>
+        <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">
+          <input
+            type="checkbox"
+            checked={agreeGdpr}
+            onChange={(e) => setAgreeGdpr(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[#be3f6f]"
+            required
+          />
+          <span>
+            Sunt de acord cu{" "}
+            <a href="/gdpr" className="font-semibold text-[#be3f6f] underline">
+              politica GDPR
+            </a>
+            .
+          </span>
+        </label>
       </div>
 
       <button
