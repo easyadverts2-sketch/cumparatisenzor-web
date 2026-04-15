@@ -321,11 +321,11 @@ export function OrderForm() {
                   </span>
                 ) : c === "PPL" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Livrare standard prin reteaua PPL, 3-4 zile.
+                    Livrare standard prin reteaua PPL, 2-4 zile.
                   </span>
                 ) : (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Livrare standard prin reteaua DPD, 3-4 zile.
+                    Livrare standard prin reteaua DPD, 2-4 zile.
                   </span>
                 )}
 

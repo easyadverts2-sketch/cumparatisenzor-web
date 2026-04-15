@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import { SEO_DEFAULT_DESCRIPTION, SEO_DEFAULT_OG_IMAGE_PATH, SITE_NAME } from "@
 import { getMetadataBase, getPublicSiteUrl } from "@/lib/site-url";
 
 const inter = Inter({ subsets: ["latin"] });
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["500", "600", "700"] });
 
 const siteUrl = getPublicSiteUrl();
 const ogImageUrl = `${siteUrl}${SEO_DEFAULT_OG_IMAGE_PATH}`;
@@ -69,11 +70,14 @@ export default function RootLayout({
         <GoogleAnalytics measurementId={gaId} />
         <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
-            <Link href="/" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-white no-underline hover:text-[#ffe2c8]">
+            <Link
+              href="/"
+              className={`inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-white no-underline hover:text-[#ffe2c8] ${plusJakarta.className}`}
+            >
               <Image src="/brand-logo.png" alt="Logo Senzori Libre Romania" width={34} height={34} className="h-[34px] w-[34px] rounded-full bg-white/90 p-0.5" />
               <span>Senzori Libre Romania</span>
             </Link>
-            <nav className="flex flex-1 flex-wrap gap-x-5 gap-y-2 text-sm font-medium lg:justify-center">
+            <nav className={`flex flex-1 flex-wrap gap-x-5 gap-y-2 text-[15px] font-semibold tracking-[0.01em] lg:justify-center ${plusJakarta.className}`}>
               <Link href="/despre-libre" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Despre Libre 2 Plus
               </Link>
@@ -82,9 +86,6 @@ export default function RootLayout({
               </Link>
               <Link href="/instalare-librelink" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Instalare app
-              </Link>
-              <Link href="/freestyle-libre-vs-dexcom" className="text-white/95 no-underline hover:text-[#ffe2c8]">
-                Libre vs Dexcom
               </Link>
               <Link href="/comanda" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Comanda
@@ -95,14 +96,17 @@ export default function RootLayout({
               <Link href="/gdpr" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 GDPR
               </Link>
-              <Link href="/admin" className="text-white/95 no-underline hover:text-[#ffe2c8]">
-                Admin
-              </Link>
             </nav>
             <HeaderContactInline />
           </div>
         </header>
         {children}
+        <Link
+          href="/admin"
+          className={`fixed bottom-4 right-4 z-40 rounded-full border border-white/25 bg-[#4d1d35]/70 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-lg backdrop-blur transition hover:bg-[#4d1d35] ${plusJakarta.className}`}
+        >
+          Admin
+        </Link>
         <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
           <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#ffe7d6]">
             <div className="mb-5 inline-flex items-center gap-2 text-base font-semibold text-white">

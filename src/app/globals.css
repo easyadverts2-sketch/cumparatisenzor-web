@@ -38,3 +38,74 @@ a {
 a:hover {
   color: var(--brand-link-hover);
 }
+
+@keyframes whyOrbPulse {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.12) translateY(-8px);
+    opacity: 0.65;
+  }
+}
+
+@keyframes whyCardRise {
+  0% {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.why-choose-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.28) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: whyShine 4.8s ease-in-out infinite;
+}
+
+@keyframes whyShine {
+  0%,
+  55% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+.why-choose-orb {
+  position: absolute;
+  width: 13rem;
+  height: 13rem;
+  border-radius: 9999px;
+  filter: blur(42px);
+  animation: whyOrbPulse 5.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.why-choose-orb-one {
+  top: -4rem;
+  right: -2rem;
+  background: rgba(190, 63, 111, 0.45);
+}
+
+.why-choose-orb-two {
+  bottom: -5rem;
+  left: -3rem;
+  background: rgba(13, 148, 136, 0.3);
+  animation-delay: 700ms;
+}
+
+.why-choose-item {
+  opacity: 0;
+  animation: whyCardRise 650ms ease-out forwards;
+}

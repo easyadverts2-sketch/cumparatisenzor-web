@@ -116,33 +116,35 @@ export default function Home() {
       </section>
 
       <section className="mx-auto mt-14 max-w-6xl px-6">
-        <div className="rounded-3xl border-2 border-[#a6445f]/15 bg-[#fff4ec] p-8 md:p-10">
-          <h2 className="text-2xl font-bold text-[#042f2c]">Cum cumperi in 4 pasi</h2>
-          <ol className="mt-6 grid gap-4 md:grid-cols-2">
-            {[
-              "Alegeti cantitatea de senzori pe pagina de comanda.",
-              "Completati datele de facturare si livrare.",
-              "Alegeti ramburs sau transfer bancar (la transfer, expedem dupa plata).",
-              "Primiti coletul in 2-5 zile lucratoare din depozitul nostru din Polonia.",
-            ].map((step, i) => (
-              <li
-                key={step}
-                className="flex gap-3 rounded-2xl border border-[#de6a44]/25 bg-white p-4 text-[#14534d] shadow-sm"
+        <div className="why-choose-panel relative overflow-hidden rounded-3xl border-2 border-[#a6445f]/15 bg-[#fff4ec] p-8 md:p-10">
+          <div className="why-choose-orb why-choose-orb-one" />
+          <div className="why-choose-orb why-choose-orb-two" />
+          <div className="relative">
+            <h2 className="text-2xl font-bold text-[#042f2c] md:text-3xl">De ce sa alegi cumparatisenzor.ro</h2>
+            <div className="mt-6 grid gap-3 md:grid-cols-2">
+              {[
+                "🚚 Livrare rapida din UE (2-5 zile)",
+                "📦 Senzori originali, sigilati",
+                "🇷🇴 Suport in limba romana",
+                "💳 Plata simpla (ramburs sau transfer)",
+              ].map((reason, i) => (
+                <div
+                  key={reason}
+                  className="why-choose-item flex items-center rounded-2xl border border-[#de6a44]/25 bg-white/95 px-4 py-3 text-[15px] font-medium text-[#14534d] shadow-sm"
+                  style={{ animationDelay: `${i * 120}ms` }}
+                >
+                  {reason}
+                </div>
+              ))}
+            </div>
+            <div className="mt-7">
+              <Link
+                href="/comanda"
+                className="inline-flex rounded-xl bg-[#be3f6f] px-8 py-3.5 font-semibold text-white no-underline shadow-md hover:bg-[#9d2f56]"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#be3f6f] text-sm font-bold text-white">
-                  {i + 1}
-                </span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
-          <div className="mt-8 text-center">
-            <Link
-              href="/comanda"
-              className="inline-flex rounded-xl bg-[#be3f6f] px-8 py-3.5 font-semibold text-white no-underline shadow-md hover:bg-[#9d2f56]"
-            >
-              Mergi la comanda
-            </Link>
+                Comanda acum
+              </Link>
+            </div>
           </div>
         </div>
       </section>
