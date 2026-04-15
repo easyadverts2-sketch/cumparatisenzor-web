@@ -18,13 +18,41 @@ export const metadata: Metadata = {
 };
 
 export default function ComandaPage() {
+  const motifPieces = [
+    { top: "2%", left: "-10%", w: 200, r: -22, o: 0.24 },
+    { top: "10%", left: "8%", w: 165, r: 14, o: 0.19 },
+    { top: "3%", right: "6%", w: 180, r: -11, o: 0.21 },
+    { top: "15%", right: "-11%", w: 210, r: 20, o: 0.24 },
+    { top: "28%", left: "-8%", w: 225, r: 8, o: 0.22 },
+    { top: "32%", right: "3%", w: 160, r: -18, o: 0.18 },
+    { top: "45%", left: "4%", w: 175, r: 26, o: 0.2 },
+    { top: "50%", right: "-9%", w: 230, r: -7, o: 0.24 },
+    { top: "62%", left: "-12%", w: 240, r: -14, o: 0.24 },
+    { top: "70%", left: "14%", w: 170, r: 11, o: 0.18 },
+    { top: "75%", right: "10%", w: 180, r: -24, o: 0.2 },
+    { top: "86%", right: "-12%", w: 220, r: 16, o: 0.24 },
+    { bottom: "-2%", left: "0%", w: 190, r: 12, o: 0.22 },
+    { bottom: "4%", right: "0%", w: 195, r: -16, o: 0.22 },
+  ];
+
   return (
     <main className="relative isolate mx-auto max-w-6xl px-6 py-12">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -left-36 top-12 h-[560px] w-[280px] rotate-[-14deg] bg-[url('/sensor-motif.png')] bg-[length:190px_auto] bg-repeat-y opacity-[0.14]" />
-        <div className="absolute -right-36 top-20 h-[620px] w-[280px] rotate-[12deg] bg-[url('/sensor-motif.png')] bg-[length:190px_auto] bg-repeat-y opacity-[0.14]" />
-        <div className="absolute -left-20 bottom-0 h-[320px] w-[220px] rotate-[8deg] bg-[url('/sensor-motif.png')] bg-[length:160px_auto] bg-no-repeat opacity-[0.12]" />
-        <div className="absolute -right-20 bottom-0 h-[320px] w-[220px] rotate-[-8deg] bg-[url('/sensor-motif.png')] bg-[length:160px_auto] bg-no-repeat opacity-[0.12]" />
+        {motifPieces.map((piece, idx) => (
+          <div
+            key={idx}
+            className="absolute aspect-[799/392] bg-[url('/sensor-motif-bold.png')] bg-contain bg-center bg-no-repeat"
+            style={{
+              top: piece.top,
+              left: piece.left,
+              right: piece.right,
+              bottom: piece.bottom,
+              width: `${piece.w}px`,
+              transform: `rotate(${piece.r}deg)`,
+              opacity: piece.o,
+            }}
+          />
+        ))}
       </div>
 
       <div className="relative z-10">
