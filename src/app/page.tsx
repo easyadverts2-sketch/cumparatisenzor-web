@@ -116,34 +116,66 @@ export default function Home() {
       </section>
 
       <section className="mx-auto mt-14 max-w-6xl px-6">
-        <div className="why-choose-panel relative overflow-hidden rounded-3xl border-2 border-[#a6445f]/15 bg-[#fff4ec] p-8 md:p-10">
-          <div className="why-choose-orb why-choose-orb-one" />
-          <div className="why-choose-orb why-choose-orb-two" />
-          <div className="relative">
-            <h2 className="text-2xl font-bold text-[#042f2c] md:text-3xl">De ce sa alegi cumparatisenzor.ro</h2>
-            <div className="mt-6 grid gap-3 md:grid-cols-2">
-              {[
-                "🚚 Livrare rapida din UE (2-5 zile)",
-                "📦 Senzori originali, sigilati",
-                "🇷🇴 Suport in limba romana",
-                "💳 Plata simpla (ramburs sau transfer)",
-              ].map((reason, i) => (
-                <div
-                  key={reason}
-                  className="why-choose-item flex items-center rounded-2xl border border-[#de6a44]/25 bg-white/95 px-4 py-3 text-[15px] font-medium text-[#14534d] shadow-sm"
-                  style={{ animationDelay: `${i * 120}ms` }}
-                >
-                  {reason}
-                </div>
-              ))}
-            </div>
-            <div className="mt-7">
+        <div className="why-split-panel relative overflow-hidden rounded-3xl border border-[#b44b67]/25 bg-gradient-to-br from-[#6f2147] via-[#9d2f56] to-[#d45a40] p-6 text-white shadow-2xl md:p-8">
+          <div className="why-split-glow why-split-glow-one" />
+          <div className="why-split-glow why-split-glow-two" />
+          <div className="relative grid gap-6 lg:grid-cols-[1.05fr_1.35fr] lg:items-stretch">
+            <div className="rounded-2xl border border-white/25 bg-black/10 p-6 backdrop-blur-sm">
+              <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#ffd8be]">Argumente clare</p>
+              <h2 className="mt-3 text-4xl font-bold leading-tight md:text-5xl">De ce sa alegi cumparatisenzor.ro</h2>
+              <p className="mt-4 text-base leading-relaxed text-white/90 md:text-lg">
+                Livrare rapida, produse sigilate si suport clar pentru fiecare comanda, fara complicatii.
+              </p>
               <Link
                 href="/comanda"
-                className="inline-flex rounded-xl bg-[#be3f6f] px-8 py-3.5 font-semibold text-white no-underline shadow-md hover:bg-[#9d2f56]"
+                className="mt-7 inline-flex rounded-xl bg-white px-7 py-3.5 text-base font-bold text-[#8f2c53] no-underline shadow-lg transition hover:bg-[#fff1e6]"
               >
                 Comanda acum
               </Link>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {[
+                {
+                  id: "01",
+                  title: "Livrare rapida din UE",
+                  detail: "2-5 zile",
+                  icon: "🚚",
+                },
+                {
+                  id: "02",
+                  title: "Senzori originali",
+                  detail: "sigilati, verificati",
+                  icon: "📦",
+                },
+                {
+                  id: "03",
+                  title: "Suport in limba romana",
+                  detail: "raspuns rapid la intrebari",
+                  icon: "🇷🇴",
+                },
+                {
+                  id: "04",
+                  title: "Plata simpla",
+                  detail: "ramburs sau transfer",
+                  icon: "💳",
+                },
+              ].map((item, idx) => (
+                <article
+                  key={item.id}
+                  className="why-split-card group rounded-2xl border border-white/25 bg-white/12 p-5 shadow-lg backdrop-blur-md"
+                  style={{ animationDelay: `${idx * 110}ms` }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xl shadow-sm">
+                      {item.icon}
+                    </span>
+                    <span className="text-sm font-semibold text-[#ffe2c8]">{item.id}</span>
+                  </div>
+                  <h3 className="mt-4 text-xl font-bold leading-snug md:text-2xl">{item.title}</h3>
+                  <p className="mt-2 text-base font-medium text-white/90">{item.detail}</p>
+                </article>
+              ))}
             </div>
           </div>
         </div>

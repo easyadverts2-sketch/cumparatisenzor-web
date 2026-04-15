@@ -39,37 +39,37 @@ a:hover {
   color: var(--brand-link-hover);
 }
 
-@keyframes whyOrbPulse {
+@keyframes whyGlowPulse {
   0%,
   100% {
     transform: scale(1) translateY(0);
-    opacity: 0.45;
+    opacity: 0.4;
   }
   50% {
-    transform: scale(1.12) translateY(-8px);
-    opacity: 0.65;
+    transform: scale(1.14) translateY(-10px);
+    opacity: 0.62;
   }
 }
 
-@keyframes whyCardRise {
+@keyframes whySplitRise {
   0% {
-    transform: translateY(8px);
+    transform: translateY(12px) scale(0.98);
     opacity: 0;
   }
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
-.why-choose-panel::after {
+.why-split-panel::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.28) 50%, transparent 80%);
+  background: linear-gradient(120deg, transparent 18%, rgba(255, 255, 255, 0.22) 49%, transparent 80%);
   transform: translateX(-100%);
-  animation: whyShine 4.8s ease-in-out infinite;
+  animation: whyShine 5.6s ease-in-out infinite;
 }
 
 @keyframes whyShine {
@@ -82,30 +82,40 @@ a:hover {
   }
 }
 
-.why-choose-orb {
+.why-split-glow {
   position: absolute;
-  width: 13rem;
-  height: 13rem;
+  width: 16rem;
+  height: 16rem;
   border-radius: 9999px;
-  filter: blur(42px);
-  animation: whyOrbPulse 5.2s ease-in-out infinite;
+  filter: blur(52px);
+  animation: whyGlowPulse 6s ease-in-out infinite;
   pointer-events: none;
 }
 
-.why-choose-orb-one {
-  top: -4rem;
-  right: -2rem;
-  background: rgba(190, 63, 111, 0.45);
+.why-split-glow-one {
+  top: -5rem;
+  right: -4rem;
+  background: rgba(255, 198, 143, 0.35);
 }
 
-.why-choose-orb-two {
-  bottom: -5rem;
-  left: -3rem;
-  background: rgba(13, 148, 136, 0.3);
-  animation-delay: 700ms;
+.why-split-glow-two {
+  bottom: -7rem;
+  left: -5rem;
+  background: rgba(255, 255, 255, 0.25);
+  animation-delay: 900ms;
 }
 
-.why-choose-item {
+.why-split-card {
   opacity: 0;
-  animation: whyCardRise 650ms ease-out forwards;
+  animation: whySplitRise 620ms ease-out forwards;
+  transition:
+    transform 220ms ease,
+    background-color 220ms ease,
+    border-color 220ms ease;
+}
+
+.why-split-card:hover {
+  transform: translateY(-3px);
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.45);
 }
