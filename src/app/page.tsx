@@ -123,7 +123,7 @@ export default function Home() {
               "Alegeti cantitatea de senzori pe pagina de comanda.",
               "Completati datele de facturare si livrare.",
               "Alegeti ramburs sau transfer bancar (la transfer, expedem dupa plata).",
-              "Primiti coletul in 3-5 zile lucratoare din depozitul nostru din Polonia.",
+              "Primiti coletul in 2-5 zile lucratoare din depozitul nostru din Polonia.",
             ].map((step, i) => (
               <li
                 key={step}

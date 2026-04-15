@@ -26,8 +26,8 @@ export default function ComandaPage() {
       <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">Comanda FreeStyle Libre 2 Plus</h1>
       <p className="mt-2 max-w-2xl text-[#1a4d47]">
         Pret: <strong className="text-[#0a2624]">350 RON</strong> / pachet · SKU{" "}
-        <strong className="text-[#0a2624]">5021791006694</strong> · Livrare PPL/Packeta{" "}
-        <strong className="text-[#0a2624]">70 RON</strong> (gratuita de la 5 bucati) · Fineship{" "}
+        <strong className="text-[#0a2624]">5021791006694</strong> · Livrare PPL/DPD{" "}
+        <strong className="text-[#0a2624]">40 RON</strong> (gratuita de la 5 bucati) · Fineship{" "}
         <strong className="text-[#0a2624]">200 RON</strong> (de la 6 bucati).
       </p>
 
@@ -46,7 +46,7 @@ export default function ComandaPage() {
           <ul className="mt-3 grid gap-2 text-sm text-[#5c3046] sm:grid-cols-2">
             <li>✓ Confirmare imediata pe e-mail</li>
             <li>✓ Plata ramburs, transfer sau card</li>
-            <li>✓ Curieri multipli (PPL, Packeta, Fineship)</li>
+            <li>✓ Curieri multipli (PPL, DPD, Fineship)</li>
             <li>✓ Formular securizat, proces simplu</li>
           </ul>
         </div>

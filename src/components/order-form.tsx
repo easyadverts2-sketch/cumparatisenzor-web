@@ -28,7 +28,7 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
 
 export function OrderForm() {
   const UNIT_PRICE = 350;
-  const STANDARD_SHIPPING = 70;
+  const STANDARD_SHIPPING = 40;
   const FINESHIP_SHIPPING = 200;
 
   const router = useRouter();
@@ -313,7 +313,7 @@ export function OrderForm() {
               />
               <span className="min-w-0">
                 <span className="block font-semibold text-[#0a2624]">
-                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "Packeta" : "Fineship"}
+                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "DPD" : "Fineship"}
                 </span>
                 {c === "FINESHIP" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
@@ -325,7 +325,7 @@ export function OrderForm() {
                   </span>
                 ) : (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
-                    Livrare prin puncte Packeta / Z-Box, 3-4 zile.
+                    Livrare standard prin reteaua DPD, 3-4 zile.
                   </span>
                 )}
 
@@ -335,7 +335,7 @@ export function OrderForm() {
                   </span>
                 ) : (
                   <span className="mt-2 inline-flex rounded-full bg-[#e9f7f4] px-2.5 py-1 text-xs font-medium text-[#155e57]">
-                    70 RON • Gratuit de la 5 bucati
+                    40 RON • Gratuit de la 5 bucati
                   </span>
                 )}
               </span>
@@ -501,7 +501,7 @@ export function OrderForm() {
             <dd className="font-medium">{productsTotal} RON</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt>Livrare ({carrier === "PPL" ? "PPL" : carrier === "PACKETA" ? "Packeta" : "Fineship"})</dt>
+            <dt>Livrare ({carrier === "PPL" ? "PPL" : carrier === "PACKETA" ? "DPD" : "Fineship"})</dt>
             <dd className="font-medium">{shippingPrice} RON</dd>
           </div>
           <div className="flex items-center justify-between border-t border-[#de6a44]/30 pt-2 text-base text-[#3a1d2d]">

@@ -58,7 +58,7 @@ export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
 
 export function formatShippingLine(order: Pick<Order, "shippingCarrier" | "shippingCarrierOther">): string {
   if (order.shippingCarrier === "PPL") return "PPL";
-  if (order.shippingCarrier === "PACKETA") return "Packeta";
+  if (order.shippingCarrier === "PACKETA") return "DPD";
   if (order.shippingCarrier === "FINESHIP") return "Fineship";
   return "PPL";
 }
@@ -223,7 +223,7 @@ export async function createOrder(input: {
         message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
       };
     }
-    const shippingPrice = input.shippingCarrier === "FINESHIP" ? 200 : input.quantity >= 5 ? 0 : 70;
+    const shippingPrice = input.shippingCarrier === "FINESHIP" ? 200 : input.quantity >= 5 ? 0 : 40;
     const totalPrice = input.quantity * price + shippingPrice;
 
     const carrierOther = null;

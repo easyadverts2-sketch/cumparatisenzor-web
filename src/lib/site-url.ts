@@ -4,12 +4,17 @@ export function getPublicSiteUrl() {
   if (explicit) {
     return explicit.replace(/\/$/, "");
   }
+  // In productie preferam mereu domeniul principal, altfel Search Console
+  // poate vedea URL-uri de preview (*.vercel.app) in sitemap.
+  if (process.env.VERCEL_ENV === "production") {
+    return "https://cumparatisenzor.ro";
+  }
   const vercel = process.env.VERCEL_URL?.trim();
   if (vercel) {
     const host = vercel.replace(/^https?:\/\//, "");
     return `https://${host}`;
   }
-  return "http://localhost:3000";
+  return "https://cumparatisenzor.ro";
 }
 
 /** Bază pentru metadata Next.js (canonical, Open Graph). */

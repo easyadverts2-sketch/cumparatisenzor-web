@@ -83,6 +83,9 @@ export default function RootLayout({
               <Link href="/instalare-librelink" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Instalare app
               </Link>
+              <Link href="/freestyle-libre-vs-dexcom" className="text-white/95 no-underline hover:text-[#ffe2c8]">
+                Libre vs Dexcom
+              </Link>
               <Link href="/comanda" className="text-white/95 no-underline hover:text-[#ffe2c8]">
                 Comanda
               </Link>
