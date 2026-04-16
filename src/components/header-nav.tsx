@@ -8,6 +8,7 @@ const links = [
   { href: "/despre-noi", label: "Despre noi" },
   { href: "/instalare-librelink", label: "Instalare app" },
   { href: "/comanda", label: "Comanda" },
+  { href: "/hu", label: "HU oldal" },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {

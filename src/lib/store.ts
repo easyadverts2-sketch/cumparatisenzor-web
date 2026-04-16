@@ -1,15 +1,27 @@
-import { Order, OrderStatus, ShippingCarrier, Store } from "./types";
+import { Market, Order, OrderStatus, ShippingCarrier, Store } from "./types";
 import { sendEmail } from "./email";
 import { getSql } from "./db";
 import { formatOrderNumber } from "./order-format";
 import { getStripe } from "./stripe-checkout";
 
-const defaults = {
-  inventory: 98,
-  sku: "5021791006694",
-  price: 350,
-  shipping: 10,
+const defaultsByMarket: Record<Market, { inventory: number; sku: string; price: number; shipping: number }> = {
+  RO: {
+    inventory: 98,
+    sku: "5021791006694",
+    price: 350,
+    shipping: 40,
+  },
+  HU: {
+    inventory: 98,
+    sku: "5021791006694",
+    price: 28900,
+    shipping: 3200,
+  },
 };
+
+function settingKey(market: Market, key: "inventory" | "sku" | "price" | "shipping") {
+  return market === "RO" ? key : `hu_${key}`;
+}
 
 type Row = Record<string, unknown>;
 type SqlClient = ReturnType<typeof getSql>;
@@ -47,6 +59,7 @@ function toOrder(row: Row): Order {
     itemPrice: Number(row.item_price),
     totalPrice: Number(row.total_price),
     status: String(row.status) as OrderStatus,
+    market: String(row.market || "RO") as Market,
   };
 }
 
@@ -96,6 +109,18 @@ async function migrateShippingCarrier(sql: SqlClient) {
   await sql`alter table orders add column shipping_carrier_other text`;
 }
 
+async function migrateOrderMarket(sql: SqlClient) {
+  const col = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'market'
+  `;
+  if (col.length > 0) {
+    return;
+  }
+  await sql`alter table orders add column market text not null default 'RO'`;
+  await sql`create index if not exists orders_market_created_idx on orders(market, created_at desc)`;
+}
+
 async function ensureSchema(sql: SqlClient) {
   await sql`
     create table if not exists app_settings (
@@ -133,15 +158,20 @@ async function ensureSchema(sql: SqlClient) {
 
   await sql`
     insert into app_settings (key, value) values
-      ('inventory', ${String(defaults.inventory)}),
-      ('sku', ${defaults.sku}),
-      ('price', ${String(defaults.price)}),
-      ('shipping', ${String(defaults.shipping)})
+      ('inventory', ${String(defaultsByMarket.RO.inventory)}),
+      ('sku', ${defaultsByMarket.RO.sku}),
+      ('price', ${String(defaultsByMarket.RO.price)}),
+      ('shipping', ${String(defaultsByMarket.RO.shipping)}),
+      ('hu_inventory', ${String(defaultsByMarket.HU.inventory)}),
+      ('hu_sku', ${defaultsByMarket.HU.sku}),
+      ('hu_price', ${String(defaultsByMarket.HU.price)}),
+      ('hu_shipping', ${String(defaultsByMarket.HU.shipping)})
     on conflict (key) do nothing
   `;
 
   await migrateOrderNumber(sql);
   await migrateShippingCarrier(sql);
+  await migrateOrderMarket(sql);
 }
 
 async function getSettingNumber(sql: SqlClient, key: string, fallback: number) {
@@ -156,15 +186,16 @@ async function getSettingString(sql: SqlClient, key: string, fallback: string) {
   return rows.length === 0 ? fallback : String(rows[0].value);
 }
 
-export async function readStore(): Promise<Store> {
+export async function readStore(market: Market = "RO"): Promise<Store> {
   const sql = getSql();
   await ensureSchema(sql);
+  const defaults = defaultsByMarket[market];
   const [inventory, sku, price, shipping, orderRows, notificationRows] = await Promise.all([
-    getSettingNumber(sql, "inventory", defaults.inventory),
-    getSettingString(sql, "sku", defaults.sku),
-    getSettingNumber(sql, "price", defaults.price),
-    getSettingNumber(sql, "shipping", defaults.shipping),
-    sql`select * from orders order by created_at desc`,
+    getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory),
+    getSettingString(sql, settingKey(market, "sku"), defaults.sku),
+    getSettingNumber(sql, settingKey(market, "price"), defaults.price),
+    getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping),
+    sql`select * from orders where market = ${market} order by created_at desc`,
     sql`select * from notifications order by created_at desc`,
   ]);
 
@@ -185,10 +216,10 @@ export async function readStore(): Promise<Store> {
   };
 }
 
-export async function writeStore(store: Store): Promise<void> {
+export async function writeStore(store: Store, market: Market = "RO"): Promise<void> {
   const sql = getSql();
   await ensureSchema(sql);
-  await sql`insert into app_settings (key, value) values ('inventory', ${String(store.inventory)})
+  await sql`insert into app_settings (key, value) values (${settingKey(market, "inventory")}, ${String(store.inventory)})
             on conflict (key) do update set value = excluded.value`;
 }
 
@@ -202,7 +233,7 @@ export async function createOrder(input: {
   paymentMethod: Order["paymentMethod"];
   shippingCarrier: ShippingCarrier;
   shippingCarrierOther?: string | null;
-}): Promise<{ ok: boolean; order?: Order; message: string }> {
+}, market: Market = "RO"): Promise<{ ok: boolean; order?: Order; message: string }> {
   try {
     const sql = getSql();
     await ensureSchema(sql);
@@ -215,15 +246,27 @@ export async function createOrder(input: {
       };
     }
 
-    const inventory = await getSettingNumber(sql, "inventory", defaults.inventory);
-    const price = await getSettingNumber(sql, "price", defaults.price);
+    const defaults = defaultsByMarket[market];
+    const inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
+    const price = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
     if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
       return {
         ok: false,
         message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
       };
     }
-    const shippingPrice = input.shippingCarrier === "FINESHIP" ? 200 : input.quantity >= 5 ? 0 : 40;
+    const shippingPrice =
+      market === "HU"
+        ? input.shippingCarrier === "FINESHIP"
+          ? 16000
+          : input.quantity >= 5
+            ? 0
+            : 3200
+        : input.shippingCarrier === "FINESHIP"
+          ? 200
+          : input.quantity >= 5
+            ? 0
+            : 40;
     const totalPrice = input.quantity * price + shippingPrice;
 
     const carrierOther = null;
@@ -250,29 +293,43 @@ export async function createOrder(input: {
       insert into orders (
         id, customer_name, email, phone, billing_address, delivery_address,
         quantity, payment_method, shipping_price, item_price, total_price, status,
-        shipping_carrier, shipping_carrier_other
+        shipping_carrier, shipping_carrier_other, market
       ) values (
         ${orderId}, ${input.customerName}, ${input.email}, ${input.phone},
         ${input.billingAddress}, ${input.deliveryAddress},
         ${input.quantity}, ${input.paymentMethod}, ${shippingPrice},
         ${price}, ${totalPrice}, ${status},
-        ${input.shippingCarrier}, ${carrierOther}
+        ${input.shippingCarrier}, ${carrierOther}, ${market}
       )
       returning *
     `;
     const order = toOrder(inserted[0] as unknown as Row);
 
     const nr = formatOrderNumber(order.orderNumber);
-    const subject = "Confirmare comanda FreeStyle Libre 2 Plus";
+    const subject =
+      market === "HU"
+        ? "FreeStyle Libre 2 Plus rendeles visszaigazolasa"
+        : "Confirmare comanda FreeStyle Libre 2 Plus";
     const payHint =
-      input.paymentMethod === "BANK_TRANSFER"
-        ? "Plata trebuie confirmata in maximum 5 zile."
-        : input.paymentMethod === "CARD_STRIPE"
-          ? "Urmeaza sa fiti redirectionat catre plata securizata cu cardul. Daca inchideti pagina inainte de plata, comanda ramane in asteptare."
-          : "Comanda va fi procesata pentru expediere.";
-    const body = `Comanda #${nr} a fost inregistrata. Metoda plata: ${formatPaymentMethodLabel(
-      input.paymentMethod
-    )}. Curier / livrare: ${formatShippingLine(order)}. ${payHint}`;
+      market === "HU"
+        ? input.paymentMethod === "BANK_TRANSFER"
+          ? "Az atutalast kerjuk 5 napon belul teljesiteni."
+          : input.paymentMethod === "CARD_STRIPE"
+            ? "A rendszer biztonsagos kartyaoldalra iranyit. Ha megszakad a folyamat, a rendeles varakozo allapotban marad."
+            : "A rendelest elokeszitjuk feladasra."
+        : input.paymentMethod === "BANK_TRANSFER"
+          ? "Plata trebuie confirmata in maximum 5 zile."
+          : input.paymentMethod === "CARD_STRIPE"
+            ? "Urmeaza sa fiti redirectionat catre plata securizata cu cardul. Daca inchideti pagina inainte de plata, comanda ramane in asteptare."
+            : "Comanda va fi procesata pentru expediere.";
+    const body =
+      market === "HU"
+        ? `A #${nr} rendeles rogzitve. Fizetesi mod: ${formatPaymentMethodLabel(
+            input.paymentMethod
+          )}. Futar: ${formatShippingLine(order)}. ${payHint}`
+        : `Comanda #${nr} a fost inregistrata. Metoda plata: ${formatPaymentMethodLabel(
+            input.paymentMethod
+          )}. Curier / livrare: ${formatShippingLine(order)}. ${payHint}`;
     await sql`
       insert into notifications (id, type, recipient, subject, body)
       values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${subject}, ${body})
@@ -288,13 +345,13 @@ export async function createOrder(input: {
         `Telefon: ${order.phone}`,
         `Cantitate: ${order.quantity}`,
         `Livrare: ${formatShippingLine(order)}`,
-        `Total: ${order.totalPrice} RON`,
+        `Total: ${order.totalPrice} ${market === "HU" ? "HUF" : "RON"}`,
         `Plata: ${formatPaymentMethodLabel(input.paymentMethod)}`,
         `Status: ${order.status}`,
       ].join("\n");
       await sendEmail({
         to: internal,
-        subject: `Comanda noua #${nr} - cumparatisenzor.ro`,
+        subject: `Comanda noua #${nr} - ${market === "HU" ? "szenzorvasarlas.hu" : "cumparatisenzor.ro"}`,
         text: internalText,
       }).catch(() => undefined);
     }
@@ -320,40 +377,41 @@ export async function autoCancelExpiredOrders() {
   `;
 }
 
-export async function getOrderByNumber(orderNumber: number): Promise<Order | null> {
+export async function getOrderByNumber(orderNumber: number, market: Market = "RO"): Promise<Order | null> {
   const sql = getSql();
   await ensureSchema(sql);
   if (!Number.isFinite(orderNumber) || orderNumber < 1) {
     return null;
   }
-  const rows = await sql`select * from orders where order_number = ${orderNumber} limit 1`;
+  const rows = await sql`select * from orders where order_number = ${orderNumber} and market = ${market} limit 1`;
   if (rows.length === 0) {
     return null;
   }
   return toOrder(rows[0] as unknown as Row);
 }
 
-export async function getOrderById(orderId: string): Promise<Order | null> {
+export async function getOrderById(orderId: string, market: Market = "RO"): Promise<Order | null> {
   const sql = getSql();
   await ensureSchema(sql);
-  const rows = await sql`select * from orders where id = ${orderId} limit 1`;
+  const rows = await sql`select * from orders where id = ${orderId} and market = ${market} limit 1`;
   if (rows.length === 0) {
     return null;
   }
   return toOrder(rows[0] as unknown as Row);
 }
 
-export async function updateOrderStatus(orderId: string, status: OrderStatus) {
+export async function updateOrderStatus(orderId: string, status: OrderStatus, market: Market = "RO") {
   const sql = getSql();
   await ensureSchema(sql);
-  const rows = await sql`select * from orders where id = ${orderId} limit 1`;
+  const rows = await sql`select * from orders where id = ${orderId} and market = ${market} limit 1`;
   if (rows.length === 0) {
     return false;
   }
   const order = toOrder(rows[0] as unknown as Row);
 
   return sql.begin(async (tx) => {
-    const invRows = await tx`select value from app_settings where key = 'inventory' limit 1`;
+    const defaults = defaultsByMarket[market];
+    const invRows = await tx`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
     const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
 
     const prepaid =
@@ -363,7 +421,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
       }
-      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = 'inventory'`;
+      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
     }
 
     if (
@@ -375,7 +433,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
       }
-      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = 'inventory'`;
+      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
     }
 
     await tx`update orders set status = ${status} where id = ${orderId}`;

@@ -6,7 +6,17 @@ import { formatOrderNumber } from "@/lib/order-format";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-export function AdminOrdersList({ orders }: { orders: Order[] }) {
+export function AdminOrdersList({
+  orders,
+  locale = "ro-RO",
+  currency = "RON",
+  detailsBasePath = "/admin/orders",
+}: {
+  orders: Order[];
+  locale?: string;
+  currency?: string;
+  detailsBasePath?: string;
+}) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [q, setQ] = useState("");
 
@@ -76,16 +86,18 @@ export function AdminOrdersList({ orders }: { orders: Order[] }) {
                 <td className="px-4 py-3 font-mono font-medium text-[#0f766e]">
                   {formatOrderNumber(o.orderNumber)}
                 </td>
-                <td className="px-4 py-3 text-[#1a4d47]">{new Date(o.createdAt).toLocaleString("ro-RO")}</td>
+                <td className="px-4 py-3 text-[#1a4d47]">{new Date(o.createdAt).toLocaleString(locale)}</td>
                 <td className="px-4 py-3">
                   <div className="font-medium text-[#0a2624]">{o.customerName}</div>
                   <div className="text-xs text-[#1a4d47]">{o.email}</div>
                 </td>
-                <td className="px-4 py-3 text-[#0a2624]">{o.totalPrice} RON</td>
+                <td className="px-4 py-3 text-[#0a2624]">
+                  {o.totalPrice} {currency}
+                </td>
                 <td className="max-w-[140px] truncate px-4 py-3 text-xs text-[#1a4d47]">{o.status}</td>
                 <td className="px-4 py-3">
                   <Link
-                    href={`/admin/orders/${o.orderNumber}`}
+                    href={`${detailsBasePath}/${o.orderNumber}`}
                     className="font-medium text-[#0f766e] hover:underline"
                   >
                     Detalii

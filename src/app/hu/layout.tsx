@@ -1,0 +1,59 @@
+import type { ReactNode } from "react";
+import Image from "next/image";
+import Link from "next/link";
+
+export default function HuLayout({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
+          <Link href="/hu" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-white no-underline">
+            <Image src="/brand-logo.png" alt="Szenzorvasarlas.hu logo" width={34} height={34} className="h-[34px] w-[34px] rounded-full bg-white/90 p-0.5" />
+            <span>Szenzorvasarlas.hu</span>
+          </Link>
+          <nav className="flex flex-1 flex-wrap gap-2 text-[15px] font-semibold lg:justify-center">
+            {[
+              ["/hu/despre-libre", "Libre 2 Plus"],
+              ["/hu/rolunk", "Rolunk"],
+              ["/hu/comanda", "Rendeles"],
+              ["/hu/aszf", "ASZF"],
+              ["/hu/adatkezeles", "Adatkezeles"],
+            ].map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-white no-underline shadow-sm backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-white/40 hover:bg-white/20"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="hidden flex-col items-end gap-1 border-l border-white/30 pl-4 text-xs lg:flex">
+            <a href="mailto:info@cumparatisenzor.ro" className="font-semibold text-white no-underline">
+              info@cumparatisenzor.ro
+            </a>
+            <a href="https://wa.me/420777577352" target="_blank" rel="noopener noreferrer" className="font-semibold text-white no-underline">
+              +420 777 577 352
+            </a>
+          </div>
+        </div>
+      </header>
+      {children}
+      <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
+        <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#ffe7d6]">
+          <p className="font-medium text-white">Operator: Česká maloobchodní s.r.o.</p>
+          <p>Cim: Braunerova 563/7, Liben (Praga 8), 180 00 Praha</p>
+          <p>ID: 23504463</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link href="/hu/aszf" className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20">
+              ASZF
+            </Link>
+            <Link href="/hu/adatkezeles" className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20">
+              Adatkezeles
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </>
+  );
+}

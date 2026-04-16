@@ -14,6 +14,7 @@ export const SHIPPING_CARRIERS = ["PPL", "PACKETA", "FINESHIP"] as const;
 export type ShippingCarrier = (typeof SHIPPING_CARRIERS)[number];
 
 export type PaymentMethod = "COD" | "BANK_TRANSFER" | "CARD_STRIPE";
+export type Market = "RO" | "HU";
 
 export type Order = {
   id: string;
@@ -34,6 +35,7 @@ export type Order = {
   itemPrice: number;
   totalPrice: number;
   status: OrderStatus;
+  market?: Market;
 };
 
 export type Notification = {
