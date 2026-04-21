@@ -24,10 +24,15 @@ export default function HuAboutLibrePage() {
         <h2 className="border-b border-[#de6a44]/20 bg-[#fff4ec] px-5 py-3 text-lg font-semibold text-[#3a1d2d]">
           Instrukcios video
         </h2>
-        <video controls preload="metadata" className="aspect-video w-full bg-black">
-          <source src="/video.mp4" type="video/mp4" />
-          A bongeszo nem tamogatja a video lejatszast.
-        </video>
+        <iframe
+          width="100%"
+          height="460"
+          src="https://www.youtube.com/embed/lPh1fDlr9m8"
+          title="Instrukcios video - FreeStyle Libre 2 Plus"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="aspect-video w-full"
+        />
       </div>
 
       <div className="mt-8 rounded-2xl border border-[#de6a44]/25 bg-[#fff4ec] p-5">

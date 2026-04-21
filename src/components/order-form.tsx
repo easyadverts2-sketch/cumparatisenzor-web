@@ -27,6 +27,7 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
 }
 
 export function OrderForm() {
+  const PRODUCT_NAME = "FreeStyle Libre 2 Plus";
   const UNIT_PRICE = 350;
   const STANDARD_SHIPPING = 40;
   const FINESHIP_SHIPPING = 200;
@@ -497,7 +498,9 @@ export function OrderForm() {
         <h4 className="text-base font-semibold text-[#3a1d2d]">Sumar comanda</h4>
         <dl className="mt-3 space-y-2 text-sm text-[#5c3046]">
           <div className="flex items-center justify-between">
-            <dt>Produse ({quantity} x {UNIT_PRICE} RON)</dt>
+            <dt>
+              {PRODUCT_NAME} ({quantity} x {UNIT_PRICE} RON)
+            </dt>
             <dd className="font-medium">{productsTotal} RON</dd>
           </div>
           <div className="flex items-center justify-between">
