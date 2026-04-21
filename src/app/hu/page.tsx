@@ -45,20 +45,99 @@ export default function HuHomePage() {
         </div>
       </section>
 
-      <section className="mx-auto mt-12 max-w-6xl px-6">
+      <section className="relative -mt-8 mx-auto max-w-6xl px-6">
         <div className="rounded-3xl border-2 border-[#de6a44]/25 bg-white p-8 shadow-xl md:p-10">
-          <h2 className="text-2xl font-bold text-[#042f2c] md:text-3xl">Miert a szenzorvasarlas.hu?</h2>
-          <div className="mt-6 grid gap-3 md:grid-cols-2">
+          <h2 className="text-2xl font-bold text-[#042f2c] md:text-3xl">Mi a FreeStyle Libre 2 Plus?</h2>
+          <p className="mt-4 text-lg leading-relaxed text-[#14534d]">
+            A FreeStyle Libre 2 Plus egy folyamatos glukozmonitorozasi rendszer (CGM): egy kis szenzor a karon,
+            amely akar <strong className="text-[#042f2c]">15 napig</strong> koveti az ertekeket, es az adatok
+            telefonon vagy dedikalt olvason is megjelennek.
+          </p>
+          <p className="mt-4 text-lg leading-relaxed text-[#14534d]">
+            A rendszer segit atlathatobban kezelni a mindennapi glukozvaltozasokat, kevesebb ujjszuras mellett,
+            jobb napi rutinnal es tisztabb trendekkel.
+          </p>
+
+          <div className="mt-10 grid gap-4 sm:grid-cols-2">
             {[
-              "🚚 Gyors EU-szallitas (2-5 nap)",
-              "📦 Eredeti, bontatlan szenzorok",
-              "🇭🇺 Magyar nyelvu tamogatas",
-              "💳 Egyszeru fizetes (utanvet vagy atutalas)",
+              {
+                icon: "🔔",
+                title: "Riasztas magas/alacsony ertekre",
+                text: "Szemelyre szabott jelzesek segitik a gyors reagalast.",
+              },
+              {
+                icon: "📱",
+                title: "Gyors leolvasas",
+                text: "Telefonon vagy olvason egyszeruen kovethetoek az adatok.",
+              },
+              {
+                icon: "📈",
+                title: "Trendek az alkalmazasban",
+                text: "A napi gorbek es elozmenyek jobban tamogatjak a donteseket.",
+              },
+              {
+                icon: "🩹",
+                title: "Kevesebb mindennapi szuras",
+                text: "A folyamatos monitorozas kenyelmesebb rutint tesz lehetove.",
+              },
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-[#de6a44]/25 bg-[#fff4ec] px-4 py-3 text-base font-medium text-[#14534d]">
-                {item}
+              <div
+                key={item.title}
+                className="rounded-2xl border border-[#de6a44]/30 bg-gradient-to-br from-[#fff4ec] to-white p-5 shadow-sm"
+              >
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f8d9c4] text-lg">
+                  {item.icon}
+                </span>
+                <h3 className="mt-3 font-semibold text-[#042f2c]">{item.title}</h3>
+                <p className="mt-2 text-[#14534d]">{item.text}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto mt-12 max-w-6xl px-6">
+        <div className="why-split-panel relative overflow-hidden rounded-3xl border border-[#b44b67]/25 bg-gradient-to-br from-[#6f2147] via-[#9d2f56] to-[#d45a40] p-6 text-white shadow-2xl md:p-8">
+          <div className="why-split-glow why-split-glow-one" />
+          <div className="why-split-glow why-split-glow-two" />
+          <div className="relative grid gap-6 lg:grid-cols-[1.05fr_1.35fr] lg:items-stretch">
+            <div className="rounded-2xl border border-white/25 bg-black/10 p-6 backdrop-blur-sm">
+              <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#ffd8be]">Gyakorlati elonyok</p>
+              <h2 className="mt-3 text-4xl font-bold leading-tight md:text-5xl">Miert a szenzorvasarlas.hu?</h2>
+              <p className="mt-4 text-base leading-relaxed text-white/90 md:text-lg">
+                Gyors kiszallitas, eredeti termekek es magyar nyelvu tamogatas - atlathato rendelessel.
+              </p>
+              <Link
+                href="/hu/comanda"
+                className="mt-7 inline-flex rounded-xl bg-white px-7 py-3.5 text-base font-bold text-[#8f2c53] no-underline shadow-lg transition hover:bg-[#fff1e6]"
+              >
+                Rendeles
+              </Link>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {[
+                { id: "01", title: "Gyors EU-szallitas", detail: "2-5 nap", icon: "🚚" },
+                { id: "02", title: "Eredeti szenzorok", detail: "bontatlan csomagolas", icon: "📦" },
+                { id: "03", title: "Magyar nyelvu tamogatas", detail: "gyors valasz ugyfelszolgalat", icon: "🇭🇺" },
+                { id: "04", title: "Egyszeru fizetes", detail: "utanvet vagy atutalas", icon: "💳" },
+              ].map((item, idx) => (
+                <article
+                  key={item.id}
+                  className="why-split-card group rounded-2xl border border-white/25 bg-white/12 p-5 shadow-lg backdrop-blur-md"
+                  style={{ animationDelay: `${idx * 110}ms` }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xl shadow-sm">
+                      {item.icon}
+                    </span>
+                    <span className="text-sm font-semibold text-[#ffe2c8]">{item.id}</span>
+                  </div>
+                  <h3 className="mt-4 text-xl font-bold leading-snug md:text-2xl">{item.title}</h3>
+                  <p className="mt-2 text-base font-medium text-white/90">{item.detail}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
       </section>

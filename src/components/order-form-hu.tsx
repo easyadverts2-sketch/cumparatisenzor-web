@@ -27,8 +27,8 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
 }
 
 export function OrderFormHu() {
-  const UNIT_PRICE = 28900;
-  const STANDARD_SHIPPING = 3200;
+  const UNIT_PRICE = 25339;
+  const STANDARD_SHIPPING = 3199;
   const FINESHIP_SHIPPING = 16000;
 
   const router = useRouter();
@@ -271,7 +271,7 @@ export function OrderFormHu() {
                   </span>
                 ) : (
                   <span className="mt-2 inline-flex rounded-full bg-[#e9f7f4] px-2.5 py-1 text-xs font-medium text-[#155e57]">
-                    3200 HUF • 5 db-tol ingyenes
+                    3199 HUF • 5 db-tol ingyenes
                   </span>
                 )}
               </span>

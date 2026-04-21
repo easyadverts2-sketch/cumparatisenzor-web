@@ -19,6 +19,17 @@ export default function HuAboutLibrePage() {
         <li className="flex gap-2"><span className="text-[#0d9488]">•</span>Trendek es elozmenyek alkalmazasban.</li>
         <li className="flex gap-2"><span className="text-[#0d9488]">•</span>Riasztasok magas vagy alacsony ertekekre.</li>
       </ul>
+
+      <div className="mt-10 overflow-hidden rounded-2xl border-2 border-[#0d9488]/25 bg-white shadow-lg">
+        <h2 className="border-b border-[#de6a44]/20 bg-[#fff4ec] px-5 py-3 text-lg font-semibold text-[#3a1d2d]">
+          Instrukcios video
+        </h2>
+        <video controls preload="metadata" className="aspect-video w-full bg-black">
+          <source src="/video.mp4" type="video/mp4" />
+          A bongeszo nem tamogatja a video lejatszast.
+        </video>
+      </div>
+
       <div className="mt-8 rounded-2xl border border-[#de6a44]/25 bg-[#fff4ec] p-5">
         <h2 className="text-lg font-semibold text-[#3a1d2d]">LibreLink letoltes</h2>
         <p className="mt-2 text-[#5c3046]">Magyarorszagon az alkalmazas hivatalosan letoltheto:</p>

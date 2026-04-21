@@ -11,14 +11,18 @@ export const metadata: Metadata = {
 
 export default function HuComandaPage() {
   const motifPieces = [
-    { top: "2%", left: "-10%", w: 200, r: -22, o: 0.24 },
-    { top: "10%", left: "8%", w: 165, r: 14, o: 0.19 },
-    { top: "3%", right: "6%", w: 180, r: -11, o: 0.21 },
-    { top: "15%", right: "-11%", w: 210, r: 20, o: 0.24 },
-    { top: "45%", left: "4%", w: 175, r: 26, o: 0.2 },
-    { top: "70%", left: "14%", w: 170, r: 11, o: 0.18 },
-    { top: "75%", right: "10%", w: 180, r: -24, o: 0.2 },
-    { bottom: "4%", right: "0%", w: 195, r: -16, o: 0.22 },
+    { top: "2%", left: "-14%", w: 215, r: -20, o: 0.27 },
+    { top: "8%", left: "2%", w: 155, r: 16, o: 0.21 },
+    { top: "4%", right: "2%", w: 175, r: -10, o: 0.24 },
+    { top: "14%", right: "-14%", w: 235, r: 18, o: 0.27 },
+    { top: "30%", left: "-13%", w: 235, r: 10, o: 0.25 },
+    { top: "36%", right: "-6%", w: 185, r: -16, o: 0.22 },
+    { top: "52%", left: "-9%", w: 210, r: 22, o: 0.24 },
+    { top: "58%", right: "-12%", w: 245, r: -9, o: 0.26 },
+    { top: "73%", left: "-6%", w: 205, r: 12, o: 0.23 },
+    { top: "80%", right: "-7%", w: 210, r: -21, o: 0.24 },
+    { bottom: "8%", left: "6%", w: 165, r: -8, o: 0.22 },
+    { bottom: "5%", right: "4%", w: 175, r: 9, o: 0.22 },
   ];
 
   return (
@@ -47,9 +51,9 @@ export default function HuComandaPage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">FreeStyle Libre 2 Plus rendeles</h1>
         <p className="mt-2 max-w-2xl text-[#1a4d47]">
-          Ar: <strong className="text-[#0a2624]">28900 HUF</strong> / csomag · SKU{" "}
+          Ar: <strong className="text-[#0a2624]">25339 HUF</strong> / csomag · SKU{" "}
           <strong className="text-[#0a2624]">5021791006694</strong> · PPL/DPD szallitas{" "}
-          <strong className="text-[#0a2624]">3200 HUF</strong> (5 db-tol ingyenes) · Fineship{" "}
+          <strong className="text-[#0a2624]">3199 HUF</strong> (5 db-tol ingyenes) · Fineship{" "}
           <strong className="text-[#0a2624]">16000 HUF</strong> (6 db-tol).
         </p>
 

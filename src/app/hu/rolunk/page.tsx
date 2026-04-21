@@ -21,9 +21,9 @@ export default function HuAboutUsPage() {
       desc: "Szakmai anyagok, iranyelvek es megbizhato informaciok cukorbetegeknek.",
     },
     {
-      title: "DiabForum",
-      url: "https://www.diabforum.hu/",
-      desc: "Kozertheto cikkek, mindennapi eletmod tippek es gyakorlati tanacsok diabetezhez.",
+      title: "Cukrom.hu - diabetes blog es eletmod",
+      url: "https://cukrom.hu/",
+      desc: "Kozossegi jellegu diabetes tartalmak, eletmod tippek es szemelyesebb hangvetelu cikkek.",
     },
     {
       title: "Webbeteg - cukorbetegseg temaoldal",

@@ -14,8 +14,8 @@ const defaultsByMarket: Record<Market, { inventory: number; sku: string; price: 
   HU: {
     inventory: 98,
     sku: "5021791006694",
-    price: 28900,
-    shipping: 3200,
+    price: 25339,
+    shipping: 3199,
   },
 };
 
@@ -261,7 +261,7 @@ export async function createOrder(input: {
           ? 16000
           : input.quantity >= 5
             ? 0
-            : 3200
+            : 3199
         : input.shippingCarrier === "FINESHIP"
           ? 200
           : input.quantity >= 5
