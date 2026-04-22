@@ -150,7 +150,7 @@ export default function HuHomePage() {
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <a
-              href="https://play.google.com/store/apps/details?id=com.freestylelibre.app.hu"
+              href="https://play.google.com/store/search?q=FreeStyle%20LibreLink%20HU&c=apps"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-xl border border-[#de6a44]/30 bg-[#fff4ec] px-5 py-3 font-semibold text-[#7a3f54] no-underline"
@@ -158,7 +158,7 @@ export default function HuHomePage() {
               Google Play
             </a>
             <a
-              href="https://apps.apple.com/hu/app/freestyle-librelink-hu/id1472262800"
+              href="https://apps.apple.com/hu/search?term=FreeStyle%20LibreLink"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-xl border border-[#de6a44]/30 bg-[#fff4ec] px-5 py-3 font-semibold text-[#7a3f54] no-underline"

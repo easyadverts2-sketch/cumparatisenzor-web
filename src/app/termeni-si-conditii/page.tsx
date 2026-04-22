@@ -19,8 +19,8 @@ export default function TermeniPage() {
     <main className="mx-auto max-w-4xl px-6 py-14">
       <h1 className="text-4xl font-bold text-[#042f2c]">Termeni si conditii de utilizare</h1>
       <p className="mt-4 text-[#14534d]">
-        Ultima actualizare: aprilie 2026. Document informativ — pentru versiune juridica definitiva, consultati un
-        avocat in materie comerciala si de protectie a consumatorilor in Romania si in Cehia.
+        Ultima actualizare: aprilie 2026. Acesti termeni reglementeaza vanzarea online a produselor prin
+        cumparatisenzor.ro, cu respectarea legislatiei UE si a legislatiei aplicabile din Republica Ceha.
       </p>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
@@ -38,11 +38,14 @@ export default function TermeniPage() {
       </section>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
-        <h2 className="text-xl font-semibold text-[#042f2c]">2. Domeniul de aplicare</h2>
+        <h2 className="text-xl font-semibold text-[#042f2c]">2. Aplicabilitate si definiri</h2>
         <p>
-          Prezentii termeni reglementeaza utilizarea site-ului si incheierea contractelor la distanta pentru
-          produsele oferite. Prin plasarea unei comenzi, declarati ca ati citit si acceptat acesti termeni si
-          politica de confidentialitate (GDPR).
+          Prezentii termeni se aplica tuturor comenzilor plasate prin site. Prin trimiterea comenzii, Cumparatorul
+          confirma ca a citit si a acceptat acesti termeni si politica GDPR.
+        </p>
+        <p>
+          Cumparatorul poate actiona ca persoana fizica (consumator) sau in cadrul unei activitati economice.
+          Drepturile consumatorilor raman protejate de normele imperative aplicabile in statul de resedinta.
         </p>
       </section>
 
@@ -82,19 +85,29 @@ export default function TermeniPage() {
       <section className="mt-10 space-y-4 text-[#14534d]">
         <h2 className="text-xl font-semibold text-[#042f2c]">6. Livrare</h2>
         <p>
-          Livrarea se face prin curier, la adresa indicata. Termenele estimate (ex. 3-5 zile lucratoare) sunt
-          orientative; intarzieri independente de vointa noastra pot aparea. Expedierea poate fi din depozit in
-          afara Romaniei, conform informatiilor de pe site la momentul comenzii.
+          Livrarea se face prin curier, la adresa indicata. Termenele estimate afisate pe site sunt orientative;
+          intarzieri independente de vointa noastra pot aparea (curier, forta majora, sarbatori legale etc.).
+        </p>
+        <p>
+          Riscul privind produsul trece la Cumparator la momentul predarii coletului de catre curier.
         </p>
       </section>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
-        <h2 className="text-xl font-semibold text-[#042f2c]">7. Dreptul de retragere si produse sigilate</h2>
+        <h2 className="text-xl font-semibold text-[#042f2c]">7. Retragere, retur si produse desigilate</h2>
         <p>
-          In masura in care legea aplicabila privind vanzarile la distanta va acorda dreptul de retragere,
-          veti fi informat despre modalitate si termene. Produsele sigilate de natura sanitara/medicala pot face
-          obiectul unor exceptii de la retragere dupa desigilare — detaliile trebuie aliniate la reglementarile
-          UE si nationale in vigoare la data comenzii (consultati un jurist).
+          Consumatorul are, in principiu, drept de retragere in 14 zile de la primirea produsului, cu exceptiile
+          prevazute de legislatia aplicabila pentru produse de natura sanitara/medicala desigilate.
+        </p>
+        <p>
+          <strong>Clauza speciala pentru senzori deschisi sau utilizati:</strong> pentru senzori desigilati /
+          utilizati, returnarea banilor sau inlocuirea cu un senzor nou se acorda numai daca defectul este dovedit
+          prin documentare clara, ideal video, sau cel putin foto (de exemplu: eroare la pornire, functionare
+          defectuoasa, produs neutilizabil).
+        </p>
+        <p>
+          In lipsa dovezilor obiective privind defectul, produsul desigilat/utilizat nu poate fi acceptat la retur
+          pentru rambursare.
         </p>
       </section>
 
@@ -117,10 +130,14 @@ export default function TermeniPage() {
       </section>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
-        <h2 className="text-xl font-semibold text-[#042f2c]">10. Lege aplicabila si litigii</h2>
+        <h2 className="text-xl font-semibold text-[#042f2c]">10. Lege aplicabila, solutionarea litigiilor</h2>
         <p>
-          Pentru aspectele comerciale se pot aplica normele UE si nationale relevante. Consumatorii din UE pot
-          beneficia de mecanisme de solutionare extrajudiciara (ex. platforma ODR) acolo unde este cazul.
+          Raporturile contractuale sunt guvernate de legislatia Republicii Cehe (in special Codul civil ceh),
+          fara a afecta protectia minima obligatorie acordata consumatorilor prin normele UE si nationale aplicabile.
+        </p>
+        <p>
+          Consumatorii pot utiliza mecanisme de solutionare alternativa a litigiilor si platforma ODR:
+          https://ec.europa.eu/consumers/odr.
         </p>
       </section>
 

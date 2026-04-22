@@ -39,10 +39,10 @@ export default function HuAboutLibrePage() {
         <h2 className="text-lg font-semibold text-[#3a1d2d]">LibreLink letoltes</h2>
         <p className="mt-2 text-[#5c3046]">Magyarorszagon az alkalmazas hivatalosan letoltheto:</p>
         <div className="mt-3 flex flex-wrap gap-3">
-          <a href="https://play.google.com/store/apps/details?id=com.freestylelibre.app.hu" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#be3f6f] underline">
+          <a href="https://play.google.com/store/search?q=FreeStyle%20LibreLink%20HU&c=apps" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#be3f6f] underline">
             Google Play
           </a>
-          <a href="https://apps.apple.com/hu/app/freestyle-librelink-hu/id1472262800" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#be3f6f] underline">
+          <a href="https://apps.apple.com/hu/search?term=FreeStyle%20LibreLink" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#be3f6f] underline">
             App Store
           </a>
         </div>
