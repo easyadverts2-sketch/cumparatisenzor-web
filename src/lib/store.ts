@@ -119,13 +119,52 @@ function toOrder(row: Row): Order {
   };
 }
 
+function structuredValidationErrors(body: Record<string, unknown>): string {
+  const errors = body.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const firstErr = errors[0];
+    if (firstErr && typeof firstErr === "object") {
+      const errRec = firstErr as Record<string, unknown>;
+      return String(errRec.message || errRec.errorMessage || JSON.stringify(firstErr));
+    }
+    return String(firstErr);
+  }
+  if (errors && typeof errors === "object" && !Array.isArray(errors)) {
+    const parts: string[] = [];
+    for (const [key, val] of Object.entries(errors as Record<string, unknown>)) {
+      if (Array.isArray(val)) {
+        parts.push(`${key}: ${val.map((x) => String(x)).join("; ")}`);
+      } else if (val != null && typeof val === "object") {
+        parts.push(`${key}: ${JSON.stringify(val)}`);
+      } else if (val != null) {
+        parts.push(`${key}: ${String(val)}`);
+      }
+    }
+    return parts.join(" | ");
+  }
+  return "";
+}
+
 function shipmentErrorStatus(reason: string, raw?: unknown) {
   let detail = "";
   if (raw && typeof raw === "object") {
     const rec = raw as Record<string, unknown>;
-    const bodyRec =
+    let bodyRec: Record<string, unknown> =
       rec.body && typeof rec.body === "object" ? (rec.body as Record<string, unknown>) : rec;
+    if (rec.body && typeof rec.body === "string") {
+      try {
+        const parsed = JSON.parse(rec.body as string) as unknown;
+        if (parsed && typeof parsed === "object") {
+          bodyRec = parsed as Record<string, unknown>;
+        }
+      } catch {
+        /* keep bodyRec from rec */
+      }
+    }
+    const fromErrors = structuredValidationErrors(bodyRec);
+    const genericTitle = /^(badrequest|bad request|one or more validation errors occurred\.?)$/i;
     const candidate =
+      bodyRec.Message ||
       bodyRec.message ||
       bodyRec.error ||
       bodyRec.error_description ||
@@ -136,17 +175,19 @@ function shipmentErrorStatus(reason: string, raw?: unknown) {
       rec.error_description ||
       rec.detail ||
       rec.title;
-    if (!candidate && Array.isArray(bodyRec.errors) && bodyRec.errors.length > 0) {
-      const firstErr = bodyRec.errors[0];
-      if (firstErr && typeof firstErr === "object") {
-        const errRec = firstErr as Record<string, unknown>;
-        detail = String(errRec.message || errRec.errorMessage || JSON.stringify(firstErr));
-      } else {
-        detail = String(firstErr);
-      }
+    const candStr = candidate != null ? String(candidate).trim() : "";
+    if (fromErrors) {
+      detail = genericTitle.test(candStr) || !candStr ? fromErrors : `${candStr} — ${fromErrors}`;
+    } else if (candStr) {
+      detail = candStr;
     }
-    if (candidate != null) {
-      detail = String(candidate);
+    const trace =
+      (bodyRec.traceId as string | undefined) ||
+      (bodyRec.TraceId as string | undefined) ||
+      (bodyRec.trace_id as string | undefined) ||
+      "";
+    if (trace) {
+      detail = detail ? `${detail} (trace:${trace})` : `trace:${trace}`;
     }
     const headersRec =
       rec.headers && typeof rec.headers === "object"
@@ -163,7 +204,7 @@ function shipmentErrorStatus(reason: string, raw?: unknown) {
     detail = raw;
   }
   const suffix = detail ? `:${detail}` : "";
-  return `ERROR:${reason}${suffix}`.slice(0, 240);
+  return `ERROR:${reason}${suffix}`.slice(0, 2000);
 }
 
 export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
@@ -427,9 +468,10 @@ async function createShipmentForOrder(
       }
       return;
     }
+    const pplErr = shipmentErrorStatus(ppl.reason, ppl.raw);
     await sql`
       update orders
-      set ppl_shipment_status = ${shipmentErrorStatus(ppl.reason, ppl.raw)}
+      set ppl_shipment_status = ${pplErr}
       where id = ${order.id}
     `;
     await insertAuditLog(sql, {
@@ -437,7 +479,7 @@ async function createShipmentForOrder(
       action: "PPL_SHIPMENT_ERROR",
       orderId: order.id,
       orderNumber: order.orderNumber,
-      details: `${auditDetailPrefix || ""} ${ppl.reason}`.trim(),
+      details: `${auditDetailPrefix || ""} ${pplErr}`.trim().slice(0, 4000),
     });
     return;
   }
@@ -474,9 +516,10 @@ async function createShipmentForOrder(
       }
       return;
     }
+    const dpdErr = shipmentErrorStatus(dpd.reason, dpd.raw);
     await sql`
       update orders
-      set dpd_shipment_status = ${shipmentErrorStatus(dpd.reason, dpd.raw)}
+      set dpd_shipment_status = ${dpdErr}
       where id = ${order.id}
     `;
     await insertAuditLog(sql, {
@@ -484,7 +527,7 @@ async function createShipmentForOrder(
       action: "DPD_SHIPMENT_ERROR",
       orderId: order.id,
       orderNumber: order.orderNumber,
-      details: `${auditDetailPrefix || ""} ${dpd.reason}`.trim(),
+      details: `${auditDetailPrefix || ""} ${dpdErr}`.trim().slice(0, 4000),
     });
   }
 }
