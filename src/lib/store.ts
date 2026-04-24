@@ -123,14 +123,41 @@ function shipmentErrorStatus(reason: string, raw?: unknown) {
   let detail = "";
   if (raw && typeof raw === "object") {
     const rec = raw as Record<string, unknown>;
+    const bodyRec =
+      rec.body && typeof rec.body === "object" ? (rec.body as Record<string, unknown>) : rec;
     const candidate =
+      bodyRec.message ||
+      bodyRec.error ||
+      bodyRec.error_description ||
+      bodyRec.detail ||
+      bodyRec.title ||
       rec.message ||
       rec.error ||
       rec.error_description ||
       rec.detail ||
       rec.title;
+    if (!candidate && Array.isArray(bodyRec.errors) && bodyRec.errors.length > 0) {
+      const firstErr = bodyRec.errors[0];
+      if (firstErr && typeof firstErr === "object") {
+        const errRec = firstErr as Record<string, unknown>;
+        detail = String(errRec.message || errRec.errorMessage || JSON.stringify(firstErr));
+      } else {
+        detail = String(firstErr);
+      }
+    }
     if (candidate != null) {
       detail = String(candidate);
+    }
+    const headersRec =
+      rec.headers && typeof rec.headers === "object"
+        ? (rec.headers as Record<string, unknown>)
+        : null;
+    const reqId =
+      (headersRec?.["x-correlation-id"] as string | undefined) ||
+      (headersRec?.["x-request-id"] as string | undefined) ||
+      "";
+    if (reqId) {
+      detail = detail ? `${detail} (req:${reqId})` : `req:${reqId}`;
     }
   } else if (typeof raw === "string") {
     detail = raw;

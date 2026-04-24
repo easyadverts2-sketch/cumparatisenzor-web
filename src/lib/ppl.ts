@@ -34,6 +34,16 @@ function parseAddressLine(deliveryAddress: string) {
   return { street, city, zipCode };
 }
 
+function productTypeForMarket(market: Market) {
+  if (market === "HU") {
+    return process.env.PPL_PRODUCT_TYPE_HU?.trim() || process.env.PPL_PRODUCT_TYPE_INTL?.trim() || "CONN";
+  }
+  if (market === "RO") {
+    return process.env.PPL_PRODUCT_TYPE_RO?.trim() || process.env.PPL_PRODUCT_TYPE_INTL?.trim() || "CONN";
+  }
+  return process.env.PPL_PRODUCT_TYPE?.trim() || "BUSS";
+}
+
 function firstLabelUrl(pollRaw: Record<string, unknown>): string | null {
   const completeLabel = toRecord(pollRaw.completeLabel);
   const urls = Array.isArray(completeLabel.labelUrls) ? completeLabel.labelUrls : [];
@@ -159,6 +169,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
   const country = market === "HU" ? "HU" : "RO";
   const currency = market === "HU" ? "HUF" : "RON";
   const ref = String(order.orderNumber).padStart(7, "0");
+  const productType = productTypeForMarket(market);
 
   const payload: Record<string, unknown> = {
     returnChannel: {
@@ -170,14 +181,14 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       dpi: Number(process.env.PPL_LABEL_DPI || 300),
       completeLabelSettings: {
         isCompleteLabelRequested: true,
-        pageSize: String(process.env.PPL_LABEL_PAGE_SIZE || "A4"),
+        pageSize: String(process.env.PPL_LABEL_PAGE_SIZE || "A6"),
         position: Number(process.env.PPL_LABEL_POSITION || 1),
       },
     },
     shipmentsOrderBy: "ShipmentNumber",
     shipments: [
       {
-        productType: process.env.PPL_PRODUCT_TYPE || "BUSS",
+        productType,
         referenceId: ref,
         note: `Order ${ref}`,
         depot: process.env.PPL_DEPOT || undefined,
@@ -223,14 +234,28 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
     };
   }
 
+  const first = (payload.shipments as Array<Record<string, unknown>>)[0];
+  const senderObj = first.sender as Record<string, unknown> | undefined;
+  const senderCountryValue = String(senderObj?.country || "");
+  if ((market === "RO" || market === "HU") && (!senderObj || !senderCountryValue)) {
+    return { ok: false, reason: "ppl_sender_not_configured_for_international" };
+  }
+  if ((market === "RO" || market === "HU") && senderCountryValue === country) {
+    return { ok: false, reason: "ppl_sender_country_must_differ_for_international" };
+  }
+
   if (order.paymentMethod === "COD") {
-    const first = (payload.shipments as Array<Record<string, unknown>>)[0];
+    const codIban = process.env.PPL_COD_IBAN?.trim();
+    const codSwift = process.env.PPL_COD_SWIFT?.trim();
+    if (!codIban || !codSwift) {
+      return { ok: false, reason: "ppl_cod_bank_data_missing" };
+    }
     first.cashOnDelivery = {
       codCurrency: currency,
       codPrice: order.totalPrice,
       codVarSym: ref,
-      iban: process.env.PPL_COD_IBAN?.trim() || undefined,
-      swift: process.env.PPL_COD_SWIFT?.trim() || undefined,
+      iban: codIban,
+      swift: codSwift,
     };
   }
 
@@ -255,7 +280,14 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       }
     }
     if (!res.ok) {
-      return { ok: false, reason: `ppl_api_http_${res.status}`, raw: raw || rawText };
+      return {
+        ok: false,
+        reason: `ppl_api_http_${res.status}`,
+        raw: {
+          body: raw || rawText,
+          headers: Object.fromEntries(res.headers.entries()),
+        },
+      };
     }
 
     const location = res.headers.get("location") || "";
