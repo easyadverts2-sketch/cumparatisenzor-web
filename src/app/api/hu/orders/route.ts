@@ -1,4 +1,5 @@
 import { createOrder } from "@/lib/store";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 import type { Order } from "@/lib/types";
 import { NextResponse } from "next/server";
@@ -43,6 +44,19 @@ function formatAddress(addr: AddressPayload): string {
 
 export async function POST(request: Request) {
   try {
+    const limited = await enforceRateLimit({
+      request,
+      action: "api_orders_create_hu",
+      limit: 12,
+      windowSec: 60,
+    });
+    if (!limited.ok) {
+      return NextResponse.json(
+        { ok: false, message: "Tul sok probalkozas. Probald ujra kicsit kesobb." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
+      );
+    }
+
     const body = await request.json();
     const shippingCarrier = parseShippingCarrier(body.shippingCarrier) ?? "PPL";
     const customerName = toSafe(body.customerName);

@@ -1,12 +1,22 @@
 import { redirect } from "next/navigation";
 import { clearAdminSessionCookie, hasAdminSession, isAdminPasswordValid, setAdminSessionCookie } from "@/lib/auth";
+import { clearLoginFailures, isLoginLocked, recordFailedLogin } from "@/lib/login-guard";
 
 async function loginAction(formData: FormData) {
   "use server";
+  const lockState = await isLoginLocked("RO");
+  if (lockState.locked) {
+    redirect(`/admin/login?locked=1&retry=${lockState.retryAfterSec || 0}`);
+  }
   const password = String(formData.get("password") || "");
   if (!isAdminPasswordValid(password)) {
+    const failed = await recordFailedLogin("RO");
+    if (failed.locked) {
+      redirect(`/admin/login?locked=1&retry=${failed.retryAfterSec || 0}`);
+    }
     redirect("/admin/login?error=1");
   }
+  await clearLoginFailures("RO");
   setAdminSessionCookie();
   redirect("/admin");
 }
@@ -20,7 +30,7 @@ async function logoutAction() {
 export default function AdminLoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string };
+  searchParams: { error?: string; locked?: string; retry?: string };
 }) {
   if (hasAdminSession()) {
     return (
@@ -54,6 +64,11 @@ export default function AdminLoginPage({
         </button>
       </form>
       {searchParams.error ? <p className="mt-3 text-sm text-red-600">Parola incorecta.</p> : null}
+      {searchParams.locked ? (
+        <p className="mt-3 text-sm text-red-700">
+          Prea multe incercari esuate. Reincercati peste aproximativ {searchParams.retry || "1800"} secunde.
+        </p>
+      ) : null}
     </main>
   );
 }

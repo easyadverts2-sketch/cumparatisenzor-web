@@ -72,8 +72,8 @@ export default function HuLayout({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="hidden flex-col items-end gap-1 border-l border-white/30 pl-4 text-xs lg:flex">
-            <a href="mailto:info@cumparatisenzor.ro" className="font-semibold text-white no-underline">
-              info@cumparatisenzor.ro
+            <a href="mailto:info@szenzorvasarlas.hu" className="font-semibold text-white no-underline">
+              info@szenzorvasarlas.hu
             </a>
             <a href="https://wa.me/420777577352" target="_blank" rel="noopener noreferrer" className="font-semibold text-white no-underline">
               +420 777 577 352

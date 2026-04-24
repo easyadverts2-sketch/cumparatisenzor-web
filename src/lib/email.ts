@@ -22,6 +22,7 @@ export async function sendEmail(params: {
   to: string;
   subject: string;
   text: string;
+  from?: string;
   html?: string;
   attachments?: Array<{
     filename: string;
@@ -29,7 +30,7 @@ export async function sendEmail(params: {
     contentType?: string;
   }>;
 }) {
-  const from = process.env.SMTP_FROM || "no-reply@cumparatisenzor.ro";
+  const from = params.from || process.env.SMTP_FROM || "no-reply@cumparatisenzor.ro";
   const transporter = getTransporter();
   if (!transporter) {
     return { sent: false, reason: "smtp_not_configured" as const };

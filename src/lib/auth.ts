@@ -5,7 +5,11 @@ const COOKIE_NAME = "admin_session";
 const HU_COOKIE_NAME = "hu_admin_session";
 
 function getSecret() {
-  return process.env.ADMIN_SESSION_SECRET || "change-this-in-production";
+  const secret = process.env.ADMIN_SESSION_SECRET || "change-this-in-production";
+  if (process.env.NODE_ENV === "production" && secret === "change-this-in-production") {
+    throw new Error("ADMIN_SESSION_SECRET must be set in production.");
+  }
+  return secret;
 }
 
 function sign(value: string) {
@@ -21,7 +25,11 @@ export function isValidSessionToken(token?: string) {
   if (!token || !token.includes(".")) return false;
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return false;
-  return sign(payload) === signature;
+  const expected = sign(payload);
+  const left = Buffer.from(expected);
+  const right = Buffer.from(signature);
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
 }
 
 export function isAdminPasswordValid(input: string) {

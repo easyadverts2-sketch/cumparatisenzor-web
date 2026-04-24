@@ -30,14 +30,15 @@ function shippingLabel(order: Pick<Order, "shippingCarrier">) {
 }
 
 function htmlShell(content: string, market: Market) {
-  const logo = `${siteUrl(market)}/logo.png`;
+  const logo = `${siteUrl(market)}/icon.png`;
   return `
-  <div style="background:#f7f7fb;padding:28px 12px;font-family:Arial,sans-serif;color:#111827;">
-    <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #ead5df;border-radius:16px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#6f2147,#a22d53,#df5b42);padding:20px 24px;">
-        <img src="${logo}" alt="${siteName(market)}" style="height:42px;width:auto;display:block;background:#fff;border-radius:10px;padding:6px 10px;" />
+  <div style="background:#f4f1f6;padding:24px 10px;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:660px;margin:0 auto;background:#ffffff;border:1px solid #ead5df;border-radius:20px;overflow:hidden;box-shadow:0 15px 45px rgba(111,33,71,.17);">
+      <div style="background:linear-gradient(135deg,#6f2147,#a22d53,#df5b42);padding:18px 22px;position:relative;">
+        <div style="position:absolute;right:-30px;top:-30px;width:140px;height:140px;background:rgba(255,255,255,.08);border-radius:100%;"></div>
+        <img src="${logo}" alt="Logo" style="height:54px;width:54px;display:block;background:#fff;border-radius:14px;padding:8px;position:relative;z-index:1;" />
       </div>
-      <div style="padding:24px;">
+      <div style="padding:24px 24px 26px;">
         ${content}
       </div>
     </div>
@@ -48,7 +49,7 @@ function footer(market: Market) {
   return market === "HU"
     ? `<p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
          Kerdes eseten barmikor irjon nekunk:<br/>
-         Email: <a href="mailto:info@cumparatisenzor.ro">info@cumparatisenzor.ro</a><br/>
+         Email: <a href="mailto:info@szenzorvasarlas.hu">info@szenzorvasarlas.hu</a><br/>
          Telefon/WhatsApp: <a href="tel:+420777577352">+420 777 577 352</a>
        </p>`
     : `<p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
@@ -56,6 +57,44 @@ function footer(market: Market) {
          Email: <a href="mailto:info@cumparatisenzor.ro">info@cumparatisenzor.ro</a><br/>
          Telefon/WhatsApp: <a href="tel:+420777577352">+420 777 577 352</a>
        </p>`;
+}
+
+function normalizeAddress(value: string) {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function addressSummary(order: Order, market: Market) {
+  const deliveryTitle = market === "HU" ? "Szallitasi cim" : "Adresa de livrare";
+  const billingTitle = market === "HU" ? "Szamlazasi cim" : "Adresa de facturare";
+  const showBilling = normalizeAddress(order.billingAddress) !== normalizeAddress(order.deliveryAddress);
+
+  const billingHtml = showBilling
+    ? `<div style="margin-top:10px;padding:12px 13px;border:1px solid #e8dbe3;border-radius:12px;background:#fff;white-space:pre-line;">
+         <div style="font-size:12px;font-weight:700;color:#6f2147;text-transform:uppercase;letter-spacing:.04em;">${billingTitle}</div>
+         <div style="margin-top:5px;font-size:14px;line-height:1.55;color:#1f2937;">${order.billingAddress}</div>
+       </div>`
+    : "";
+
+  const billingText = showBilling ? `\n${billingTitle}: ${order.billingAddress}` : "";
+
+  return {
+    html: `
+      <div style="margin-top:14px;padding:14px;border:1px solid #eadce4;border-radius:14px;background:#faf7fb;">
+        <div style="font-size:12px;font-weight:700;color:#6f2147;text-transform:uppercase;letter-spacing:.04em;">${deliveryTitle}</div>
+        <div style="margin-top:5px;font-size:14px;line-height:1.55;color:#1f2937;white-space:pre-line;">${order.deliveryAddress}</div>
+        ${billingHtml}
+      </div>`,
+    text: `${deliveryTitle}: ${order.deliveryAddress}${billingText}`,
+  };
+}
+
+function summaryRow(label: string, value: string, icon: string) {
+  return `<tr>
+    <td style="padding:10px 12px;border-bottom:1px solid #f0e2ea;white-space:nowrap;color:#6f2147;font-weight:700;font-size:13px;">
+      <span style="display:inline-block;width:20px;text-align:center;margin-right:6px;">${icon}</span>${label}
+    </td>
+    <td style="padding:10px 12px;border-bottom:1px solid #f0e2ea;color:#111827;font-size:14px;font-weight:600;">${value}</td>
+  </tr>`;
 }
 
 export function buildOrderCreatedEmail(order: Order, market: Market, variableSymbol?: string | null) {
@@ -91,20 +130,28 @@ export function buildOrderCreatedEmail(order: Order, market: Market, variableSym
     market === "HU"
       ? `Kedves ${order.customerName}, koszonjuk a rendeleset!`
       : `Buna, ${order.customerName}! Va multumim pentru comanda.`;
+  const address = addressSummary(order, market);
 
   const content = `
-    <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.2;">${greeting}</h1>
-    <p style="margin:0 0 16px 0;color:#374151;">${market === "HU" ? "Rendeleset rogzitettuk." : "Comanda a fost inregistrata cu succes."}</p>
-    <div style="border:1px solid #e5e7eb;border-radius:12px;padding:14px;">
-      <div style="font-size:14px;line-height:1.7;">
-        <strong>${market === "HU" ? "Rendelesszam" : "Numar comanda"}:</strong> #${nr}<br/>
-        <strong>${market === "HU" ? "Termek" : "Produs"}:</strong> ${PRODUCT_NAME}<br/>
-        <strong>${market === "HU" ? "Mennyiseg" : "Cantitate"}:</strong> ${order.quantity}<br/>
-        <strong>${market === "HU" ? "Szallitas" : "Livrare"}:</strong> ${shippingLabel(order)}<br/>
-        <strong>${market === "HU" ? "Fizetes" : "Plata"}:</strong> ${paymentLabel(order.paymentMethod, market)}<br/>
-        <strong>${market === "HU" ? "Vegosszeg" : "Total"}:</strong> ${order.totalPrice} ${currency}
-      </div>
+    <div style="display:inline-block;padding:6px 10px;background:#f9edf3;border:1px solid #f0d5e3;border-radius:999px;font-size:12px;font-weight:700;color:#8d2f5a;">
+      ${siteName(market)}
     </div>
+    <h1 style="margin:10px 0 8px 0;font-size:31px;line-height:1.16;color:#111827;">${greeting}</h1>
+    <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">${market === "HU" ? "Rendeleset rogzitettuk, es mar dolgozunk az elokeszitesen." : "Comanda a fost inregistrata cu succes si este in curs de procesare."}</p>
+    <div style="border:1px solid #e8dbe3;border-radius:14px;overflow:hidden;background:#fff;">
+      <div style="padding:11px 14px;background:#fff2f8;border-bottom:1px solid #f0e2ea;font-weight:700;color:#6f2147;font-size:13px;letter-spacing:.05em;text-transform:uppercase;">
+        ${market === "HU" ? "Rendelesi osszesito" : "Rezumat comanda"}
+      </div>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+        ${summaryRow(market === "HU" ? "Rendelesszam" : "Numar comanda", `#${nr}`, "🔖")}
+        ${summaryRow(market === "HU" ? "Termek" : "Produs", PRODUCT_NAME, "📦")}
+        ${summaryRow(market === "HU" ? "Mennyiseg" : "Cantitate", String(order.quantity), "🔢")}
+        ${summaryRow(market === "HU" ? "Szallitas" : "Livrare", shippingLabel(order), "🚚")}
+        ${summaryRow(market === "HU" ? "Fizetes" : "Plata", paymentLabel(order.paymentMethod, market), "💳")}
+        ${summaryRow(market === "HU" ? "Vegosszeg" : "Total", `${order.totalPrice} ${currency}`, "💰")}
+      </table>
+    </div>
+    ${address.html}
     ${transferBlock}
     ${footer(market)}
   `;
@@ -116,6 +163,7 @@ export function buildOrderCreatedEmail(order: Order, market: Market, variableSym
     `${market === "HU" ? "Fizetes" : "Plata"}: ${paymentLabel(order.paymentMethod, market)}`,
     `${market === "HU" ? "Szallitas" : "Livrare"}: ${shippingLabel(order)}`,
     `${market === "HU" ? "Vegosszeg" : "Total"}: ${order.totalPrice} ${currency}`,
+    address.text,
     order.paymentMethod === "BANK_TRANSFER"
       ? `IBAN: ${bank.iban}; BIC: ${bank.bic}; ${market === "HU" ? "Valtozo szam" : "Variabila"}: ${variableSymbol || "-"}`
       : "",
