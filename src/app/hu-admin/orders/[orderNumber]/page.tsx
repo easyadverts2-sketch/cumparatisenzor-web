@@ -3,6 +3,7 @@ import {
   formatPaymentMethodLabel,
   formatShippingLine,
   getOrderByNumber,
+  triggerShipmentCreation,
   updateOrderTrackingNumber,
   updateOrderStatus,
 } from "@/lib/store";
@@ -35,6 +36,17 @@ async function updateTracking(formData: FormData) {
   const trackingNumber = String(formData.get("trackingNumber") || "");
   if (orderId && trackingNumber.trim()) {
     await updateOrderTrackingNumber(orderId, trackingNumber, "HU");
+  }
+  revalidatePath("/hu-admin");
+  if (orderNo) revalidatePath(`/hu-admin/orders/${orderNo}`);
+}
+
+async function triggerShipment(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  const orderNo = String(formData.get("orderNumber") || "");
+  if (orderId) {
+    await triggerShipmentCreation(orderId, "HU");
   }
   revalidatePath("/hu-admin");
   if (orderNo) revalidatePath(`/hu-admin/orders/${orderNo}`);
@@ -125,6 +137,14 @@ export default async function HuAdminOrderDetailPage({
           <button type="submit" className="rounded-lg bg-[#6f2147] px-4 py-2 font-medium text-white">
             Uložit tracking + poslat e-mail
           </button>
+        </form>
+        <form action={triggerShipment} className="flex items-center gap-3 border-t border-[#0d4f4a]/10 pt-4">
+          <input type="hidden" name="orderId" value={order.id} />
+          <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
+          <button type="submit" className="rounded-lg bg-[#0f766e] px-4 py-2 font-medium text-white">
+            Test odeslání zásilky (PPL/DPD)
+          </button>
+          <span className="text-xs text-[#1a4d47]">Bez vytváření nové objednávky</span>
         </form>
       </div>
     </main>

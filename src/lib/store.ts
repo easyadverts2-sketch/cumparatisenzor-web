@@ -1014,6 +1014,17 @@ export async function updateOrderTrackingNumber(orderId: string, trackingNumber:
   return true;
 }
 
+export async function triggerShipmentCreation(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) return false;
+  if (!(order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD")) return false;
+  const senderFrom = senderEmailForMarket(market);
+  await createShipmentForOrder(sql, order, market, senderFrom, "manual_debug_trigger");
+  return true;
+}
+
 export async function getRecentAdminAuditLogs(market: Market = "RO", limit = 25) {
   const sql = getSql();
   await ensureSchema(sql);
