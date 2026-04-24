@@ -36,6 +36,10 @@ export type Order = {
   totalPrice: number;
   status: OrderStatus;
   market?: Market;
+  pplShipmentId?: string | null;
+  pplShipmentStatus?: string | null;
+  pplLabelPath?: string | null;
+  trackingNumber?: string | null;
 };
 
 export type Notification = {

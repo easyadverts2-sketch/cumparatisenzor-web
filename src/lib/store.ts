@@ -3,6 +3,20 @@ import { sendEmail } from "./email";
 import { getSql } from "./db";
 import { formatOrderNumber } from "./order-format";
 import { getStripe } from "./stripe-checkout";
+import {
+  formatInvoiceNo,
+  formatVariableSymbol,
+  getBankDetails,
+  marketCurrency,
+  renderInvoiceText,
+  type InvoiceKind,
+} from "./billing";
+import { createPplShipment } from "./ppl";
+import {
+  buildOrderCreatedEmail,
+  buildPaymentReceivedEmail,
+  buildTrackingEmail,
+} from "./order-emails";
 
 const defaultsByMarket: Record<Market, { inventory: number; sku: string; price: number; shipping: number }> = {
   RO: {
@@ -25,6 +39,20 @@ function settingKey(market: Market, key: "inventory" | "sku" | "price" | "shippi
 
 type Row = Record<string, unknown>;
 type SqlClient = ReturnType<typeof getSql>;
+
+type InvoiceRow = {
+  id: string;
+  order_id: string;
+  market: string;
+  kind: string;
+  sequence_no: number;
+  invoice_no: string;
+  variable_symbol: string;
+  issue_date: string;
+  due_date: string;
+  currency: string;
+  amount: number;
+};
 
 function toOrder(row: Row): Order {
   const orderNumber =
@@ -60,6 +88,10 @@ function toOrder(row: Row): Order {
     totalPrice: Number(row.total_price),
     status: String(row.status) as OrderStatus,
     market: String(row.market || "RO") as Market,
+    pplShipmentId: row.ppl_shipment_id != null ? String(row.ppl_shipment_id) : null,
+    pplShipmentStatus: row.ppl_shipment_status != null ? String(row.ppl_shipment_status) : null,
+    pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
+    trackingNumber: row.tracking_number != null ? String(row.tracking_number) : null,
   };
 }
 
@@ -121,6 +153,40 @@ async function migrateOrderMarket(sql: SqlClient) {
   await sql`create index if not exists orders_market_created_idx on orders(market, created_at desc)`;
 }
 
+async function migrateOrderShippingIntegration(sql: SqlClient) {
+  const pplIdCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_shipment_id'
+  `;
+  if (pplIdCol.length === 0) {
+    await sql`alter table orders add column ppl_shipment_id text`;
+  }
+
+  const pplStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_shipment_status'
+  `;
+  if (pplStatusCol.length === 0) {
+    await sql`alter table orders add column ppl_shipment_status text`;
+  }
+
+  const trackingCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'tracking_number'
+  `;
+  if (trackingCol.length === 0) {
+    await sql`alter table orders add column tracking_number text`;
+  }
+
+  const labelPathCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_label_path'
+  `;
+  if (labelPathCol.length === 0) {
+    await sql`alter table orders add column ppl_label_path text`;
+  }
+}
+
 async function ensureSchema(sql: SqlClient) {
   await sql`
     create table if not exists app_settings (
@@ -157,6 +223,25 @@ async function ensureSchema(sql: SqlClient) {
   `;
 
   await sql`
+    create table if not exists invoices (
+      id uuid primary key,
+      order_id uuid not null references orders(id) on delete cascade,
+      market text not null,
+      kind text not null,
+      sequence_no integer not null,
+      invoice_no text not null,
+      variable_symbol text not null,
+      issue_date date not null,
+      due_date date not null,
+      currency text not null,
+      amount numeric not null,
+      created_at timestamptz not null default now()
+    )
+  `;
+  await sql`create unique index if not exists invoices_market_kind_seq_idx on invoices(market, kind, sequence_no)`;
+  await sql`create index if not exists invoices_order_kind_idx on invoices(order_id, kind)`;
+
+  await sql`
     insert into app_settings (key, value) values
       ('inventory', ${String(defaultsByMarket.RO.inventory)}),
       ('sku', ${defaultsByMarket.RO.sku}),
@@ -172,6 +257,52 @@ async function ensureSchema(sql: SqlClient) {
   await migrateOrderNumber(sql);
   await migrateShippingCarrier(sql);
   await migrateOrderMarket(sql);
+  await migrateOrderShippingIntegration(sql);
+}
+
+async function nextInvoiceSequence(sql: SqlClient, market: Market, kind: InvoiceKind): Promise<number> {
+  const key = `${market.toLowerCase()}_${kind.toLowerCase()}_invoice_seq`;
+  const rows = await sql`select value from app_settings where key = ${key} limit 1`;
+  const current = rows.length > 0 ? Number(rows[0].value) : 0;
+  const next = Number.isFinite(current) ? current + 1 : 1;
+  await sql`
+    insert into app_settings (key, value) values (${key}, ${String(next)})
+    on conflict (key) do update set value = excluded.value
+  `;
+  return next;
+}
+
+async function createInvoiceRecord(sql: SqlClient, order: Order, market: Market, kind: InvoiceKind) {
+  const existing = await sql<InvoiceRow[]>`
+    select * from invoices where order_id = ${order.id} and kind = ${kind} and market = ${market}
+    order by created_at desc
+    limit 1
+  `;
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  const issueDate = new Date();
+  const dueDate = new Date(issueDate);
+  dueDate.setDate(dueDate.getDate() + (kind === "PROFORMA" ? 5 : 0));
+  const sequenceNo = await nextInvoiceSequence(sql, market, kind);
+  const invoiceNo = formatInvoiceNo(kind, issueDate, sequenceNo);
+  const variableSymbol = formatVariableSymbol(issueDate, sequenceNo);
+  const currency = marketCurrency(market);
+  const amount = order.totalPrice;
+
+  const inserted = await sql<InvoiceRow[]>`
+    insert into invoices (
+      id, order_id, market, kind, sequence_no, invoice_no, variable_symbol,
+      issue_date, due_date, currency, amount
+    ) values (
+      ${crypto.randomUUID()}, ${order.id}, ${market}, ${kind}, ${sequenceNo}, ${invoiceNo},
+      ${variableSymbol}, ${issueDate.toISOString().slice(0, 10)}, ${dueDate.toISOString().slice(0, 10)},
+      ${currency}, ${amount}
+    )
+    returning *
+  `;
+  return inserted[0];
 }
 
 async function getSettingNumber(sql: SqlClient, key: string, fallback: number) {
@@ -304,37 +435,58 @@ export async function createOrder(input: {
       returning *
     `;
     const order = toOrder(inserted[0] as unknown as Row);
+    let proforma: InvoiceRow | null = null;
+    if (input.paymentMethod === "BANK_TRANSFER") {
+      proforma = await createInvoiceRecord(sql, order, market, "PROFORMA");
+    }
 
     const nr = formatOrderNumber(order.orderNumber);
-    const subject =
-      market === "HU"
-        ? "FreeStyle Libre 2 Plus rendeles visszaigazolasa"
-        : "Confirmare comanda FreeStyle Libre 2 Plus";
-    const payHint =
-      market === "HU"
-        ? input.paymentMethod === "BANK_TRANSFER"
-          ? "Az atutalast kerjuk 5 napon belul teljesiteni."
-          : input.paymentMethod === "CARD_STRIPE"
-            ? "A rendszer biztonsagos kartyaoldalra iranyit. Ha megszakad a folyamat, a rendeles varakozo allapotban marad."
-            : "A rendelest elokeszitjuk feladasra."
-        : input.paymentMethod === "BANK_TRANSFER"
-          ? "Plata trebuie confirmata in maximum 5 zile."
-          : input.paymentMethod === "CARD_STRIPE"
-            ? "Urmeaza sa fiti redirectionat catre plata securizata cu cardul. Daca inchideti pagina inainte de plata, comanda ramane in asteptare."
-            : "Comanda va fi procesata pentru expediere.";
-    const body =
-      market === "HU"
-        ? `A #${nr} rendeles rogzitve. Fizetesi mod: ${formatPaymentMethodLabel(
-            input.paymentMethod
-          )}. Futar: ${formatShippingLine(order)}. ${payHint}`
-        : `Comanda #${nr} a fost inregistrata. Metoda plata: ${formatPaymentMethodLabel(
-            input.paymentMethod
-          )}. Curier / livrare: ${formatShippingLine(order)}. ${payHint}`;
+    const createdEmail = buildOrderCreatedEmail(order, market, proforma?.variable_symbol || null);
     await sql`
       insert into notifications (id, type, recipient, subject, body)
-      values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${subject}, ${body})
+      values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${createdEmail.subject}, ${createdEmail.text})
     `;
-    await sendEmail({ to: input.email, subject, text: body }).catch(() => undefined);
+    await sendEmail({
+      to: input.email,
+      subject: createdEmail.subject,
+      text: createdEmail.text,
+      html: createdEmail.html,
+    }).catch(() => undefined);
+
+    if (proforma) {
+      const bank = getBankDetails(market);
+      const invoiceText = renderInvoiceText(order, {
+        invoiceNo: proforma.invoice_no,
+        sequenceNo: Number(proforma.sequence_no),
+        variableSymbol: proforma.variable_symbol,
+        issueDateIso: String(proforma.issue_date),
+        dueDateIso: String(proforma.due_date),
+        currency: marketCurrency(market),
+        market,
+        kind: "PROFORMA",
+        total: Number(proforma.amount),
+      });
+      const proformaSubject =
+        market === "HU"
+          ? `Dijbekero / proforma #${proforma.invoice_no}`
+          : `Factura proforma #${proforma.invoice_no}`;
+      const proformaBody =
+        market === "HU"
+          ? `A rendeleshez dijbekero keszult. Kerdjuk az atutalast az alabbi adatokkal:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nValtozo kozlemeny: ${proforma.variable_symbol}`
+          : `Pentru comanda a fost emisa factura proforma. Va rugam sa efectuati plata folosind:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nVariabila plata: ${proforma.variable_symbol}`;
+      await sendEmail({
+        to: input.email,
+        subject: proformaSubject,
+        text: proformaBody,
+        attachments: [
+          {
+            filename: `${proforma.invoice_no}.txt`,
+            content: invoiceText,
+            contentType: "text/plain; charset=utf-8",
+          },
+        ],
+      }).catch(() => undefined);
+    }
 
     const internal = process.env.INTERNAL_ORDER_EMAIL;
     if (internal) {
@@ -409,7 +561,10 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
   }
   const order = toOrder(rows[0] as unknown as Row);
 
-  return sql.begin(async (tx) => {
+  let shouldIssueFinalInvoice = false;
+  let shouldCreateShipment = false;
+
+  const updated = await sql.begin(async (tx) => {
     const defaults = defaultsByMarket[market];
     const invRows = await tx`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
     const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
@@ -422,6 +577,8 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
         return true;
       }
       await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
+      shouldIssueFinalInvoice = true;
+      shouldCreateShipment = true;
     }
 
     if (
@@ -439,4 +596,119 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     await tx`update orders set status = ${status} where id = ${orderId}`;
     return true;
   });
+
+  if (!updated) return false;
+
+  if (shouldIssueFinalInvoice) {
+    const sql = getSql();
+    await ensureSchema(sql);
+    const refreshed = await getOrderById(orderId, market);
+    if (refreshed) {
+      const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
+      const invoiceText = renderInvoiceText(refreshed, {
+        invoiceNo: finalInvoice.invoice_no,
+        sequenceNo: Number(finalInvoice.sequence_no),
+        variableSymbol: finalInvoice.variable_symbol,
+        issueDateIso: String(finalInvoice.issue_date),
+        dueDateIso: String(finalInvoice.due_date),
+        currency: marketCurrency(market),
+        market,
+        kind: "FINAL",
+        total: Number(finalInvoice.amount),
+      });
+      await sendEmail({
+        to: refreshed.email,
+        subject:
+          market === "HU"
+            ? `Vegszamla #${finalInvoice.invoice_no}`
+            : `Factura finala #${finalInvoice.invoice_no}`,
+        text:
+          market === "HU"
+            ? "A befizetes beazonositasa utan a vegszamlat mellekelten kuldjuk."
+            : "Dupa confirmarea platii, factura finala este atasata acestui e-mail.",
+        attachments: [
+          {
+            filename: `${finalInvoice.invoice_no}.txt`,
+            content: invoiceText,
+            contentType: "text/plain; charset=utf-8",
+          },
+        ],
+      }).catch(() => undefined);
+
+      const paidEmail = buildPaymentReceivedEmail(refreshed, market);
+      await sendEmail({
+        to: refreshed.email,
+        subject: paidEmail.subject,
+        text: paidEmail.text,
+        html: paidEmail.html,
+      }).catch(() => undefined);
+
+      if (shouldCreateShipment) {
+        const ppl = await createPplShipment(refreshed, market);
+        if (ppl.ok) {
+          await sql`
+            update orders
+            set
+              ppl_shipment_id = ${ppl.shipmentId},
+              ppl_shipment_status = 'CREATED',
+              tracking_number = ${ppl.shipmentId},
+              ppl_label_path = ${ppl.labelPublicPath || null}
+            where id = ${orderId}
+          `;
+          const withTracking = await getOrderById(orderId, market);
+          if (withTracking?.trackingNumber) {
+            const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
+            await sendEmail({
+              to: withTracking.email,
+              subject: trackingEmail.subject,
+              text: trackingEmail.text,
+              html: trackingEmail.html,
+            }).catch(() => undefined);
+          }
+        } else {
+          await sql`
+            update orders
+            set ppl_shipment_status = ${`ERROR:${ppl.reason}`}
+            where id = ${orderId}
+          `;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+export async function updateOrderTrackingNumber(orderId: string, trackingNumber: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const normalized = trackingNumber.trim();
+  if (!normalized) return false;
+  const rows = await sql`select * from orders where id = ${orderId} and market = ${market} limit 1`;
+  if (rows.length === 0) return false;
+  await sql`update orders set tracking_number = ${normalized} where id = ${orderId}`;
+  const order = await getOrderById(orderId, market);
+  if (!order) return false;
+  const trackingEmail = buildTrackingEmail(order, market, normalized);
+  await sendEmail({
+    to: order.email,
+    subject: trackingEmail.subject,
+    text: trackingEmail.text,
+    html: trackingEmail.html,
+  }).catch(() => undefined);
+  return true;
+}
+
+export async function getLatestInvoiceByOrderNumber(orderNumber: number, market: Market, kind: InvoiceKind) {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql<InvoiceRow[]>`
+    select i.*
+    from invoices i
+    join orders o on o.id = i.order_id
+    where o.order_number = ${orderNumber} and o.market = ${market} and i.kind = ${kind}
+    order by i.created_at desc
+    limit 1
+  `;
+  return rows[0] || null;
 }

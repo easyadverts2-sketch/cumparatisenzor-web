@@ -18,7 +18,17 @@ function getTransporter() {
   });
 }
 
-export async function sendEmail(params: { to: string; subject: string; text: string }) {
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    contentType?: string;
+  }>;
+}) {
   const from = process.env.SMTP_FROM || "no-reply@cumparatisenzor.ro";
   const transporter = getTransporter();
   if (!transporter) {
@@ -30,6 +40,8 @@ export async function sendEmail(params: { to: string; subject: string; text: str
     to: params.to,
     subject: params.subject,
     text: params.text,
+    html: params.html,
+    attachments: params.attachments,
   });
 
   return { sent: true as const };

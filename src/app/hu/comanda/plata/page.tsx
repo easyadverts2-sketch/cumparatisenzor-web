@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NOINDEX_PAGE } from "@/lib/seo-config";
+import { getLatestInvoiceByOrderNumber } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Banki atutalas",
@@ -9,20 +10,24 @@ export const metadata: Metadata = {
 
 function getBankConfig() {
   return {
-    iban: process.env.BANK_IBAN || "(allitd be a BANK_IBAN valtozot)",
-    accountName: process.env.BANK_ACCOUNT_NAME || "Ceska maloobchodni s.r.o.",
-    bankName: process.env.BANK_NAME || "",
-    bic: process.env.BANK_BIC || "",
+    iban: "CZ11 0800 0000 0022 1394 5293",
+    accountName: "Ceska maloobchodni s.r.o.",
+    bankName: "",
+    bic: "GIBACZPX",
   };
 }
 
-export default function HuPaymentPage({
+export default async function HuPaymentPage({
   searchParams,
 }: {
   searchParams: { nr?: string };
 }) {
   const nrRaw = searchParams.nr || "";
   const nr = nrRaw ? nrRaw.padStart(7, "0") : "-";
+  const orderNumber = Number(nrRaw);
+  const proforma = Number.isFinite(orderNumber)
+    ? await getLatestInvoiceByOrderNumber(orderNumber, "HU", "PROFORMA")
+    : null;
   const bank = getBankConfig();
 
   return (
@@ -36,7 +41,9 @@ export default function HuPaymentPage({
           <p className="text-[#1a4d47]"><strong>IBAN:</strong> {bank.iban}</p>
           {bank.bankName ? <p className="text-[#1a4d47]"><strong>Bank:</strong> {bank.bankName}</p> : null}
           {bank.bic ? <p className="text-[#1a4d47]"><strong>BIC:</strong> {bank.bic}</p> : null}
-          <p className="mt-2 text-[#1a4d47]"><strong>Kozlemeny:</strong> Rendeles {nr}</p>
+          <p className="mt-2 text-[#1a4d47]">
+            <strong>Kozlemeny:</strong> {proforma ? proforma.variable_symbol : `Rendeles ${nr}`}
+          </p>
         </div>
         <Link href="/hu" className="mt-8 inline-block rounded-xl bg-[#0d9488] px-8 py-3 font-semibold text-white no-underline hover:bg-[#0f766e]">
           Vissza a fooldalra

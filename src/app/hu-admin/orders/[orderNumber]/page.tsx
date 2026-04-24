@@ -3,6 +3,7 @@ import {
   formatPaymentMethodLabel,
   formatShippingLine,
   getOrderByNumber,
+  updateOrderTrackingNumber,
   updateOrderStatus,
 } from "@/lib/store";
 import { ORDER_STATUSES, OrderStatus } from "@/lib/types";
@@ -25,6 +26,18 @@ async function updateStatus(formData: FormData) {
   if (orderNo) {
     revalidatePath(`/hu-admin/orders/${orderNo}`);
   }
+}
+
+async function updateTracking(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  const orderNo = String(formData.get("orderNumber") || "");
+  const trackingNumber = String(formData.get("trackingNumber") || "");
+  if (orderId && trackingNumber.trim()) {
+    await updateOrderTrackingNumber(orderId, trackingNumber, "HU");
+  }
+  revalidatePath("/hu-admin");
+  if (orderNo) revalidatePath(`/hu-admin/orders/${orderNo}`);
 }
 
 export default async function HuAdminOrderDetailPage({
@@ -58,6 +71,17 @@ export default async function HuAdminOrderDetailPage({
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Fizetes:</strong> {formatPaymentMethodLabel(order.paymentMethod)}</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Futar:</strong> {formatShippingLine(order)}</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Vegosszeg:</strong> {order.totalPrice} HUF</p>
+        <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Tracking:</strong> {order.trackingNumber || "-"}</p>
+        <p className="text-[#1a4d47]">
+          <strong className="text-[#0a2624]">Cimke PDF:</strong>{" "}
+          {order.pplLabelPath ? (
+            <a href={order.pplLabelPath} target="_blank" rel="noreferrer" className="font-medium text-[#0f766e] hover:underline">
+              Cimke megnyitasa
+            </a>
+          ) : (
+            "-"
+          )}
+        </p>
 
         <form action={updateStatus} className="flex flex-wrap items-end gap-3 border-t border-[#0d4f4a]/10 pt-6">
           <input type="hidden" name="orderId" value={order.id} />
@@ -74,6 +98,23 @@ export default async function HuAdminOrderDetailPage({
           </label>
           <button type="submit" className="rounded-lg bg-[#0d9488] px-4 py-2 font-medium text-white">
             Mentes
+          </button>
+        </form>
+
+        <form action={updateTracking} className="flex flex-wrap items-end gap-3 border-t border-[#0d4f4a]/10 pt-4">
+          <input type="hidden" name="orderId" value={order.id} />
+          <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
+          <label className="flex min-w-[260px] flex-col gap-1">
+            <span className="text-xs font-medium text-[#0f766e]">Csomag kovetesi szam</span>
+            <input
+              name="trackingNumber"
+              defaultValue={order.trackingNumber || order.pplShipmentId || ""}
+              className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2"
+              placeholder="Pl. PPL123456789"
+            />
+          </label>
+          <button type="submit" className="rounded-lg bg-[#6f2147] px-4 py-2 font-medium text-white">
+            Tracking mentese + email kuldes
           </button>
         </form>
       </div>

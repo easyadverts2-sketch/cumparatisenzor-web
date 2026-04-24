@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NOINDEX_PAGE } from "@/lib/seo-config";
+import { getLatestInvoiceByOrderNumber } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Plata prin transfer bancar",
@@ -9,23 +10,25 @@ export const metadata: Metadata = {
 
 function getBankConfig() {
   return {
-    iban: process.env.BANK_IBAN || "(configurati BANK_IBAN in Vercel)",
-    accountName: process.env.BANK_ACCOUNT_NAME || "Česká maloobchodní s.r.o.",
-    bankName: process.env.BANK_NAME || "",
-    bic: process.env.BANK_BIC || "",
-    referenceNote:
-      process.env.BANK_PAYMENT_NOTE ||
-      "Mentionati numarul comenzii in detaliile platii / referinta platii.",
+    iban: "CZ03 0100 0000 0001 1076 4124",
+    accountName: "Česká Maloobchodní s.r.o.",
+    bankName: "",
+    bic: "KOMBCZPP",
+    referenceNote: "Folositi variabila din factura proforma.",
   };
 }
 
-export default function PlataPage({
+export default async function PlataPage({
   searchParams,
 }: {
   searchParams: { nr?: string };
 }) {
   const nrRaw = searchParams.nr || "";
   const nr = nrRaw ? nrRaw.padStart(7, "0") : "—";
+  const orderNumber = Number(nrRaw);
+  const proforma = Number.isFinite(orderNumber)
+    ? await getLatestInvoiceByOrderNumber(orderNumber, "RO", "PROFORMA")
+    : null;
   const bank = getBankConfig();
 
   return (
@@ -64,7 +67,7 @@ export default function PlataPage({
             <div>
               <dt className="text-sm font-medium text-[#0f766e]">Referinta / detalii plata</dt>
               <dd>
-                Comanda {nr} — {bank.referenceNote}
+                {proforma ? proforma.variable_symbol : `Comanda ${nr}`} — {bank.referenceNote}
               </dd>
             </div>
           </dl>
