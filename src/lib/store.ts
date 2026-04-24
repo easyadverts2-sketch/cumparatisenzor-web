@@ -119,10 +119,30 @@ function toOrder(row: Row): Order {
   };
 }
 
+function shipmentErrorStatus(reason: string, raw?: unknown) {
+  let detail = "";
+  if (raw && typeof raw === "object") {
+    const rec = raw as Record<string, unknown>;
+    const candidate =
+      rec.message ||
+      rec.error ||
+      rec.error_description ||
+      rec.detail ||
+      rec.title;
+    if (candidate != null) {
+      detail = String(candidate);
+    }
+  } else if (typeof raw === "string") {
+    detail = raw;
+  }
+  const suffix = detail ? `:${detail}` : "";
+  return `ERROR:${reason}${suffix}`.slice(0, 240);
+}
+
 export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
-  if (pm === "COD") return "Ramburs";
-  if (pm === "BANK_TRANSFER") return "Transfer bancar";
-  return "Card (online)";
+  if (pm === "COD") return "Dobírka";
+  if (pm === "BANK_TRANSFER") return "Bankovní převod";
+  return "Karta (online)";
 }
 
 export function formatShippingLine(order: Pick<Order, "shippingCarrier" | "shippingCarrierOther">): string {
@@ -382,7 +402,7 @@ async function createShipmentForOrder(
     }
     await sql`
       update orders
-      set ppl_shipment_status = ${`ERROR:${ppl.reason}`}
+      set ppl_shipment_status = ${shipmentErrorStatus(ppl.reason, ppl.raw)}
       where id = ${order.id}
     `;
     await insertAuditLog(sql, {
@@ -429,7 +449,7 @@ async function createShipmentForOrder(
     }
     await sql`
       update orders
-      set dpd_shipment_status = ${`ERROR:${dpd.reason}`}
+      set dpd_shipment_status = ${shipmentErrorStatus(dpd.reason, dpd.raw)}
       where id = ${order.id}
     `;
     await insertAuditLog(sql, {
