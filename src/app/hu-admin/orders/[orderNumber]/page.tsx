@@ -71,11 +71,20 @@ export default async function HuAdminOrderDetailPage({
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Fizetes:</strong> {formatPaymentMethodLabel(order.paymentMethod)}</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Futar:</strong> {formatShippingLine(order)}</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Vegosszeg:</strong> {order.totalPrice} HUF</p>
+        <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Szamlazasi cim:</strong> <span className="whitespace-pre-line">{order.billingAddress}</span></p>
+        <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Szallitasi cim:</strong> <span className="whitespace-pre-line">{order.deliveryAddress}</span></p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Tracking:</strong> {order.trackingNumber || "-"}</p>
+        <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">PPL API statusz:</strong> {order.pplShipmentStatus || "-"}</p>
+        <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">DPD API statusz:</strong> {order.dpdShipmentStatus || "-"}</p>
         <p className="text-[#1a4d47]">
           <strong className="text-[#0a2624]">Cimke PDF:</strong>{" "}
-          {order.pplLabelPath ? (
-            <a href={order.pplLabelPath} target="_blank" rel="noreferrer" className="font-medium text-[#0f766e] hover:underline">
+          {order.pplLabelPath || order.dpdLabelPath ? (
+            <a
+              href={order.pplLabelPath || order.dpdLabelPath || "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-[#0f766e] hover:underline"
+            >
               Cimke megnyitasa
             </a>
           ) : (
@@ -108,7 +117,7 @@ export default async function HuAdminOrderDetailPage({
             <span className="text-xs font-medium text-[#0f766e]">Csomag kovetesi szam</span>
             <input
               name="trackingNumber"
-              defaultValue={order.trackingNumber || order.pplShipmentId || ""}
+              defaultValue={order.trackingNumber || order.pplShipmentId || order.dpdShipmentId || ""}
               className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2"
               placeholder="Pl. PPL123456789"
             />

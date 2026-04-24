@@ -11,7 +11,7 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-export const SHIPPING_CARRIERS = ["PPL", "PACKETA", "FINESHIP"] as const;
+export const SHIPPING_CARRIERS = ["PPL", "DPD", "FINESHIP"] as const;
 export type ShippingCarrier = (typeof SHIPPING_CARRIERS)[number];
 
 export type PaymentMethod = "COD" | "BANK_TRANSFER" | "CARD_STRIPE";
@@ -40,6 +40,9 @@ export type Order = {
   pplShipmentId?: string | null;
   pplShipmentStatus?: string | null;
   pplLabelPath?: string | null;
+  dpdShipmentId?: string | null;
+  dpdShipmentStatus?: string | null;
+  dpdLabelPath?: string | null;
   trackingNumber?: string | null;
 };
 

@@ -20,8 +20,9 @@ function parsePaymentMethod(raw: string): PaymentMethod {
 
 function parseShippingCarrier(raw: string): ShippingCarrier {
   const u = raw.toUpperCase();
-  if (u === "PPL" || u === "PACKETA" || u === "FINESHIP") {
-    return u;
+  if (u === "PACKETA") return "DPD";
+  if (u === "PPL" || u === "DPD" || u === "FINESHIP") {
+    return u as ShippingCarrier;
   }
   return "PPL";
 }
@@ -63,6 +64,12 @@ export function OrderFormHu() {
       setCarrier("PPL");
     }
   }, [carrier, fineshipAllowed]);
+
+  useEffect(() => {
+    if (carrier === "DPD" && paymentMethod === "COD") {
+      setPaymentMethod("BANK_TRANSFER");
+    }
+  }, [carrier, paymentMethod]);
 
   const shippingPrice =
     carrier === "FINESHIP" ? FINESHIP_SHIPPING : quantity >= 5 ? 0 : STANDARD_SHIPPING;
@@ -212,10 +219,15 @@ export function OrderFormHu() {
               checked={paymentMethod === "COD"}
               onChange={() => setPaymentMethod("COD")}
               className="mt-1 accent-[#0d9488]"
+              disabled={carrier === "DPD"}
             />
             <span>
               <span className="font-semibold text-[#0a2624]">Utanvet</span>
-              <span className="mt-1 block text-sm text-[#1a4d47]">A futarnak fizetsz atvetelkor.</span>
+              <span className="mt-1 block text-sm text-[#1a4d47]">
+                {carrier === "DPD"
+                  ? "DPD szallitashoz Magyarorszagon utanvet jelenleg nem elerheto."
+                  : "A futarnak fizetsz atvetelkor."}
+              </span>
             </span>
           </label>
           <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
@@ -237,6 +249,11 @@ export function OrderFormHu() {
 
       <div className="md:col-span-2">
         <h3 className="text-lg font-semibold text-[#0a2624]">Futar / szallitas</h3>
+        {carrier === "DPD" ? (
+          <p className="mt-1 text-sm text-[#7a3f54]">
+            DPD eseteben jelenleg csak banki atutalas valaszthato (utanvet nem).
+          </p>
+        ) : null}
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {SHIPPING_CARRIERS.map((c) => (
             <label
@@ -256,7 +273,7 @@ export function OrderFormHu() {
               />
               <span className="min-w-0">
                 <span className="block font-semibold text-[#0a2624]">
-                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "DPD" : "Fineship"}
+                  {c === "PPL" ? "PPL" : c === "DPD" ? "DPD" : "Fineship"}
                 </span>
                 {c === "FINESHIP" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">Premium szallitas, 1-3 nap.</span>
@@ -434,7 +451,7 @@ export function OrderFormHu() {
             <dd className="font-medium">{productsTotal} HUF</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt>Szallitas ({carrier === "PPL" ? "PPL" : carrier === "PACKETA" ? "DPD" : "Fineship"})</dt>
+            <dt>Szallitas ({carrier === "PPL" ? "PPL" : carrier === "DPD" ? "DPD" : "Fineship"})</dt>
             <dd className="font-medium">{shippingPrice} HUF</dd>
           </div>
           <div className="flex items-center justify-between border-t border-[#de6a44]/30 pt-2 text-base text-[#3a1d2d]">

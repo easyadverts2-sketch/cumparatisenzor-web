@@ -20,8 +20,9 @@ function parsePaymentMethod(raw: string): PaymentMethod {
 
 function parseShippingCarrier(raw: string): ShippingCarrier {
   const u = raw.toUpperCase();
-  if (u === "PPL" || u === "PACKETA" || u === "FINESHIP") {
-    return u;
+  if (u === "PACKETA") return "DPD";
+  if (u === "PPL" || u === "DPD" || u === "FINESHIP") {
+    return u as ShippingCarrier;
   }
   return "PPL";
 }
@@ -77,7 +78,7 @@ export function OrderForm() {
     deliveryCity.trim().length >= 2 &&
     postalRegex.test(deliveryPostalCode) &&
     deliveryCounty.trim().length >= 2;
-  const shippingStepReady = carrier === "PPL" || carrier === "PACKETA" || carrier === "FINESHIP";
+  const shippingStepReady = carrier === "PPL" || carrier === "DPD" || carrier === "FINESHIP";
   const billingStepReady = !billingDifferent
     ? true
     : billingCompanyName.trim().length >= 2 &&
@@ -314,7 +315,7 @@ export function OrderForm() {
               />
               <span className="min-w-0">
                 <span className="block font-semibold text-[#0a2624]">
-                  {c === "PPL" ? "PPL" : c === "PACKETA" ? "DPD" : "Fineship"}
+                  {c === "PPL" ? "PPL" : c === "DPD" ? "DPD" : "Fineship"}
                 </span>
                 {c === "FINESHIP" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
@@ -504,7 +505,7 @@ export function OrderForm() {
             <dd className="font-medium">{productsTotal} RON</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt>Livrare ({carrier === "PPL" ? "PPL" : carrier === "PACKETA" ? "DPD" : "Fineship"})</dt>
+            <dt>Livrare ({carrier === "PPL" ? "PPL" : carrier === "DPD" ? "DPD" : "Fineship"})</dt>
             <dd className="font-medium">{shippingPrice} RON</dd>
           </div>
           <div className="flex items-center justify-between border-t border-[#de6a44]/30 pt-2 text-base text-[#3a1d2d]">

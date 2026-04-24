@@ -74,10 +74,12 @@ export default async function AdminOrderDetailPage({
         <div>
           <h2 className="font-semibold text-[#0f766e]">Adrese</h2>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Facturare:</strong> {order.billingAddress}
+            <strong className="text-[#0a2624]">Facturare:</strong>{" "}
+            <span className="whitespace-pre-line">{order.billingAddress}</span>
           </p>
           <p className="mt-2 text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Livrare:</strong> {order.deliveryAddress}
+            <strong className="text-[#0a2624]">Livrare:</strong>{" "}
+            <span className="whitespace-pre-line">{order.deliveryAddress}</span>
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -100,9 +102,20 @@ export default async function AdminOrderDetailPage({
             <strong className="text-[#0a2624]">Tracking:</strong> {order.trackingNumber || "-"}
           </p>
           <p className="text-[#1a4d47]">
+            <strong className="text-[#0a2624]">PPL status API:</strong> {order.pplShipmentStatus || "-"}
+          </p>
+          <p className="text-[#1a4d47]">
+            <strong className="text-[#0a2624]">DPD status API:</strong> {order.dpdShipmentStatus || "-"}
+          </p>
+          <p className="text-[#1a4d47]">
             <strong className="text-[#0a2624]">Eticheta PDF:</strong>{" "}
-            {order.pplLabelPath ? (
-              <a href={order.pplLabelPath} target="_blank" rel="noreferrer" className="font-medium text-[#0f766e] hover:underline">
+            {order.pplLabelPath || order.dpdLabelPath ? (
+              <a
+                href={order.pplLabelPath || order.dpdLabelPath || "#"}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-[#0f766e] hover:underline"
+              >
                 Deschide eticheta
               </a>
             ) : (
@@ -136,7 +149,7 @@ export default async function AdminOrderDetailPage({
             <span className="text-xs font-medium text-[#0f766e]">Numar colet / tracking</span>
             <input
               name="trackingNumber"
-              defaultValue={order.trackingNumber || order.pplShipmentId || ""}
+              defaultValue={order.trackingNumber || order.pplShipmentId || order.dpdShipmentId || ""}
               className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2"
               placeholder="Ex: PPL123456789"
             />

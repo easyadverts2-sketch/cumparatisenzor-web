@@ -12,6 +12,7 @@ function parsePaymentMethod(raw: unknown): Order["paymentMethod"] {
 
 function parseShippingCarrier(raw: unknown): ShippingCarrier | null {
   const s = String(raw || "").toUpperCase();
+  if (s === "PACKETA") return "DPD";
   if ((SHIPPING_CARRIERS as readonly string[]).includes(s)) {
     return s as ShippingCarrier;
   }

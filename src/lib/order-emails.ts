@@ -24,7 +24,7 @@ function paymentLabel(paymentMethod: Order["paymentMethod"], market: Market) {
 }
 
 function shippingLabel(order: Pick<Order, "shippingCarrier">) {
-  if (order.shippingCarrier === "PACKETA") return "DPD";
+  if (order.shippingCarrier === "DPD") return "DPD";
   if (order.shippingCarrier === "FINESHIP") return "Fineship";
   return "PPL";
 }

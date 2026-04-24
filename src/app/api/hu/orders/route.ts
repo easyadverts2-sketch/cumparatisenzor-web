@@ -12,6 +12,7 @@ function parsePaymentMethod(raw: unknown): Order["paymentMethod"] {
 
 function parseShippingCarrier(raw: unknown): ShippingCarrier | null {
   const s = String(raw || "").toUpperCase();
+  if (s === "PACKETA") return "DPD";
   if ((SHIPPING_CARRIERS as readonly string[]).includes(s)) {
     return s as ShippingCarrier;
   }
@@ -136,6 +137,12 @@ export async function POST(request: Request) {
         ].join("\n")
       : [`Maganszemely: ${customerName}`, formatAddress(delivery)].join("\n");
 
+    if (shippingCarrier === "DPD" && parsePaymentMethod(body.paymentMethod) === "COD") {
+      return NextResponse.json(
+        { ok: false, message: "DPD + utanvet jelenleg nem elerheto Magyarorszagon." },
+        { status: 400 }
+      );
+    }
     const result = await createOrder(
       {
         customerName,

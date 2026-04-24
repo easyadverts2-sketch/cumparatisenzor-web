@@ -12,6 +12,7 @@ import {
   type InvoiceKind,
 } from "./billing";
 import { createPplShipment } from "./ppl";
+import { createDpdShipment } from "./dpd";
 import {
   buildOrderCreatedEmail,
   buildPaymentReceivedEmail,
@@ -79,9 +80,12 @@ function toOrder(row: Row): Order {
   const carrierRaw = row.shipping_carrier != null ? String(row.shipping_carrier) : "PPL";
   const shippingCarrier = (
     carrierRaw === "PPL" ||
+    carrierRaw === "DPD" ||
     carrierRaw === "PACKETA" ||
     carrierRaw === "FINESHIP"
-      ? carrierRaw
+      ? carrierRaw === "PACKETA"
+        ? "DPD"
+        : carrierRaw
       : "PPL"
   ) as ShippingCarrier;
   return {
@@ -108,6 +112,9 @@ function toOrder(row: Row): Order {
     pplShipmentId: row.ppl_shipment_id != null ? String(row.ppl_shipment_id) : null,
     pplShipmentStatus: row.ppl_shipment_status != null ? String(row.ppl_shipment_status) : null,
     pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
+    dpdShipmentId: row.dpd_shipment_id != null ? String(row.dpd_shipment_id) : null,
+    dpdShipmentStatus: row.dpd_shipment_status != null ? String(row.dpd_shipment_status) : null,
+    dpdLabelPath: row.dpd_label_path != null ? String(row.dpd_label_path) : null,
     trackingNumber: row.tracking_number != null ? String(row.tracking_number) : null,
   };
 }
@@ -120,7 +127,7 @@ export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
 
 export function formatShippingLine(order: Pick<Order, "shippingCarrier" | "shippingCarrierOther">): string {
   if (order.shippingCarrier === "PPL") return "PPL";
-  if (order.shippingCarrier === "PACKETA") return "DPD";
+  if (order.shippingCarrier === "DPD") return "DPD";
   if (order.shippingCarrier === "FINESHIP") return "Fineship";
   return "PPL";
 }
@@ -201,6 +208,30 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
   `;
   if (labelPathCol.length === 0) {
     await sql`alter table orders add column ppl_label_path text`;
+  }
+
+  const dpdIdCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_shipment_id'
+  `;
+  if (dpdIdCol.length === 0) {
+    await sql`alter table orders add column dpd_shipment_id text`;
+  }
+
+  const dpdStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_shipment_status'
+  `;
+  if (dpdStatusCol.length === 0) {
+    await sql`alter table orders add column dpd_shipment_status text`;
+  }
+
+  const dpdLabelCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_label_path'
+  `;
+  if (dpdLabelCol.length === 0) {
+    await sql`alter table orders add column dpd_label_path text`;
   }
 }
 
@@ -308,6 +339,107 @@ async function insertAuditLog(
       ${input.details || null}
     )
   `;
+}
+
+async function createShipmentForOrder(
+  sql: SqlClient,
+  order: Order,
+  market: Market,
+  senderFrom: string,
+  auditDetailPrefix?: string
+) {
+  if (order.shippingCarrier === "PPL") {
+    const ppl = await createPplShipment(order, market);
+    if (ppl.ok) {
+      await sql`
+        update orders
+        set
+          ppl_shipment_id = ${ppl.shipmentId},
+          ppl_shipment_status = 'CREATED',
+          tracking_number = ${ppl.shipmentId},
+          ppl_label_path = ${ppl.labelPublicPath || null}
+        where id = ${order.id}
+      `;
+      await insertAuditLog(sql, {
+        market,
+        action: "PPL_SHIPMENT_CREATED",
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        details: `${auditDetailPrefix || ""} shipment=${ppl.shipmentId} label=${ppl.labelPublicPath || "-"}`.trim(),
+      });
+      const withTracking = await getOrderById(order.id, market);
+      if (withTracking?.trackingNumber) {
+        const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
+        await sendEmail({
+          to: withTracking.email,
+          subject: trackingEmail.subject,
+          text: trackingEmail.text,
+          html: trackingEmail.html,
+          from: senderFrom,
+        }).catch(() => undefined);
+      }
+      return;
+    }
+    await sql`
+      update orders
+      set ppl_shipment_status = ${`ERROR:${ppl.reason}`}
+      where id = ${order.id}
+    `;
+    await insertAuditLog(sql, {
+      market,
+      action: "PPL_SHIPMENT_ERROR",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      details: `${auditDetailPrefix || ""} ${ppl.reason}`.trim(),
+    });
+    return;
+  }
+
+  if (order.shippingCarrier === "DPD") {
+    const dpd = await createDpdShipment(order, market);
+    if (dpd.ok) {
+      await sql`
+        update orders
+        set
+          dpd_shipment_id = ${dpd.shipmentId},
+          dpd_shipment_status = 'CREATED',
+          tracking_number = ${dpd.shipmentId},
+          dpd_label_path = ${dpd.labelPublicPath || null}
+        where id = ${order.id}
+      `;
+      await insertAuditLog(sql, {
+        market,
+        action: "DPD_SHIPMENT_CREATED",
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        details: `${auditDetailPrefix || ""} shipment=${dpd.shipmentId} label=${dpd.labelPublicPath || "-"}`.trim(),
+      });
+      const withTracking = await getOrderById(order.id, market);
+      if (withTracking?.trackingNumber) {
+        const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
+        await sendEmail({
+          to: withTracking.email,
+          subject: trackingEmail.subject,
+          text: trackingEmail.text,
+          html: trackingEmail.html,
+          from: senderFrom,
+        }).catch(() => undefined);
+      }
+      return;
+    }
+    await sql`
+      update orders
+      set dpd_shipment_status = ${`ERROR:${dpd.reason}`}
+      where id = ${order.id}
+    `;
+    await insertAuditLog(sql, {
+      market,
+      action: "DPD_SHIPMENT_ERROR",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      details: `${auditDetailPrefix || ""} ${dpd.reason}`.trim(),
+    });
+  }
 }
 
 async function nextInvoiceSequence(sql: SqlClient, market: Market, kind: InvoiceKind): Promise<number> {
@@ -437,6 +569,12 @@ export async function createOrder(input: {
         message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
       };
     }
+    if (market === "HU" && input.shippingCarrier === "DPD" && input.paymentMethod === "COD") {
+      return {
+        ok: false,
+        message: "Pentru Ungaria, DPD nu permite plata ramburs. Alegeti transfer bancar.",
+      };
+    }
     const shippingPrice =
       market === "HU"
         ? input.shippingCarrier === "FINESHIP"
@@ -486,8 +624,9 @@ export async function createOrder(input: {
       returning *
     `;
     const order = toOrder(inserted[0] as unknown as Row);
-    const shouldCreatePplImmediately =
-      order.paymentMethod === "COD" && order.shippingCarrier === "PPL";
+    const shouldCreateShipmentImmediately =
+      order.paymentMethod === "COD" &&
+      (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD");
     try {
       let proforma: InvoiceRow | null = null;
       if (input.paymentMethod === "BANK_TRANSFER") {
@@ -581,56 +720,18 @@ export async function createOrder(input: {
         }).catch(() => undefined);
       }
 
-      if (shouldCreatePplImmediately) {
-        const ppl = await createPplShipment(order, market);
-        if (ppl.ok) {
-          const defaults = defaultsByMarket[market];
-          const invRows = await sql`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
-          const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
-          if (inventory >= order.quantity) {
-            await sql`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
-            await sql`
-              update orders
-              set
-                status = 'ORDERED_PPLRDY',
-                ppl_shipment_id = ${ppl.shipmentId},
-                ppl_shipment_status = 'CREATED',
-                tracking_number = ${ppl.shipmentId},
-                ppl_label_path = ${ppl.labelPublicPath || null}
-              where id = ${order.id}
-            `;
-            await insertAuditLog(sql, {
-              market,
-              action: "PPL_SHIPMENT_CREATED",
-              orderId: order.id,
-              orderNumber: order.orderNumber,
-              details: `immediate_cod_ppl shipment=${ppl.shipmentId} label=${ppl.labelPublicPath || "-"}`,
-            });
-            const withTracking = await getOrderById(order.id, market);
-            if (withTracking?.trackingNumber) {
-              const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
-              await sendEmail({
-                to: withTracking.email,
-                subject: trackingEmail.subject,
-                text: trackingEmail.text,
-                html: trackingEmail.html,
-                from: senderFrom,
-              }).catch(() => undefined);
-            }
-          }
-        } else {
+      if (shouldCreateShipmentImmediately) {
+        const defaults = defaultsByMarket[market];
+        const invRows = await sql`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
+        const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
+        if (inventory >= order.quantity) {
+          await sql`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
           await sql`
             update orders
-            set ppl_shipment_status = ${`ERROR:${ppl.reason}`}
+            set status = 'ORDERED_PPLRDY'
             where id = ${order.id}
           `;
-          await insertAuditLog(sql, {
-            market,
-            action: "PPL_SHIPMENT_ERROR",
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            details: `immediate_cod_ppl ${ppl.reason}`,
-          });
+          await createShipmentForOrder(sql, order, market, senderFrom, "immediate_cod_shipment");
         }
       }
     } catch (postProcessError) {
@@ -727,6 +828,28 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       order.paymentMethod === "COD" &&
       order.status === "WAITING_FOR_SHIPPING"
     ) {
+      if (market === "HU" && order.shippingCarrier === "DPD") {
+        await tx`update orders set status = 'WAITING_FOR_SHIPPING' where id = ${orderId}`;
+        return true;
+      }
+      if (inventory < order.quantity) {
+        await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
+        return true;
+      }
+      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
+      shouldCreateShipment = true;
+    }
+
+    if (
+      status === "ORDERED_PPLRDY" &&
+      order.paymentMethod === "COD" &&
+      order.status === "WAITING_FOR_SHIPPING" &&
+      (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD")
+    ) {
+      if (market === "HU" && order.shippingCarrier === "DPD") {
+        await tx`update orders set status = 'WAITING_FOR_SHIPPING' where id = ${orderId}`;
+        return true;
+      }
       if (inventory < order.quantity) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
@@ -827,49 +950,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       }
 
       if (shouldCreateShipment) {
-        const ppl = await createPplShipment(refreshed, market);
-        if (ppl.ok) {
-          await sql`
-            update orders
-            set
-              ppl_shipment_id = ${ppl.shipmentId},
-              ppl_shipment_status = 'CREATED',
-              tracking_number = ${ppl.shipmentId},
-              ppl_label_path = ${ppl.labelPublicPath || null}
-            where id = ${orderId}
-          `;
-          const withTracking = await getOrderById(orderId, market);
-          await insertAuditLog(sql, {
-            market,
-            action: "PPL_SHIPMENT_CREATED",
-            orderId,
-            orderNumber: order.orderNumber,
-            details: `shipment=${ppl.shipmentId} label=${ppl.labelPublicPath || "-"}`,
-          });
-          if (withTracking?.trackingNumber) {
-            const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
-            await sendEmail({
-              to: withTracking.email,
-              subject: trackingEmail.subject,
-              text: trackingEmail.text,
-              html: trackingEmail.html,
-              from: senderFrom,
-            }).catch(() => undefined);
-          }
-        } else {
-          await sql`
-            update orders
-            set ppl_shipment_status = ${`ERROR:${ppl.reason}`}
-            where id = ${orderId}
-          `;
-          await insertAuditLog(sql, {
-            market,
-            action: "PPL_SHIPMENT_ERROR",
-            orderId,
-            orderNumber: order.orderNumber,
-            details: ppl.reason,
-          });
-        }
+        await createShipmentForOrder(sql, refreshed, market, senderFrom, "status_transition_shipment");
       }
     }
   }
