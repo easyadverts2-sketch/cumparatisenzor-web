@@ -14,6 +14,60 @@ function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
+/** PPL CPL expects ISO 3166-1 alpha-2 (e.g. CZ), not full country names. */
+function normalizeKeyForCountryAlias(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function normalizePplSenderCountryIso2(raw: string | undefined): string | null {
+  const t = (raw || "").trim();
+  if (!t) return "CZ";
+  const compact = t.toUpperCase().replace(/\s+/g, "");
+  if (/^[A-Z]{2}$/.test(compact)) return compact;
+  const alpha3: Record<string, string> = {
+    CZE: "CZ",
+    SVK: "SK",
+    ROU: "RO",
+    HUN: "HU",
+    POL: "PL",
+    DEU: "DE",
+    AUT: "AT",
+  };
+  if (compact.length === 3 && alpha3[compact]) return alpha3[compact];
+
+  const key = normalizeKeyForCountryAlias(t);
+  const aliases: Record<string, string> = {
+    cz: "CZ",
+    "czech republic": "CZ",
+    czechia: "CZ",
+    cesko: "CZ",
+    cr: "CZ",
+    romania: "RO",
+    "united kingdom": "GB",
+    uk: "GB",
+    "great britain": "GB",
+    england: "GB",
+    hungary: "HU",
+    magyarorszag: "HU",
+    slovakia: "SK",
+    slovensko: "SK",
+    poland: "PL",
+    polska: "PL",
+    germany: "DE",
+    deutschland: "DE",
+    austria: "AT",
+    osterreich: "AT",
+  };
+  if (aliases[key]) return aliases[key];
+  return null;
+}
+
 function toRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object") {
     return value as Record<string, unknown>;
@@ -229,7 +283,12 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
   const senderStreet = process.env.PPL_SENDER_STREET?.trim();
   const senderCity = process.env.PPL_SENDER_CITY?.trim();
   const senderZipCode = process.env.PPL_SENDER_ZIP?.trim();
-  const senderCountry = process.env.PPL_SENDER_COUNTRY?.trim() || "CZ";
+  const senderCountryRaw = process.env.PPL_SENDER_COUNTRY?.trim();
+  const senderCountryIso = normalizePplSenderCountryIso2(senderCountryRaw);
+  if (senderCountryRaw && !senderCountryIso) {
+    return { ok: false, reason: "ppl_sender_country_invalid_use_iso3166_alpha2" };
+  }
+  const senderCountry = senderCountryIso || "CZ";
   const senderPhone = process.env.PPL_SENDER_PHONE?.trim();
   const senderEmail = process.env.PPL_SENDER_EMAIL?.trim();
   if (senderName && senderStreet && senderCity && senderZipCode && senderPhone && senderEmail) {
