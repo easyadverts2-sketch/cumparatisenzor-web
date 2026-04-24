@@ -6,8 +6,8 @@ import { getStripe } from "./stripe-checkout";
 import {
   formatInvoiceNo,
   formatVariableSymbol,
-  getBankDetails,
   marketCurrency,
+  renderInvoiceHtml,
   renderInvoiceText,
   type InvoiceKind,
 } from "./billing";
@@ -334,7 +334,7 @@ async function createInvoiceRecord(sql: SqlClient, order: Order, market: Market,
 
   const issueDate = new Date();
   const dueDate = new Date(issueDate);
-  dueDate.setDate(dueDate.getDate() + (kind === "PROFORMA" ? 5 : 0));
+  dueDate.setDate(dueDate.getDate() + 5);
   const sequenceNo = await nextInvoiceSequence(sql, market, kind);
   const invoiceNo = formatInvoiceNo(kind, issueDate, sequenceNo);
   const variableSymbol = formatVariableSymbol(issueDate, sequenceNo);
@@ -486,6 +486,8 @@ export async function createOrder(input: {
       returning *
     `;
     const order = toOrder(inserted[0] as unknown as Row);
+    const shouldCreatePplImmediately =
+      order.paymentMethod === "COD" && order.shippingCarrier === "PPL";
     try {
       let proforma: InvoiceRow | null = null;
       if (input.paymentMethod === "BANK_TRANSFER") {
@@ -507,8 +509,18 @@ export async function createOrder(input: {
       }).catch(() => undefined);
 
       if (proforma) {
-        const bank = getBankDetails(market);
         const invoiceText = renderInvoiceText(order, {
+          invoiceNo: proforma.invoice_no,
+          sequenceNo: Number(proforma.sequence_no),
+          variableSymbol: proforma.variable_symbol,
+          issueDateIso: String(proforma.issue_date),
+          dueDateIso: String(proforma.due_date),
+          currency: marketCurrency(market),
+          market,
+          kind: "PROFORMA",
+          total: Number(proforma.amount),
+        });
+        const invoiceHtml = renderInvoiceHtml(order, {
           invoiceNo: proforma.invoice_no,
           sequenceNo: Number(proforma.sequence_no),
           variableSymbol: proforma.variable_symbol,
@@ -525,14 +537,20 @@ export async function createOrder(input: {
             : `Factura proforma #${proforma.invoice_no}`;
         const proformaBody =
           market === "HU"
-            ? `A rendeleshez dijbekero keszult. Kerdjuk az atutalast az alabbi adatokkal:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nValtozo kozlemeny: ${proforma.variable_symbol}`
-            : `Pentru comanda a fost emisa factura proforma. Va rugam sa efectuati plata folosind:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nVariabila plata: ${proforma.variable_symbol}`;
+            ? `A rendeleshez dijbekero keszult. A csatolt proforma tartalmazza a fizetendo osszeget es a valtozo szamot (${proforma.variable_symbol}).`
+            : `Pentru comanda a fost emisa factura proforma. In fisierul atasat gasiti suma de plata si numarul variabil (${proforma.variable_symbol}).`;
         await sendEmail({
           to: input.email,
           subject: proformaSubject,
           text: proformaBody,
+          html: invoiceHtml,
           from: senderFrom,
           attachments: [
+            {
+              filename: `${proforma.invoice_no}.html`,
+              content: invoiceHtml,
+              contentType: "text/html; charset=utf-8",
+            },
             {
               filename: `${proforma.invoice_no}.txt`,
               content: invoiceText,
@@ -562,6 +580,59 @@ export async function createOrder(input: {
           from: senderFrom,
         }).catch(() => undefined);
       }
+
+      if (shouldCreatePplImmediately) {
+        const ppl = await createPplShipment(order, market);
+        if (ppl.ok) {
+          const defaults = defaultsByMarket[market];
+          const invRows = await sql`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
+          const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
+          if (inventory >= order.quantity) {
+            await sql`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
+            await sql`
+              update orders
+              set
+                status = 'ORDERED_PPLRDY',
+                ppl_shipment_id = ${ppl.shipmentId},
+                ppl_shipment_status = 'CREATED',
+                tracking_number = ${ppl.shipmentId},
+                ppl_label_path = ${ppl.labelPublicPath || null}
+              where id = ${order.id}
+            `;
+            await insertAuditLog(sql, {
+              market,
+              action: "PPL_SHIPMENT_CREATED",
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              details: `immediate_cod_ppl shipment=${ppl.shipmentId} label=${ppl.labelPublicPath || "-"}`,
+            });
+            const withTracking = await getOrderById(order.id, market);
+            if (withTracking?.trackingNumber) {
+              const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
+              await sendEmail({
+                to: withTracking.email,
+                subject: trackingEmail.subject,
+                text: trackingEmail.text,
+                html: trackingEmail.html,
+                from: senderFrom,
+              }).catch(() => undefined);
+            }
+          }
+        } else {
+          await sql`
+            update orders
+            set ppl_shipment_status = ${`ERROR:${ppl.reason}`}
+            where id = ${order.id}
+          `;
+          await insertAuditLog(sql, {
+            market,
+            action: "PPL_SHIPMENT_ERROR",
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            details: `immediate_cod_ppl ${ppl.reason}`,
+          });
+        }
+      }
     } catch (postProcessError) {
       console.error("[createOrder] post-process warning", {
         market,
@@ -571,7 +642,8 @@ export async function createOrder(input: {
       });
     }
 
-    return { ok: true, order, message: "Comanda a fost inregistrata." };
+    const freshOrder = await getOrderById(order.id, market);
+    return { ok: true, order: freshOrder || order, message: "Comanda a fost inregistrata." };
   } catch (error) {
     console.error("[createOrder] failed", {
       market,
@@ -651,6 +723,19 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     }
 
     if (
+      status === "ORDERED_PAID_NOT_SHIPPED" &&
+      order.paymentMethod === "COD" &&
+      order.status === "WAITING_FOR_SHIPPING"
+    ) {
+      if (inventory < order.quantity) {
+        await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
+        return true;
+      }
+      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
+      shouldCreateShipment = true;
+    }
+
+    if (
       status === "SHIPPED" &&
       order.paymentMethod === "COD" &&
       order.status === "WAITING_FOR_SHIPPING"
@@ -676,51 +761,70 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     details: `${oldStatus} -> ${status}`,
   });
 
-  if (shouldIssueFinalInvoice) {
+  if (shouldIssueFinalInvoice || shouldCreateShipment) {
     const sql = getSql();
     await ensureSchema(sql);
     const refreshed = await getOrderById(orderId, market);
     if (refreshed) {
-      const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
-      const invoiceText = renderInvoiceText(refreshed, {
-        invoiceNo: finalInvoice.invoice_no,
-        sequenceNo: Number(finalInvoice.sequence_no),
-        variableSymbol: finalInvoice.variable_symbol,
-        issueDateIso: String(finalInvoice.issue_date),
-        dueDateIso: String(finalInvoice.due_date),
-        currency: marketCurrency(market),
-        market,
-        kind: "FINAL",
-        total: Number(finalInvoice.amount),
-      });
-      await sendEmail({
-        to: refreshed.email,
-        subject:
-          market === "HU"
-            ? `Vegszamla #${finalInvoice.invoice_no}`
-            : `Factura finala #${finalInvoice.invoice_no}`,
-        text:
-          market === "HU"
-            ? "A befizetes beazonositasa utan a vegszamlat mellekelten kuldjuk."
-            : "Dupa confirmarea platii, factura finala este atasata acestui e-mail.",
-        from: senderFrom,
-        attachments: [
-          {
-            filename: `${finalInvoice.invoice_no}.txt`,
-            content: invoiceText,
-            contentType: "text/plain; charset=utf-8",
-          },
-        ],
-      }).catch(() => undefined);
+      if (shouldIssueFinalInvoice) {
+        const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
+        const invoiceText = renderInvoiceText(refreshed, {
+          invoiceNo: finalInvoice.invoice_no,
+          sequenceNo: Number(finalInvoice.sequence_no),
+          variableSymbol: finalInvoice.variable_symbol,
+          issueDateIso: String(finalInvoice.issue_date),
+          dueDateIso: String(finalInvoice.due_date),
+          currency: marketCurrency(market),
+          market,
+          kind: "FINAL",
+          total: Number(finalInvoice.amount),
+        });
+        const invoiceHtml = renderInvoiceHtml(refreshed, {
+          invoiceNo: finalInvoice.invoice_no,
+          sequenceNo: Number(finalInvoice.sequence_no),
+          variableSymbol: finalInvoice.variable_symbol,
+          issueDateIso: String(finalInvoice.issue_date),
+          dueDateIso: String(finalInvoice.due_date),
+          currency: marketCurrency(market),
+          market,
+          kind: "FINAL",
+          total: Number(finalInvoice.amount),
+        });
+        await sendEmail({
+          to: refreshed.email,
+          subject:
+            market === "HU"
+              ? `Vegszamla #${finalInvoice.invoice_no}`
+              : `Factura finala #${finalInvoice.invoice_no}`,
+          text:
+            market === "HU"
+              ? "A befizetes beazonositasa utan a vegszamlat mellekelten kuldjuk."
+              : "Dupa confirmarea platii, factura finala este atasata acestui e-mail.",
+          html: invoiceHtml,
+          from: senderFrom,
+          attachments: [
+            {
+              filename: `${finalInvoice.invoice_no}.html`,
+              content: invoiceHtml,
+              contentType: "text/html; charset=utf-8",
+            },
+            {
+              filename: `${finalInvoice.invoice_no}.txt`,
+              content: invoiceText,
+              contentType: "text/plain; charset=utf-8",
+            },
+          ],
+        }).catch(() => undefined);
 
-      const paidEmail = buildPaymentReceivedEmail(refreshed, market);
-      await sendEmail({
-        to: refreshed.email,
-        subject: paidEmail.subject,
-        text: paidEmail.text,
-        html: paidEmail.html,
-        from: senderFrom,
-      }).catch(() => undefined);
+        const paidEmail = buildPaymentReceivedEmail(refreshed, market);
+        await sendEmail({
+          to: refreshed.email,
+          subject: paidEmail.subject,
+          text: paidEmail.text,
+          html: paidEmail.html,
+          from: senderFrom,
+        }).catch(() => undefined);
+      }
 
       if (shouldCreateShipment) {
         const ppl = await createPplShipment(refreshed, market);

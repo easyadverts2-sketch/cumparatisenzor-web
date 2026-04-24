@@ -44,6 +44,14 @@ function formatAddress(addr: AddressPayload): string {
 
 export async function POST(request: Request) {
   try {
+    const host = request.headers.get("host") || "";
+    if (host.includes("szenzorvasarlas.hu")) {
+      return NextResponse.json(
+        { ok: false, message: "Endpoint invalid pentru domeniul HU." },
+        { status: 400 }
+      );
+    }
+
     try {
       const limited = await enforceRateLimit({
         request,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NOINDEX_PAGE } from "@/lib/seo-config";
-import { getLatestInvoiceByOrderNumber } from "@/lib/store";
+import { getLatestInvoiceByOrderNumber, getOrderByNumber } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Banki atutalas",
@@ -25,6 +25,9 @@ export default async function HuPaymentPage({
   const nrRaw = searchParams.nr || "";
   const nr = nrRaw ? nrRaw.padStart(7, "0") : "-";
   const orderNumber = Number(nrRaw);
+  const order = Number.isFinite(orderNumber)
+    ? await getOrderByNumber(orderNumber, "HU")
+    : null;
   const proforma = Number.isFinite(orderNumber)
     ? await getLatestInvoiceByOrderNumber(orderNumber, "HU", "PROFORMA")
     : null;
@@ -42,8 +45,20 @@ export default async function HuPaymentPage({
           {bank.bankName ? <p className="text-[#1a4d47]"><strong>Bank:</strong> {bank.bankName}</p> : null}
           {bank.bic ? <p className="text-[#1a4d47]"><strong>BIC:</strong> {bank.bic}</p> : null}
           <p className="mt-2 text-[#1a4d47]">
-            <strong>Kozlemeny:</strong> {proforma ? proforma.variable_symbol : `Rendeles ${nr}`}
+            <strong>Fizetendo osszeg:</strong> {order ? `${order.totalPrice} HUF` : "-"}
           </p>
+          <p className="mt-2 text-[#1a4d47]">
+            <strong>Valtozo szam / kozlemeny:</strong> {proforma ? proforma.variable_symbol : `Rendeles ${nr}`}
+          </p>
+          {proforma ? (
+            <p className="mt-2 text-sm text-[#1a4d47]">
+              <strong>Proforma:</strong> {proforma.invoice_no}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-[#9a3412]">
+              A proforma most keszul. Ha 1-2 percen belul sem erkezik meg emailben, jelezd nekunk.
+            </p>
+          )}
         </div>
         <Link href="/hu" className="mt-8 inline-block rounded-xl bg-[#0d9488] px-8 py-3 font-semibold text-white no-underline hover:bg-[#0f766e]">
           Vissza a fooldalra

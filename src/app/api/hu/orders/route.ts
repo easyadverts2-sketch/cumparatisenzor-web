@@ -44,6 +44,14 @@ function formatAddress(addr: AddressPayload): string {
 
 export async function POST(request: Request) {
   try {
+    const host = request.headers.get("host") || "";
+    if (!host.includes("szenzorvasarlas.hu")) {
+      return NextResponse.json(
+        { ok: false, message: "Ervenytelen HU vegpont ehhez a domainhez." },
+        { status: 400 }
+      );
+    }
+
     try {
       const limited = await enforceRateLimit({
         request,
@@ -155,7 +163,13 @@ export async function POST(request: Request) {
         { status: 200 }
       );
     }
-    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, message: "A rendeles jelenleg nem feldolgozhato. Kerlek probald ujra." },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(result, { status: 200 });
   } catch {
     return NextResponse.json(
       { ok: false, message: "Szerverhiba. Kerlek probald ujra." },

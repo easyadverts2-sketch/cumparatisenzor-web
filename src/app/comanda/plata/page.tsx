@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NOINDEX_PAGE } from "@/lib/seo-config";
-import { getLatestInvoiceByOrderNumber } from "@/lib/store";
+import { getLatestInvoiceByOrderNumber, getOrderByNumber } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Plata prin transfer bancar",
@@ -26,6 +26,9 @@ export default async function PlataPage({
   const nrRaw = searchParams.nr || "";
   const nr = nrRaw ? nrRaw.padStart(7, "0") : "—";
   const orderNumber = Number(nrRaw);
+  const order = Number.isFinite(orderNumber)
+    ? await getOrderByNumber(orderNumber, "RO")
+    : null;
   const proforma = Number.isFinite(orderNumber)
     ? await getLatestInvoiceByOrderNumber(orderNumber, "RO", "PROFORMA")
     : null;
@@ -64,6 +67,10 @@ export default async function PlataPage({
                 <dd className="font-mono">{bank.bic}</dd>
               </div>
             ) : null}
+            <div>
+              <dt className="text-sm font-medium text-[#0f766e]">Suma de plata</dt>
+              <dd className="font-semibold text-[#0a2624]">{order ? `${order.totalPrice} RON` : "-"}</dd>
+            </div>
             <div>
               <dt className="text-sm font-medium text-[#0f766e]">Referinta / detalii plata</dt>
               <dd>
