@@ -21,6 +21,19 @@ function toRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function parseAddressLine(deliveryAddress: string) {
+  const lines = deliveryAddress
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const lineWithCommas = lines.find((line) => line.includes(",")) || "";
+  const parts = lineWithCommas.split(",").map((x) => x.trim());
+  const street = parts[0] || "";
+  const city = parts[1] || "";
+  const zipCode = (parts[2] || "").replace(/[^\d]/g, "");
+  return { street, city, zipCode };
+}
+
 function firstLabelUrl(pollRaw: Record<string, unknown>): string | null {
   const completeLabel = toRecord(pollRaw.completeLabel);
   const urls = Array.isArray(completeLabel.labelUrls) ? completeLabel.labelUrls : [];
@@ -142,22 +155,84 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
     return { ok: false, reason: "ppl_api_token_failed" };
   }
 
-  const payload = {
-    reference: String(order.orderNumber).padStart(7, "0"),
-    market,
-    recipientName: order.customerName,
-    recipientEmail: order.email,
-    recipientPhone: order.phone,
-    deliveryAddress: order.deliveryAddress,
-    codAmount: order.paymentMethod === "COD" ? order.totalPrice : 0,
-    currency: market === "HU" ? "HUF" : "RON",
-    parcels: [
+  const addr = parseAddressLine(order.deliveryAddress);
+  const country = market === "HU" ? "HU" : "RO";
+  const currency = market === "HU" ? "HUF" : "RON";
+  const ref = String(order.orderNumber).padStart(7, "0");
+
+  const payload: Record<string, unknown> = {
+    returnChannel: {
+      type: "Email",
+      address: process.env.PPL_LABEL_EMAIL || process.env.INTERNAL_ORDER_EMAIL || order.email,
+    },
+    labelSettings: {
+      format: "Pdf",
+      dpi: Number(process.env.PPL_LABEL_DPI || 300),
+      completeLabelSettings: {
+        isCompleteLabelRequested: true,
+        pageSize: String(process.env.PPL_LABEL_PAGE_SIZE || "A4"),
+        position: Number(process.env.PPL_LABEL_POSITION || 1),
+      },
+    },
+    shipmentsOrderBy: "ShipmentNumber",
+    shipments: [
       {
-        weightKg: 0.5,
-        count: 1,
+        productType: process.env.PPL_PRODUCT_TYPE || "BUSS",
+        referenceId: ref,
+        note: `Order ${ref}`,
+        depot: process.env.PPL_DEPOT || undefined,
+        recipient: {
+          name: order.customerName,
+          contact: order.customerName,
+          street: addr.street,
+          city: addr.city,
+          zipCode: addr.zipCode,
+          country,
+          phone: order.phone,
+          email: order.email,
+        },
+        services: process.env.PPL_SERVICES
+          ? String(process.env.PPL_SERVICES)
+              .split(",")
+              .map((x) => x.trim())
+              .filter(Boolean)
+              .map((code) => ({ code }))
+          : undefined,
       },
     ],
   };
+
+  const senderName = process.env.PPL_SENDER_NAME?.trim();
+  const senderStreet = process.env.PPL_SENDER_STREET?.trim();
+  const senderCity = process.env.PPL_SENDER_CITY?.trim();
+  const senderZipCode = process.env.PPL_SENDER_ZIP?.trim();
+  const senderCountry = process.env.PPL_SENDER_COUNTRY?.trim() || "CZ";
+  const senderPhone = process.env.PPL_SENDER_PHONE?.trim();
+  const senderEmail = process.env.PPL_SENDER_EMAIL?.trim();
+  if (senderName && senderStreet && senderCity && senderZipCode && senderPhone && senderEmail) {
+    const first = (payload.shipments as Array<Record<string, unknown>>)[0];
+    first.sender = {
+      name: senderName,
+      contact: senderName,
+      street: senderStreet,
+      city: senderCity,
+      zipCode: senderZipCode,
+      country: senderCountry,
+      phone: senderPhone,
+      email: senderEmail,
+    };
+  }
+
+  if (order.paymentMethod === "COD") {
+    const first = (payload.shipments as Array<Record<string, unknown>>)[0];
+    first.cashOnDelivery = {
+      codCurrency: currency,
+      codPrice: order.totalPrice,
+      codVarSym: ref,
+      iban: process.env.PPL_COD_IBAN?.trim() || undefined,
+      swift: process.env.PPL_COD_SWIFT?.trim() || undefined,
+    };
+  }
 
   try {
     const normalizedBase = normalizeBaseUrl(baseUrl);
@@ -166,16 +241,26 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
       },
       body: JSON.stringify(payload),
     });
-    const raw = await res.json().catch(() => ({}));
+    const rawText = await res.text().catch(() => "");
+    let raw: unknown = {};
+    if (rawText) {
+      try {
+        raw = JSON.parse(rawText) as unknown;
+      } catch {
+        raw = rawText;
+      }
+    }
     if (!res.ok) {
-      return { ok: false, reason: `ppl_api_http_${res.status}`, raw };
+      return { ok: false, reason: `ppl_api_http_${res.status}`, raw: raw || rawText };
     }
 
     const location = res.headers.get("location") || "";
-    const batchId = String((raw && (raw.batchId || raw.id)) || location.split("/").pop() || "");
+    const rawRec = toRecord(raw);
+    const batchId = String((rawRec.batchId || rawRec.id) || location.split("/").pop() || "");
 
     // CPL async mode: poll status endpoint by batch ID.
     if (batchId) {
@@ -220,7 +305,9 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       return { ok: true, shipmentId: batchId, labelPublicPath: null, raw };
     }
 
-    const shipmentId = String(raw.shipmentId || raw.id || raw.parcelId || raw.reference || "");
+    const shipmentId = String(
+      rawRec.shipmentId || rawRec.id || rawRec.parcelId || rawRec.reference || ""
+    );
     if (!shipmentId) {
       return { ok: false, reason: "ppl_api_missing_shipment_id", raw };
     }
