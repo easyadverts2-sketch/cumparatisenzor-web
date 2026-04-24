@@ -72,6 +72,17 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const shippingCarrier = parseShippingCarrier(body.shippingCarrier) ?? "PPL";
+    const paymentMethod = parsePaymentMethod(body.paymentMethod);
+    if (shippingCarrier === "PPL" && paymentMethod === "COD") {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "PPL nu permite ramburs in Romania. Alegeti DPD sau transfer bancar.",
+        },
+        { status: 400 }
+      );
+    }
     const customerName = toSafe(body.customerName);
     const email = toSafe(body.email);
     const phone = toSafe(body.phone).replace(/\s+/g, "");
@@ -153,7 +164,7 @@ export async function POST(request: Request) {
       billingAddress,
       deliveryAddress,
       quantity,
-      paymentMethod: parsePaymentMethod(body.paymentMethod),
+      paymentMethod,
       shippingCarrier,
       shippingCarrierOther: null,
     });

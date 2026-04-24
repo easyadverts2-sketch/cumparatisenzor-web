@@ -36,7 +36,7 @@ export function OrderForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [carrier, setCarrier] = useState<ShippingCarrier>("PPL");
+  const [carrier, setCarrier] = useState<ShippingCarrier>("DPD");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [quantity, setQuantity] = useState(1);
   const [deliveryFullName, setDeliveryFullName] = useState("");
@@ -64,6 +64,12 @@ export function OrderForm() {
       setCarrier("PPL");
     }
   }, [carrier, fineshipAllowed]);
+
+  useEffect(() => {
+    if (paymentMethod === "COD" && carrier === "PPL") {
+      setCarrier("DPD");
+    }
+  }, [carrier, paymentMethod]);
 
   const shippingPrice =
     carrier === "FINESHIP" ? FINESHIP_SHIPPING : quantity >= 5 ? 0 : STANDARD_SHIPPING;
@@ -146,6 +152,11 @@ export function OrderForm() {
       }
       if (shippingCarrier === "FINESHIP" && quantityInput < 6) {
         setError("Fineship este disponibil doar de la 6 bucati.");
+        setLoading(false);
+        return;
+      }
+      if (paymentMethodInput === "COD" && shippingCarrier === "PPL") {
+        setError("PPL nu permite ramburs in Romania. Alegeti DPD sau transfer bancar.");
         setLoading(false);
         return;
       }
@@ -252,8 +263,9 @@ export function OrderForm() {
 
         <h3 className="text-lg font-semibold text-[#0a2624]">Metoda de plata</h3>
         <p className="mt-1 text-sm text-[#1a4d47]">
-          Alegeti cum doriti sa platiti. La ramburs platiti curierului la livrare. La transfer
-          bancar, expedem dupa ce plata este inregistrata.
+          Alegeti cum doriti sa platiti. La ramburs platiti curierului la livrare (in Romania,
+          rambursul este disponibil prin DPD). La transfer bancar, expedem dupa ce plata este
+          inregistrata; transferul permite si livrare prin PPL.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
@@ -301,7 +313,9 @@ export function OrderForm() {
             <label
               key={c}
               className={`flex gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f8fbfb] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4] ${
-                c === "FINESHIP" && !fineshipAllowed ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                (c === "FINESHIP" && !fineshipAllowed) || (c === "PPL" && paymentMethod === "COD")
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-pointer"
               }`}
             >
               <input
@@ -310,7 +324,7 @@ export function OrderForm() {
                 value={c}
                 checked={carrier === c}
                 onChange={() => setCarrier(c)}
-                disabled={c === "FINESHIP" && !fineshipAllowed}
+                disabled={(c === "FINESHIP" && !fineshipAllowed) || (c === "PPL" && paymentMethod === "COD")}
                 className="mt-1 accent-[#0d9488]"
               />
               <span className="min-w-0">
@@ -324,6 +338,12 @@ export function OrderForm() {
                 ) : c === "PPL" ? (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">
                     Livrare standard prin reteaua PPL, 2-4 zile.
+                    {paymentMethod === "COD" ? (
+                      <span className="mt-1 block font-medium text-[#92400e]">
+                        PPL nu accepta ramburs in Romania; pentru ramburs alegeti DPD sau transfer
+                        bancar.
+                      </span>
+                    ) : null}
                   </span>
                 ) : (
                   <span className="mt-1 block text-sm leading-relaxed text-[#1a4d47]">

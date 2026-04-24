@@ -665,6 +665,13 @@ export async function createOrder(input: {
         message: "Pentru Ungaria, DPD nu permite plata ramburs. Alegeti transfer bancar.",
       };
     }
+    if (market === "RO" && input.shippingCarrier === "PPL" && input.paymentMethod === "COD") {
+      return {
+        ok: false,
+        message:
+          "PPL nu permite plata ramburs pentru livrari in Romania. Alegeti DPD sau transfer bancar.",
+      };
+    }
     const shippingPrice =
       market === "HU"
         ? input.shippingCarrier === "FINESHIP"

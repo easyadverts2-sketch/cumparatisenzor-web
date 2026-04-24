@@ -44,6 +44,15 @@ function productTypeForMarket(market: Market) {
   return process.env.PPL_PRODUCT_TYPE?.trim() || "BUSS";
 }
 
+/** CPL `ConstPageSize` enum is only `Default` | `A4` (no A6). Default ≈ 150×100 mm; A4 = 4 positions per sheet. */
+function pplCompleteLabelPageSize(): "Default" | "A4" {
+  const raw = (process.env.PPL_LABEL_PAGE_SIZE || "Default").trim().toLowerCase();
+  if (raw === "a4") return "A4";
+  if (raw === "default" || raw === "") return "Default";
+  if (raw === "a6" || raw === "a5") return "Default";
+  return "Default";
+}
+
 function firstLabelUrl(pollRaw: Record<string, unknown>): string | null {
   const completeLabel = toRecord(pollRaw.completeLabel);
   const urls = Array.isArray(completeLabel.labelUrls) ? completeLabel.labelUrls : [];
@@ -152,6 +161,9 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
   if (!isEnabled()) {
     return { ok: false, reason: "ppl_api_disabled" };
   }
+  if (order.paymentMethod === "COD" && market === "RO") {
+    return { ok: false, reason: "ppl_cod_not_supported_ro" };
+  }
   const baseUrl = process.env.PPL_API_BASE_URL?.trim();
   const createPath = process.env.PPL_API_CREATE_SHIPMENT_PATH?.trim() || "/shipment/batch";
   const pollPath = process.env.PPL_API_POLL_PATH?.trim() || "/shipment/batch";
@@ -181,7 +193,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       dpi: Number(process.env.PPL_LABEL_DPI || 300),
       completeLabelSettings: {
         isCompleteLabelRequested: true,
-        pageSize: String(process.env.PPL_LABEL_PAGE_SIZE || "A6"),
+        pageSize: pplCompleteLabelPageSize(),
         position: Number(process.env.PPL_LABEL_POSITION || 1),
       },
     },
