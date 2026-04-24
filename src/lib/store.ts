@@ -255,18 +255,22 @@ async function ensureSchema(sql: SqlClient) {
       created_at timestamptz not null default now()
     )
   `;
-  await sql`
-    create table if not exists admin_audit_logs (
-      id uuid primary key,
-      created_at timestamptz not null default now(),
-      market text not null,
-      action text not null,
-      order_id uuid,
-      order_number integer,
-      details text
-    )
-  `;
-  await sql`create index if not exists admin_audit_logs_market_created_idx on admin_audit_logs(market, created_at desc)`;
+  try {
+    await sql`
+      create table if not exists admin_audit_logs (
+        id uuid primary key,
+        created_at timestamptz not null default now(),
+        market text not null,
+        action text not null,
+        order_id uuid,
+        order_number integer,
+        details text
+      )
+    `;
+    await sql`create index if not exists admin_audit_logs_market_created_idx on admin_audit_logs(market, created_at desc)`;
+  } catch {
+    // Audit logging is optional and must never block checkout/admin core flow.
+  }
   await sql`create unique index if not exists invoices_market_kind_seq_idx on invoices(market, kind, sequence_no)`;
   await sql`create index if not exists invoices_order_kind_idx on invoices(order_id, kind)`;
 
@@ -482,84 +486,97 @@ export async function createOrder(input: {
       returning *
     `;
     const order = toOrder(inserted[0] as unknown as Row);
-    let proforma: InvoiceRow | null = null;
-    if (input.paymentMethod === "BANK_TRANSFER") {
-      proforma = await createInvoiceRecord(sql, order, market, "PROFORMA");
-    }
+    try {
+      let proforma: InvoiceRow | null = null;
+      if (input.paymentMethod === "BANK_TRANSFER") {
+        proforma = await createInvoiceRecord(sql, order, market, "PROFORMA");
+      }
 
-    const nr = formatOrderNumber(order.orderNumber);
-    const createdEmail = buildOrderCreatedEmail(order, market, proforma?.variable_symbol || null);
-    await sql`
-      insert into notifications (id, type, recipient, subject, body)
-      values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${createdEmail.subject}, ${createdEmail.text})
-    `;
-    await sendEmail({
-      to: input.email,
-      subject: createdEmail.subject,
-      text: createdEmail.text,
-      html: createdEmail.html,
-      from: senderFrom,
-    }).catch(() => undefined);
-
-    if (proforma) {
-      const bank = getBankDetails(market);
-      const invoiceText = renderInvoiceText(order, {
-        invoiceNo: proforma.invoice_no,
-        sequenceNo: Number(proforma.sequence_no),
-        variableSymbol: proforma.variable_symbol,
-        issueDateIso: String(proforma.issue_date),
-        dueDateIso: String(proforma.due_date),
-        currency: marketCurrency(market),
-        market,
-        kind: "PROFORMA",
-        total: Number(proforma.amount),
-      });
-      const proformaSubject =
-        market === "HU"
-          ? `Dijbekero / proforma #${proforma.invoice_no}`
-          : `Factura proforma #${proforma.invoice_no}`;
-      const proformaBody =
-        market === "HU"
-          ? `A rendeleshez dijbekero keszult. Kerdjuk az atutalast az alabbi adatokkal:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nValtozo kozlemeny: ${proforma.variable_symbol}`
-          : `Pentru comanda a fost emisa factura proforma. Va rugam sa efectuati plata folosind:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nVariabila plata: ${proforma.variable_symbol}`;
+      const nr = formatOrderNumber(order.orderNumber);
+      const createdEmail = buildOrderCreatedEmail(order, market, proforma?.variable_symbol || null);
+      await sql`
+        insert into notifications (id, type, recipient, subject, body)
+        values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${createdEmail.subject}, ${createdEmail.text})
+      `;
       await sendEmail({
         to: input.email,
-        subject: proformaSubject,
-        text: proformaBody,
+        subject: createdEmail.subject,
+        text: createdEmail.text,
+        html: createdEmail.html,
         from: senderFrom,
-        attachments: [
-          {
-            filename: `${proforma.invoice_no}.txt`,
-            content: invoiceText,
-            contentType: "text/plain; charset=utf-8",
-          },
-        ],
       }).catch(() => undefined);
-    }
 
-    const internal = process.env.INTERNAL_ORDER_EMAIL;
-    if (internal) {
-      const internalText = [
-        `Comanda noua #${nr}`,
-        `Client: ${order.customerName}`,
-        `Email: ${order.email}`,
-        `Telefon: ${order.phone}`,
-        `Cantitate: ${order.quantity}`,
-        `Livrare: ${formatShippingLine(order)}`,
-        `Total: ${order.totalPrice} ${market === "HU" ? "HUF" : "RON"}`,
-        `Plata: ${formatPaymentMethodLabel(input.paymentMethod)}`,
-        `Status: ${order.status}`,
-      ].join("\n");
-      await sendEmail({
-        to: internal,
-        subject: `Comanda noua #${nr} - ${market === "HU" ? "szenzorvasarlas.hu" : "cumparatisenzor.ro"}`,
-        text: internalText,
-        from: senderFrom,
-      }).catch(() => undefined);
+      if (proforma) {
+        const bank = getBankDetails(market);
+        const invoiceText = renderInvoiceText(order, {
+          invoiceNo: proforma.invoice_no,
+          sequenceNo: Number(proforma.sequence_no),
+          variableSymbol: proforma.variable_symbol,
+          issueDateIso: String(proforma.issue_date),
+          dueDateIso: String(proforma.due_date),
+          currency: marketCurrency(market),
+          market,
+          kind: "PROFORMA",
+          total: Number(proforma.amount),
+        });
+        const proformaSubject =
+          market === "HU"
+            ? `Dijbekero / proforma #${proforma.invoice_no}`
+            : `Factura proforma #${proforma.invoice_no}`;
+        const proformaBody =
+          market === "HU"
+            ? `A rendeleshez dijbekero keszult. Kerdjuk az atutalast az alabbi adatokkal:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nValtozo kozlemeny: ${proforma.variable_symbol}`
+            : `Pentru comanda a fost emisa factura proforma. Va rugam sa efectuati plata folosind:\nIBAN: ${bank.iban}\nBIC/SWIFT: ${bank.bic}\nVariabila plata: ${proforma.variable_symbol}`;
+        await sendEmail({
+          to: input.email,
+          subject: proformaSubject,
+          text: proformaBody,
+          from: senderFrom,
+          attachments: [
+            {
+              filename: `${proforma.invoice_no}.txt`,
+              content: invoiceText,
+              contentType: "text/plain; charset=utf-8",
+            },
+          ],
+        }).catch(() => undefined);
+      }
+
+      const internal = process.env.INTERNAL_ORDER_EMAIL;
+      if (internal) {
+        const internalText = [
+          `Comanda noua #${nr}`,
+          `Client: ${order.customerName}`,
+          `Email: ${order.email}`,
+          `Telefon: ${order.phone}`,
+          `Cantitate: ${order.quantity}`,
+          `Livrare: ${formatShippingLine(order)}`,
+          `Total: ${order.totalPrice} ${market === "HU" ? "HUF" : "RON"}`,
+          `Plata: ${formatPaymentMethodLabel(input.paymentMethod)}`,
+          `Status: ${order.status}`,
+        ].join("\n");
+        await sendEmail({
+          to: internal,
+          subject: `Comanda noua #${nr} - ${market === "HU" ? "szenzorvasarlas.hu" : "cumparatisenzor.ro"}`,
+          text: internalText,
+          from: senderFrom,
+        }).catch(() => undefined);
+      }
+    } catch (postProcessError) {
+      console.error("[createOrder] post-process warning", {
+        market,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        error: String(postProcessError),
+      });
     }
 
     return { ok: true, order, message: "Comanda a fost inregistrata." };
-  } catch {
+  } catch (error) {
+    console.error("[createOrder] failed", {
+      market,
+      error: String(error),
+    });
     return {
       ok: false,
       message: "Comanda nu a putut fi procesata momentan. Va rugam sa incercati din nou.",
