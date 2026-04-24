@@ -44,17 +44,21 @@ function formatAddress(addr: AddressPayload): string {
 
 export async function POST(request: Request) {
   try {
-    const limited = await enforceRateLimit({
-      request,
-      action: "api_orders_create_hu",
-      limit: 12,
-      windowSec: 60,
-    });
-    if (!limited.ok) {
-      return NextResponse.json(
-        { ok: false, message: "Tul sok probalkozas. Probald ujra kicsit kesobb." },
-        { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
-      );
+    try {
+      const limited = await enforceRateLimit({
+        request,
+        action: "api_orders_create_hu",
+        limit: 12,
+        windowSec: 60,
+      });
+      if (!limited.ok) {
+        return NextResponse.json(
+          { ok: false, message: "Tul sok probalkozas. Probald ujra kicsit kesobb." },
+          { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } }
+        );
+      }
+    } catch {
+      // Fail-open: ordering flow must continue even if rate-limit storage is temporarily unavailable.
     }
 
     const body = await request.json();

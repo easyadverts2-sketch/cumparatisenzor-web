@@ -19,52 +19,57 @@ export async function enforceRateLimit(params: {
   limit: number;
   windowSec: number;
 }): Promise<LimitResult> {
-  const sql = getSql();
-  await sql`
-    create table if not exists api_rate_limits (
-      key text primary key,
-      count integer not null,
-      window_start timestamptz not null
-    )
-  `;
-
-  const now = new Date();
-  const key = keyFor(params.request, params.action);
-  const row = await sql`
-    select key, count, window_start
-    from api_rate_limits
-    where key = ${key}
-    limit 1
-  `;
-
-  if (row.length === 0) {
+  try {
+    const sql = getSql();
     await sql`
-      insert into api_rate_limits (key, count, window_start)
-      values (${key}, 1, ${now.toISOString()})
+      create table if not exists api_rate_limits (
+        key text primary key,
+        count integer not null,
+        window_start timestamptz not null
+      )
     `;
-    return { ok: true };
-  }
 
-  const count = Number(row[0].count || 0);
-  const start = new Date(String(row[0].window_start));
-  const elapsedSec = Math.floor((now.getTime() - start.getTime()) / 1000);
-  if (elapsedSec >= params.windowSec) {
+    const now = new Date();
+    const key = keyFor(params.request, params.action);
+    const row = await sql`
+      select key, count, window_start
+      from api_rate_limits
+      where key = ${key}
+      limit 1
+    `;
+
+    if (row.length === 0) {
+      await sql`
+        insert into api_rate_limits (key, count, window_start)
+        values (${key}, 1, ${now.toISOString()})
+      `;
+      return { ok: true };
+    }
+
+    const count = Number(row[0].count || 0);
+    const start = new Date(String(row[0].window_start));
+    const elapsedSec = Math.floor((now.getTime() - start.getTime()) / 1000);
+    if (elapsedSec >= params.windowSec) {
+      await sql`
+        update api_rate_limits
+        set count = 1, window_start = ${now.toISOString()}
+        where key = ${key}
+      `;
+      return { ok: true };
+    }
+
+    if (count >= params.limit) {
+      return { ok: false, retryAfterSec: Math.max(1, params.windowSec - elapsedSec) };
+    }
+
     await sql`
       update api_rate_limits
-      set count = 1, window_start = ${now.toISOString()}
+      set count = count + 1
       where key = ${key}
     `;
+  } catch {
+    // Fail-open: never block checkout when rate-limit storage has an issue.
     return { ok: true };
   }
-
-  if (count >= params.limit) {
-    return { ok: false, retryAfterSec: Math.max(1, params.windowSec - elapsedSec) };
-  }
-
-  await sql`
-    update api_rate_limits
-    set count = count + 1
-    where key = ${key}
-  `;
   return { ok: true };
 }
