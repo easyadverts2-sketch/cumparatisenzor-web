@@ -54,49 +54,49 @@ export default async function AdminOrderDetailPage({
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <Link href="/admin" className="text-sm font-medium text-[#0f766e] hover:underline">
-        ← Inapoi la lista comenzi
+        ← Zpět na seznam objednávek
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-[#0a2624]">
-        Comanda {formatOrderNumber(order.orderNumber)}
+        Objednávka {formatOrderNumber(order.orderNumber)}
       </h1>
       <p className="mt-1 text-sm text-[#1a4d47]">
-        {new Date(order.createdAt).toLocaleString("ro-RO")} · ID intern:{" "}
+        {new Date(order.createdAt).toLocaleString("cs-CZ")} · Interní ID:{" "}
         <span className="font-mono text-xs">{order.id}</span>
       </p>
 
       <div className="mt-8 space-y-4 rounded-2xl border-2 border-[#0d4f4a]/10 bg-white p-6 shadow-sm">
         <div>
-          <h2 className="font-semibold text-[#0f766e]">Client</h2>
+          <h2 className="font-semibold text-[#0f766e]">Zákazník</h2>
           <p className="text-[#0a2624]">{order.customerName}</p>
           <p className="text-[#1a4d47]">{order.email}</p>
           <p className="text-[#1a4d47]">{order.phone}</p>
         </div>
         <div>
-          <h2 className="font-semibold text-[#0f766e]">Adrese</h2>
+          <h2 className="font-semibold text-[#0f766e]">Adresy</h2>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Facturare:</strong>{" "}
+            <strong className="text-[#0a2624]">Fakturační:</strong>{" "}
             <span className="whitespace-pre-line">{order.billingAddress}</span>
           </p>
           <p className="mt-2 text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Livrare:</strong>{" "}
+            <strong className="text-[#0a2624]">Doručovací:</strong>{" "}
             <span className="whitespace-pre-line">{order.deliveryAddress}</span>
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Cantitate:</strong> {order.quantity}
+            <strong className="text-[#0a2624]">Množství:</strong> {order.quantity}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Plata:</strong> {formatPaymentMethodLabel(order.paymentMethod)}
+            <strong className="text-[#0a2624]">Platba:</strong> {formatPaymentMethodLabel(order.paymentMethod)}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Curier:</strong> {formatShippingLine(order)}
+            <strong className="text-[#0a2624]">Dopravce:</strong> {formatShippingLine(order)}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Total:</strong> {order.totalPrice} RON
+            <strong className="text-[#0a2624]">Celkem:</strong> {order.totalPrice} RON
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Livrare (linie):</strong> {order.shippingPrice} RON
+            <strong className="text-[#0a2624]">Doprava:</strong> {order.shippingPrice} RON
           </p>
           <p className="text-[#1a4d47]">
             <strong className="text-[#0a2624]">Tracking:</strong> {order.trackingNumber || "-"}
@@ -108,7 +108,7 @@ export default async function AdminOrderDetailPage({
             <strong className="text-[#0a2624]">DPD status API:</strong> {order.dpdShipmentStatus || "-"}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Eticheta PDF:</strong>{" "}
+            <strong className="text-[#0a2624]">Štítek PDF:</strong>{" "}
             {order.pplLabelPath || order.dpdLabelPath ? (
               <a
                 href={order.pplLabelPath || order.dpdLabelPath || "#"}
@@ -116,7 +116,7 @@ export default async function AdminOrderDetailPage({
                 rel="noreferrer"
                 className="font-medium text-[#0f766e] hover:underline"
               >
-                Deschide eticheta
+                Otevřít štítek
               </a>
             ) : (
               "-"
@@ -128,7 +128,7 @@ export default async function AdminOrderDetailPage({
           <input type="hidden" name="orderId" value={order.id} />
           <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[#0f766e]">Status</span>
+            <span className="text-xs font-medium text-[#0f766e]">Stav</span>
             <select name="status" defaultValue={order.status} className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2">
               {ORDER_STATUSES.map((status) => (
                 <option key={status} value={status}>
@@ -138,7 +138,7 @@ export default async function AdminOrderDetailPage({
             </select>
           </label>
           <button type="submit" className="rounded-lg bg-[#0d9488] px-4 py-2 font-medium text-white">
-            Salveaza status
+            Uložit stav
           </button>
         </form>
 
@@ -146,16 +146,16 @@ export default async function AdminOrderDetailPage({
           <input type="hidden" name="orderId" value={order.id} />
           <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
           <label className="flex min-w-[260px] flex-col gap-1">
-            <span className="text-xs font-medium text-[#0f766e]">Numar colet / tracking</span>
+            <span className="text-xs font-medium text-[#0f766e]">Číslo zásilky / tracking</span>
             <input
               name="trackingNumber"
               defaultValue={order.trackingNumber || order.pplShipmentId || order.dpdShipmentId || ""}
               className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2"
-              placeholder="Ex: PPL123456789"
+              placeholder="Např. PPL123456789"
             />
           </label>
           <button type="submit" className="rounded-lg bg-[#6f2147] px-4 py-2 font-medium text-white">
-            Salveaza tracking + trimite email
+            Uložit tracking + poslat e-mail
           </button>
         </form>
       </div>

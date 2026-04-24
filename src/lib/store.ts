@@ -843,19 +843,26 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     if (
       status === "ORDERED_PPLRDY" &&
       order.paymentMethod === "COD" &&
-      order.status === "WAITING_FOR_SHIPPING" &&
+      (order.status === "WAITING_FOR_SHIPPING" || order.status === "ORDERED_PPLRDY") &&
       (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD")
     ) {
       if (market === "HU" && order.shippingCarrier === "DPD") {
         await tx`update orders set status = 'WAITING_FOR_SHIPPING' where id = ${orderId}`;
         return true;
       }
-      if (inventory < order.quantity) {
-        await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
-        return true;
+      if (order.status === "WAITING_FOR_SHIPPING") {
+        if (inventory < order.quantity) {
+          await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
+          return true;
+        }
+        await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
       }
-      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
-      shouldCreateShipment = true;
+      if (
+        order.status === "WAITING_FOR_SHIPPING" ||
+        (!order.pplShipmentId && !order.dpdShipmentId)
+      ) {
+        shouldCreateShipment = true;
+      }
     }
 
     if (

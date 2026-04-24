@@ -39,13 +39,13 @@ export function AdminOrdersList({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[#0f766e]">Filtru status</span>
+          <span className="text-xs font-medium text-[#0f766e]">Filtr stavu</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-lg border-2 border-[#0d4f4a]/20 bg-white px-3 py-2 text-[#0a2624]"
           >
-            <option value="ALL">Toate</option>
+            <option value="ALL">Vše</option>
             {ORDER_STATUSES.map((st) => (
               <option key={st} value={st}>
                 {st}
@@ -54,7 +54,7 @@ export function AdminOrdersList({
           </select>
         </label>
         <label className="min-w-[200px] flex-1">
-          <span className="text-xs font-medium text-[#0f766e]">Cautare (nume, email, telefon, nr.)</span>
+          <span className="text-xs font-medium text-[#0f766e]">Hledání (jméno, e-mail, telefon, č.)</span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -65,7 +65,7 @@ export function AdminOrdersList({
       </div>
 
       <p className="text-sm text-[#1a4d47]">
-        Afisate {filtered.length} din {orders.length} comenzi.
+        Zobrazeno {filtered.length} z {orders.length} objednávek.
       </p>
 
       <div className="max-h-[65vh] overflow-auto rounded-xl border-2 border-[#0d4f4a]/10 bg-white">
@@ -73,8 +73,8 @@ export function AdminOrdersList({
           <thead className="sticky top-0 bg-[#e6f7f4] text-[#0a2624]">
             <tr>
               <th className="px-4 py-3 font-semibold">Nr.</th>
-              <th className="px-4 py-3 font-semibold">Data</th>
-              <th className="px-4 py-3 font-semibold">Client</th>
+              <th className="px-4 py-3 font-semibold">Datum</th>
+              <th className="px-4 py-3 font-semibold">Zákazník</th>
               <th className="px-4 py-3 font-semibold">Total</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold" />
@@ -100,7 +100,7 @@ export function AdminOrdersList({
                     href={`${detailsBasePath}/${o.orderNumber}`}
                     className="font-medium text-[#0f766e] hover:underline"
                   >
-                    Detalii
+                    Detail
                   </Link>
                 </td>
               </tr>
@@ -108,7 +108,7 @@ export function AdminOrdersList({
           </tbody>
         </table>
         {filtered.length === 0 ? (
-          <p className="p-8 text-center text-[#1a4d47]">Nicio comanda nu corespunde filtrelor.</p>
+          <p className="p-8 text-center text-[#1a4d47]">Žádná objednávka neodpovídá filtru.</p>
         ) : null}
       </div>
     </div>

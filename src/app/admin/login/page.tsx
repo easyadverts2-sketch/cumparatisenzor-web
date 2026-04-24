@@ -36,9 +36,9 @@ export default function AdminLoginPage({
     return (
       <main className="mx-auto max-w-md px-6 py-16">
         <h1 className="text-2xl font-bold">Deja autentificat</h1>
-        <p className="mt-2 text-slate-600">Sesiunea de admin este activa.</p>
+        <p className="mt-2 text-slate-600">Už jste přihlášen do administrace.</p>
         <form action={logoutAction} className="mt-6">
-          <button className="rounded-lg border border-slate-300 px-4 py-2">Logout</button>
+          <button className="rounded-lg border border-slate-300 px-4 py-2">Odhlásit</button>
         </form>
       </main>
     );
@@ -46,11 +46,11 @@ export default function AdminLoginPage({
 
   return (
     <main className="mx-auto max-w-md px-6 py-16">
-      <h1 className="text-3xl font-bold">Admin login</h1>
-      <p className="mt-2 text-slate-600">Acces doar pentru personal autorizat.</p>
+      <h1 className="text-3xl font-bold">Přihlášení do administrace</h1>
+      <p className="mt-2 text-slate-600">Přístup pouze pro autorizovaný personál.</p>
       <form action={loginAction} className="mt-6 space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <label className="block text-sm font-medium text-slate-700" htmlFor="password">
-          Parola admin
+          Heslo administrace
         </label>
         <input
           id="password"
@@ -60,13 +60,13 @@ export default function AdminLoginPage({
           className="w-full rounded-lg border border-slate-300 p-2.5"
         />
         <button className="w-full rounded-lg bg-slate-900 px-4 py-2.5 font-medium text-white">
-          Autentificare
+          Přihlásit
         </button>
       </form>
-      {searchParams.error ? <p className="mt-3 text-sm text-red-600">Parola incorecta.</p> : null}
+      {searchParams.error ? <p className="mt-3 text-sm text-red-600">Nesprávné heslo.</p> : null}
       {searchParams.locked ? (
         <p className="mt-3 text-sm text-red-700">
-          Prea multe incercari esuate. Reincercati peste aproximativ {searchParams.retry || "1800"} secunde.
+          Příliš mnoho neúspěšných pokusů. Zkuste to znovu přibližně za {searchParams.retry || "1800"} sekund.
         </p>
       ) : null}
     </main>
