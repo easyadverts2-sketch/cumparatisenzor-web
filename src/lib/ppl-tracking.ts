@@ -40,19 +40,28 @@ export function validatePplShipmentBelongsToOrder(
   shipment: Record<string, unknown>,
   source: "batch" | "shipment_lookup" | "known_tracking_debug",
   codVarSym?: string
-): { ok: boolean; reasons: string[] } {
+): { ok: boolean; reasons: string[]; matchedFields: string[]; mismatchedFields: string[] } {
   const reasons: string[] = [];
+  const matchedFields: string[] = [];
+  const mismatchedFields: string[] = [];
   if (source === "known_tracking_debug") {
-    return { ok: false, reasons: ["known tracking debug source is non-authoritative"] };
+    return {
+      ok: false,
+      reasons: ["known tracking debug source is non-authoritative"],
+      matchedFields,
+      mismatchedFields: ["source"],
+    };
   }
   if (source === "batch") {
     const ref = String(shipment.referenceId || "").trim();
     const expectedRef = String(order.pplOrderReference || order.orderNumber);
     if (ref !== String(order.orderNumber) && ref !== expectedRef) {
       reasons.push(`referenceId mismatch (${ref})`);
-      return { ok: false, reasons };
+      mismatchedFields.push("referenceId");
+      return { ok: false, reasons, matchedFields, mismatchedFields };
     }
-    return { ok: true, reasons };
+    matchedFields.push("referenceId");
+    return { ok: true, reasons, matchedFields, mismatchedFields };
   }
 
   const paymentInfo =
@@ -66,22 +75,34 @@ export function validatePplShipmentBelongsToOrder(
   const shipmentVarSym = String(paymentInfo.codVariableSymbol || "").trim();
   if (codVarSym && shipmentVarSym && shipmentVarSym !== codVarSym) {
     reasons.push(`codVariableSymbol mismatch (${shipmentVarSym} vs ${codVarSym})`);
+    mismatchedFields.push("codVariableSymbol");
+  } else if (codVarSym && shipmentVarSym && shipmentVarSym === codVarSym) {
+    matchedFields.push("codVariableSymbol");
   }
   const orderZip = normalizeZip(order.deliveryAddress.match(/\b\d{4,6}\b/)?.[0] || "");
   const shipmentZip = normalizeZip(recipient.zipCode || "");
   if (orderZip && shipmentZip && orderZip !== shipmentZip) {
     reasons.push(`zip mismatch (${shipmentZip} vs ${orderZip})`);
+    mismatchedFields.push("recipient.zipCode");
+  } else if (orderZip && shipmentZip && orderZip === shipmentZip) {
+    matchedFields.push("recipient.zipCode");
   }
   const orderName = normalizeString(order.customerName);
   const shipmentName = normalizeString(recipient.name || "");
   if (orderName && shipmentName && shipmentName !== orderName) {
     reasons.push(`recipient mismatch (${shipmentName} vs ${orderName})`);
+    mismatchedFields.push("recipient.name");
+  } else if (orderName && shipmentName && shipmentName === orderName) {
+    matchedFields.push("recipient.name");
   }
   const shipmentCodPrice = Number(paymentInfo.codPrice ?? NaN);
   if (Number.isFinite(shipmentCodPrice) && Math.round(shipmentCodPrice) !== Math.round(order.totalPrice)) {
     reasons.push(`codPrice mismatch (${shipmentCodPrice} vs ${order.totalPrice})`);
+    mismatchedFields.push("paymentInfo.codPrice");
+  } else if (Number.isFinite(shipmentCodPrice) && Math.round(shipmentCodPrice) === Math.round(order.totalPrice)) {
+    matchedFields.push("paymentInfo.codPrice");
   }
-  return { ok: reasons.length === 0, reasons };
+  return { ok: reasons.length === 0, reasons, matchedFields, mismatchedFields };
 }
 
 export function resolveTrackingFromBatch(

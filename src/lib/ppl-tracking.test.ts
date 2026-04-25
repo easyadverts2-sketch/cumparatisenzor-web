@@ -52,6 +52,7 @@ describe("PPL tracking selection", () => {
       "5042026005"
     );
     expect(check.ok).toBe(true);
+    expect(check.matchedFields).toContain("codVariableSymbol");
   });
 
   it("variable symbol fallback is rejected when cod var sym mismatches", () => {

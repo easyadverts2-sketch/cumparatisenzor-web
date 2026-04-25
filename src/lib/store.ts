@@ -1000,6 +1000,33 @@ async function savePplLabelFromBatch(
   return publicPath;
 }
 
+async function persistPplTrackingResult(
+  sql: SqlClient,
+  orderId: string,
+  payload: {
+    trackingNumber: string;
+    importState: string;
+    labelUrl?: string | null;
+    completeLabelUrl?: string | null;
+    rawBatch?: unknown;
+  }
+) {
+  await sql`
+    update orders
+    set
+      tracking_number = ${payload.trackingNumber},
+      ppl_shipment_id = ${payload.trackingNumber},
+      ppl_import_state = ${payload.importState || "Complete"},
+      ppl_last_http_status = 200,
+      ppl_last_error = null,
+      ppl_label_url = ${payload.labelUrl || null},
+      ppl_complete_label_url = ${payload.completeLabelUrl || null},
+      ppl_raw_batch_status_response = ${jsonForDb(payload.rawBatch || null)},
+      ppl_shipment_status = 'PPL_TRACKING_READY'
+    where id = ${orderId}
+  `;
+}
+
 async function nextInvoiceSequence(sql: SqlClient, market: Market, kind: InvoiceKind): Promise<number> {
   const key = `${market.toLowerCase()}_${kind.toLowerCase()}_invoice_seq`;
   const rows = await sql`select value from app_settings where key = ${key} limit 1`;
@@ -1610,6 +1637,10 @@ export async function triggerShipmentCreation(orderId: string, market: Market = 
   const order = await getOrderById(orderId, market);
   if (!order) return false;
   if (!(order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD")) return false;
+  if (order.shippingCarrier === "PPL" && (order.pplBatchId || order.trackingNumber)) {
+    const refreshed = await syncPplBatch(orderId, market);
+    return refreshed.ok;
+  }
   const senderFrom = senderEmailForMarket(market);
   await createShipmentForOrder(sql, order, market, senderFrom, "manual_debug_trigger");
   return true;
@@ -1749,6 +1780,15 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
           ppl_bulk_label_urls = ${bulkLabelUrls.length > 0 ? jsonForDb(bulkLabelUrls) : null}
         where id = ${orderId}
       `;
+      if (/^(COMPLETE|COMPLETED|SUCCESS)$/i.test(importState) && trackingCandidate) {
+        await persistPplTrackingResult(sql, orderId, {
+          trackingNumber: trackingCandidate,
+          importState: "Complete",
+          labelUrl,
+          completeLabelUrl,
+          rawBatch: batchRaw,
+        });
+      }
       if (!/^(COMPLETE|COMPLETED|SUCCESS)$/i.test(importState) && !/^(ERROR|FAILED)$/i.test(importState)) {
         return {
           ok: true,
@@ -2044,9 +2084,28 @@ export async function deletePplShipmentForOrder(orderId: string, market: Market 
     set
       ppl_shipment_id = null,
       ppl_batch_id = null,
+      ppl_order_reference = null,
+      ppl_order_number = null,
       ppl_shipment_status = null,
+      ppl_import_state = null,
+      ppl_shipment_state = null,
+      ppl_last_http_status = null,
+      ppl_last_error = null,
       ppl_label_path = null,
-      tracking_number = null
+      ppl_label_url = null,
+      ppl_complete_label_url = null,
+      ppl_bulk_label_urls = null,
+      ppl_tracking_url = null,
+      tracking_number = null,
+      tracking_number_source = null,
+      tracking_number_json_path = null,
+      ppl_raw_create_request = null,
+      ppl_raw_create_response = null,
+      ppl_location_header = null,
+      ppl_raw_batch_status_response = null,
+      ppl_raw_label_response = null,
+      ppl_raw_order_response = null,
+      ppl_raw_shipment_response = null
     where id = ${orderId}
   `;
   return true;

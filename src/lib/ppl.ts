@@ -502,13 +502,24 @@ export async function pplDebugGet(
         "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
       },
     });
-    const text = await res.text().catch(() => "");
+    const contentType = (res.headers.get("content-type") || "").toLowerCase();
     let parsed: unknown = {};
-    if (text) {
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = text;
+    if (contentType.includes("application/pdf") || contentType.includes("application/octet-stream")) {
+      parsed = {
+        binary: true,
+        contentType: res.headers.get("content-type") || "",
+        contentLength: res.headers.get("content-length") || "",
+      };
+      // Consume body without storing full binary payload.
+      await res.arrayBuffer().catch(() => null);
+    } else {
+      const text = await res.text().catch(() => "");
+      if (text) {
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = text;
+        }
       }
     }
     return {
@@ -810,10 +821,11 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 export async function fetchPplBatchStatus(
   batchId: string
 ): Promise<PplGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
-  const path = process.env.PPL_API_TRACK_PATH?.trim() || "/shipment/batch/{id}";
-  const res = await pplJsonRequest<Record<string, unknown>>("GET", path, undefined, batchId);
-  if (!res.ok) return res;
-  const rec = toRecord(res.data);
+  const hard = await pplDebugGet(`/shipment/batch/${encodeURIComponent(batchId)}`, {});
+  if (!hard.ok) {
+    return { ok: false, reason: hard.error || `ppl_api_http_${hard.status || 0}`, raw: hard.data };
+  }
+  const rec = toRecord(hard.data);
   const state = String(rec.state || rec.status || rec.importState || "").toUpperCase();
   const candidate =
     extractShipmentNumberFromAny(rec) || String(rec.shipmentNumber || rec.parcelNumber || "").trim() || "";
