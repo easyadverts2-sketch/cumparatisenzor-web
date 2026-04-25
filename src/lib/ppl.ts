@@ -14,6 +14,21 @@ function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
+function extractBatchId(rawRec: Record<string, unknown>, location: string): string {
+  const fromBody = String(rawRec.batchId || rawRec.id || "").trim();
+  if (fromBody) return fromBody;
+  if (!location) return "";
+  try {
+    const u = new URL(location);
+    const parts = u.pathname.split("/").filter(Boolean);
+    return parts.at(-1) || "";
+  } catch {
+    const clean = location.split("?")[0];
+    const parts = clean.split("/").filter(Boolean);
+    return parts.at(-1) || "";
+  }
+}
+
 function pplLabelReturnEmail(market: Market): string {
   if (market === "HU") {
     return (
@@ -453,7 +468,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 
     const location = res.headers.get("location") || "";
     const rawRec = toRecord(raw);
-    const batchId = String((rawRec.batchId || rawRec.id) || location.split("/").pop() || "");
+    const batchId = extractBatchId(rawRec, location);
 
     // CPL async mode: poll status endpoint by batch ID.
     if (batchId) {
@@ -471,7 +486,11 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
           pollRaw.importState || pollRaw.state || pollRaw.status || ""
         ).toUpperCase();
         if (state === "COMPLETE" || state === "COMPLETED" || state === "SUCCESS") {
+          const items = Array.isArray(pollRaw.items) ? (pollRaw.items as Array<Record<string, unknown>>) : [];
+          const firstItem = items.length > 0 ? toRecord(items[0]) : {};
           const shipmentId = String(
+            firstItem.shipmentNumber ||
+              firstItem.parcelNumber ||
             pollRaw.shipmentId ||
               pollRaw.parcelId ||
               pollRaw.reference ||

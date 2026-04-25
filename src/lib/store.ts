@@ -472,7 +472,7 @@ async function createShipmentForOrder(
         details: `${auditDetailPrefix || ""} shipment=${ppl.shipmentId} label=${ppl.labelPublicPath || "-"}`.trim(),
       });
       const withTracking = await getOrderById(order.id, market);
-      if (withTracking?.trackingNumber) {
+      if (withTracking?.trackingNumber && withTracking.paymentMethod !== "COD") {
         const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
         await sendEmail({
           to: withTracking.email,
@@ -520,7 +520,7 @@ async function createShipmentForOrder(
         details: `${auditDetailPrefix || ""} shipment=${dpd.shipmentId} label=${dpd.labelPublicPath || "-"}`.trim(),
       });
       const withTracking = await getOrderById(order.id, market);
-      if (withTracking?.trackingNumber) {
+      if (withTracking?.trackingNumber && withTracking.paymentMethod !== "COD") {
         const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
         await sendEmail({
           to: withTracking.email,
@@ -769,18 +769,7 @@ export async function createOrder(input: {
       }
 
       const nr = formatOrderNumber(order.orderNumber);
-      const createdEmail = buildOrderCreatedEmail(order, market, proforma?.variable_symbol || null);
-      await sql`
-        insert into notifications (id, type, recipient, subject, body)
-        values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${createdEmail.subject}, ${createdEmail.text})
-      `;
-      await sendEmail({
-        to: input.email,
-        subject: createdEmail.subject,
-        text: createdEmail.text,
-        html: createdEmail.html,
-        from: senderFrom,
-      }).catch(() => undefined);
+      let customerMailOrder = order;
 
       if (proforma) {
         const invoiceText = renderInvoiceText(order, {
@@ -858,8 +847,25 @@ export async function createOrder(input: {
             where id = ${order.id}
           `;
           await createShipmentForOrder(sql, order, market, senderFrom, "immediate_cod_shipment");
+          const refreshedForMail = await getOrderById(order.id, market);
+          if (refreshedForMail) {
+            customerMailOrder = refreshedForMail;
+          }
         }
       }
+
+      const createdEmail = buildOrderCreatedEmail(customerMailOrder, market, proforma?.variable_symbol || null);
+      await sql`
+        insert into notifications (id, type, recipient, subject, body)
+        values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${createdEmail.subject}, ${createdEmail.text})
+      `;
+      await sendEmail({
+        to: input.email,
+        subject: createdEmail.subject,
+        text: createdEmail.text,
+        html: createdEmail.html,
+        from: senderFrom,
+      }).catch(() => undefined);
     } catch (postProcessError) {
       console.error("[createOrder] post-process warning", {
         market,

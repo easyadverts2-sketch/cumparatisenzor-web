@@ -33,6 +33,15 @@ function shippingLabel(order: Pick<Order, "shippingCarrier">) {
   return "PPL";
 }
 
+function customerTracking(order: Pick<Order, "trackingNumber">): string | null {
+  const raw = String(order.trackingNumber || "").trim();
+  if (!raw) return null;
+  if (raw.includes("?")) return null;
+  if (raw.includes("/")) return null;
+  if (/^[0-9]{8,20}$/.test(raw)) return raw;
+  return null;
+}
+
 function htmlShell(content: string, market: Market) {
   const logo = `${siteUrl(market)}/icon.png`;
   return `
@@ -40,7 +49,7 @@ function htmlShell(content: string, market: Market) {
     <div style="max-width:660px;margin:0 auto;background:#ffffff;border:1px solid #ead5df;border-radius:20px;overflow:hidden;box-shadow:0 15px 45px rgba(111,33,71,.17);">
       <div style="background:linear-gradient(135deg,#6f2147,#a22d53,#df5b42);padding:18px 22px;position:relative;">
         <div style="position:absolute;right:-30px;top:-30px;width:140px;height:140px;background:rgba(255,255,255,.08);border-radius:100%;"></div>
-        <img src="${logo}" alt="Logo" style="height:54px;width:54px;display:block;background:#fff;border-radius:14px;padding:8px;position:relative;z-index:1;" />
+        <img src="${logo}" alt="Logo" style="height:81px;width:81px;display:block;background:#fff;border-radius:14px;padding:8px;position:relative;z-index:1;-webkit-user-drag:none;user-select:none;" draggable="false" />
       </div>
       <div style="padding:24px 24px 26px;">
         ${content}
@@ -135,6 +144,7 @@ export function buildOrderCreatedEmail(order: Order, market: Market, variableSym
       ? `Kedves ${order.customerName}, koszonjuk a rendeleset!`
       : `Buna, ${order.customerName}! Va multumim pentru comanda.`;
   const address = addressSummary(order, market);
+  const tracking = customerTracking(order);
 
   const content = `
     <div style="display:inline-block;padding:6px 10px;background:#f9edf3;border:1px solid #f0d5e3;border-radius:999px;font-size:12px;font-weight:700;color:#8d2f5a;">
@@ -152,6 +162,7 @@ export function buildOrderCreatedEmail(order: Order, market: Market, variableSym
         ${summaryRow(market === "HU" ? "Mennyiseg" : "Cantitate", String(order.quantity), "🔢")}
         ${summaryRow(market === "HU" ? "Szallitas" : "Livrare", shippingLabel(order), "🚚")}
         ${summaryRow(market === "HU" ? "Fizetes" : "Plata", paymentLabel(order.paymentMethod, market), "💳")}
+        ${tracking ? summaryRow(market === "HU" ? "Kovetesi szam" : "Numar de urmarire", tracking, "📬") : ""}
         ${summaryRow(market === "HU" ? "Vegosszeg" : "Total", `${order.totalPrice} ${currency}`, "💰")}
       </table>
     </div>
@@ -166,6 +177,7 @@ export function buildOrderCreatedEmail(order: Order, market: Market, variableSym
     `${market === "HU" ? "Termek" : "Produs"}: ${PRODUCT_NAME} x${order.quantity}`,
     `${market === "HU" ? "Fizetes" : "Plata"}: ${paymentLabel(order.paymentMethod, market)}`,
     `${market === "HU" ? "Szallitas" : "Livrare"}: ${shippingLabel(order)}`,
+    tracking ? `${market === "HU" ? "Kovetesi szam" : "Numar de urmarire"}: ${tracking}` : "",
     `${market === "HU" ? "Vegosszeg" : "Total"}: ${order.totalPrice} ${currency}`,
     address.text,
     order.paymentMethod === "BANK_TRANSFER"
