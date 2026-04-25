@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PaymentMethod } from "@/lib/types";
 import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 
@@ -56,6 +56,7 @@ export function OrderForm() {
   const [billingCounty, setBillingCounty] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeGdpr, setAgreeGdpr] = useState(false);
+  const submitLockRef = useRef(false);
 
   const fineshipAllowed = quantity >= 6;
 
@@ -96,6 +97,8 @@ export function OrderForm() {
       billingCounty.trim().length >= 2;
 
   async function onSubmit(formData: FormData) {
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -219,6 +222,7 @@ export function OrderForm() {
       setError("A aparut o eroare la trimiterea comenzii. Va rugam sa incercati din nou.");
     } finally {
       setLoading(false);
+      submitLockRef.current = false;
     }
   }
 

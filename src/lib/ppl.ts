@@ -14,6 +14,25 @@ function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
+function pplLabelReturnEmail(market: Market): string {
+  if (market === "HU") {
+    return (
+      process.env.PPL_LABEL_EMAIL_HU?.trim() ||
+      process.env.PPL_LABEL_EMAIL?.trim() ||
+      process.env.INTERNAL_ORDER_EMAIL_HU?.trim() ||
+      process.env.INTERNAL_ORDER_EMAIL?.trim() ||
+      "info@szenzorvasarlas.hu"
+    );
+  }
+  return (
+    process.env.PPL_LABEL_EMAIL_RO?.trim() ||
+    process.env.PPL_LABEL_EMAIL?.trim() ||
+    process.env.INTERNAL_ORDER_EMAIL_RO?.trim() ||
+    process.env.INTERNAL_ORDER_EMAIL?.trim() ||
+    "info@cumparatisenzor.ro"
+  );
+}
+
 /** PPL CPL expects ISO 3166-1 alpha-2 (e.g. CZ), not full country names. */
 function normalizeKeyForCountryAlias(input: string): string {
   return input
@@ -307,7 +326,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
   const payload: Record<string, unknown> = {
     returnChannel: {
       type: "Email",
-      address: process.env.PPL_LABEL_EMAIL || process.env.INTERNAL_ORDER_EMAIL || order.email,
+      address: pplLabelReturnEmail(market),
     },
     labelSettings: {
       format: "Pdf",

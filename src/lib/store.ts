@@ -704,6 +704,28 @@ export async function createOrder(input: {
 
     const carrierOther = null;
 
+    const duplicateRows = await sql`
+      select * from orders
+      where market = ${market}
+        and email = ${input.email}
+        and phone = ${input.phone}
+        and delivery_address = ${input.deliveryAddress}
+        and quantity = ${input.quantity}
+        and payment_method = ${input.paymentMethod}
+        and shipping_carrier = ${input.shippingCarrier}
+        and created_at > now() - interval '5 minutes'
+      order by created_at desc
+      limit 1
+    `;
+    if (duplicateRows.length > 0) {
+      const existing = toOrder(duplicateRows[0] as unknown as Row);
+      return {
+        ok: true,
+        order: existing,
+        message: "Duplicitni klik detekovan; vracime existujici objednavku.",
+      };
+    }
+
     if (input.quantity > inventory) {
       const subject = "Stoc indisponibil momentan";
       const body =
