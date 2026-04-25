@@ -314,6 +314,12 @@ function toOrder(row: Row): Order {
     trackingNumberSource: row.tracking_number_source != null ? String(row.tracking_number_source) : null,
     trackingNumberJsonPath: row.tracking_number_json_path != null ? String(row.tracking_number_json_path) : null,
     pplTrackingUrl: row.ppl_tracking_url != null ? String(row.ppl_tracking_url) : null,
+    pplCancelMode: row.ppl_cancel_mode != null ? String(row.ppl_cancel_mode) : null,
+    pplCancelAttempted: row.ppl_cancel_attempted != null ? Boolean(row.ppl_cancel_attempted) : null,
+    pplCancelShipmentNumber: row.ppl_cancel_shipment_number != null ? String(row.ppl_cancel_shipment_number) : null,
+    pplCancelHttpStatus: row.ppl_cancel_http_status != null ? Number(row.ppl_cancel_http_status) : null,
+    pplCancelResponse: row.ppl_cancel_response != null ? String(row.ppl_cancel_response) : null,
+    pplLocalResetDone: row.ppl_local_reset_done != null ? Boolean(row.ppl_local_reset_done) : null,
     pplShipmentStatus: row.ppl_shipment_status != null ? String(row.ppl_shipment_status) : null,
     pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
     dpdShipmentId: row.dpd_shipment_id != null ? String(row.dpd_shipment_id) : null,
@@ -626,6 +632,36 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
     where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_tracking_url'
   `;
   if (trackingUrlCol.length === 0) await sql`alter table orders add column ppl_tracking_url text`;
+  const cancelModeCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_cancel_mode'
+  `;
+  if (cancelModeCol.length === 0) await sql`alter table orders add column ppl_cancel_mode text`;
+  const cancelAttemptedCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_cancel_attempted'
+  `;
+  if (cancelAttemptedCol.length === 0) await sql`alter table orders add column ppl_cancel_attempted boolean`;
+  const cancelShipmentCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_cancel_shipment_number'
+  `;
+  if (cancelShipmentCol.length === 0) await sql`alter table orders add column ppl_cancel_shipment_number text`;
+  const cancelStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_cancel_http_status'
+  `;
+  if (cancelStatusCol.length === 0) await sql`alter table orders add column ppl_cancel_http_status integer`;
+  const cancelRespCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_cancel_response'
+  `;
+  if (cancelRespCol.length === 0) await sql`alter table orders add column ppl_cancel_response text`;
+  const localResetCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_local_reset_done'
+  `;
+  if (localResetCol.length === 0) await sql`alter table orders add column ppl_local_reset_done boolean`;
   await sql`
     update orders
     set ppl_batch_id = tracking_number, tracking_number = null
@@ -972,6 +1008,30 @@ async function savePplLabelFromBatch(
     `;
     return order.pplLabelPath || null;
   }
+  const contentType = String(labelRes.data.contentType || "").toLowerCase();
+  const bufferLength = labelRes.data.bytes.length;
+  const startsWithPdfMagic = bufferLength >= 4 && labelRes.data.bytes.subarray(0, 4).toString("utf8") === "%PDF";
+  const isPdfContentType = contentType.includes("application/pdf");
+  if (!isPdfContentType && !startsWithPdfMagic) {
+    await sql`
+      update orders
+      set
+        ppl_last_http_status = 200,
+        ppl_shipment_status = 'PPL_PROCESSING',
+        ppl_raw_label_response = ${
+          jsonForDb({
+            ok: false,
+            error: "label_not_pdf",
+            url: labelRes.data.finalUrl,
+            contentType: labelRes.data.contentType,
+            bufferLength,
+            startsWithPdfMagic,
+          })
+        }
+      where id = ${order.id}
+    `;
+    return order.pplLabelPath || null;
+  }
   const relDir = process.env.PPL_LABEL_SAVE_DIR?.trim() || "public/ppl-labels";
   const absDir = path.resolve(process.cwd(), relDir);
   await mkdir(absDir, { recursive: true });
@@ -990,9 +1050,12 @@ async function savePplLabelFromBatch(
       ppl_last_http_status = 200,
       ppl_raw_label_response = ${
         jsonForDb({
+          ok: true,
+          url: labelRes.data.finalUrl,
           contentType: labelRes.data.contentType,
-          bytes: labelRes.data.bytes.length,
-          finalUrl: labelRes.data.finalUrl,
+          contentLength: bufferLength,
+          bufferLength,
+          startsWithPdfMagic,
         })
       }
     where id = ${order.id}
@@ -1023,6 +1086,40 @@ async function persistPplTrackingResult(
       ppl_complete_label_url = ${payload.completeLabelUrl || null},
       ppl_raw_batch_status_response = ${jsonForDb(payload.rawBatch || null)},
       ppl_shipment_status = 'PPL_TRACKING_READY'
+    where id = ${orderId}
+  `;
+}
+
+async function resetPplFields(sql: SqlClient, orderId: string, cancelMode: string) {
+  await sql`
+    update orders
+    set
+      ppl_shipment_id = null,
+      ppl_batch_id = null,
+      ppl_order_reference = null,
+      ppl_order_number = null,
+      ppl_shipment_status = null,
+      ppl_import_state = null,
+      ppl_shipment_state = null,
+      ppl_last_http_status = null,
+      ppl_last_error = null,
+      ppl_label_path = null,
+      ppl_label_url = null,
+      ppl_complete_label_url = null,
+      ppl_bulk_label_urls = null,
+      ppl_tracking_url = null,
+      tracking_number = null,
+      tracking_number_source = null,
+      tracking_number_json_path = null,
+      ppl_raw_create_request = null,
+      ppl_raw_create_response = null,
+      ppl_location_header = null,
+      ppl_raw_batch_status_response = null,
+      ppl_raw_label_response = null,
+      ppl_raw_order_response = null,
+      ppl_raw_shipment_response = null,
+      ppl_cancel_mode = ${cancelMode},
+      ppl_local_reset_done = true
     where id = ${orderId}
   `;
 }
@@ -2058,57 +2155,84 @@ export async function ensurePplLabelForOrder(orderId: string, market: Market = "
 export async function cancelPplShipmentForOrder(orderId: string, market: Market = "RO") {
   const sql = getSql();
   await ensureSchema(sql);
-  const order = await getOrderById(orderId, market);
-  const shipmentNumber = numericTrackingOrNull(order?.pplShipmentId) || numericTrackingOrNull(order?.trackingNumber);
-  if (!shipmentNumber) return false;
-  const cancelled = await cancelPplShipment(shipmentNumber);
-  if (!cancelled.ok) {
-    await sql`update orders set ppl_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)} where id = ${orderId}`;
+  let order = await getOrderById(orderId, market);
+  if (!order) return false;
+  let shipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber);
+  if (!shipmentNumber && order.pplBatchId) {
+    await syncPplBatch(orderId, market).catch(() => undefined);
+    order = (await getOrderById(orderId, market)) || order;
+    shipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber);
+  }
+  if (!shipmentNumber) {
+    await sql`
+      update orders
+      set
+        ppl_cancel_mode = 'ppl_cancel_failed_no_local_reset',
+        ppl_cancel_attempted = false,
+        ppl_cancel_http_status = null,
+        ppl_cancel_response = 'Missing shipmentNumber for cancel',
+        ppl_local_reset_done = false
+      where id = ${orderId}
+    `;
     return false;
   }
-  await sql`update orders set ppl_shipment_status = 'PPL_CANCELLED' where id = ${orderId}`;
-  return true;
-}
-
-export async function deletePplShipmentForOrder(orderId: string, market: Market = "RO") {
-  const sql = getSql();
-  await ensureSchema(sql);
-  const order = await getOrderById(orderId, market);
-  if (!order) return false;
-  const shipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber);
-  if (shipmentNumber) {
-    await cancelPplShipment(shipmentNumber).catch(() => ({ ok: false as const }));
+  const cancelled = await cancelPplShipment(shipmentNumber);
+  if (!cancelled.ok) {
+    const statusMatch = /ppl_api_http_(\d+)/.exec(cancelled.reason || "");
+    await sql`
+      update orders
+      set
+        ppl_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)},
+        ppl_cancel_mode = 'ppl_cancel_failed_no_local_reset',
+        ppl_cancel_attempted = true,
+        ppl_cancel_shipment_number = ${shipmentNumber},
+        ppl_cancel_http_status = ${statusMatch ? Number(statusMatch[1]) : null},
+        ppl_cancel_response = ${jsonForDb({ reason: cancelled.reason, raw: cancelled.raw })},
+        ppl_local_reset_done = false
+      where id = ${orderId}
+    `;
+    return false;
   }
   await sql`
     update orders
     set
-      ppl_shipment_id = null,
-      ppl_batch_id = null,
-      ppl_order_reference = null,
-      ppl_order_number = null,
-      ppl_shipment_status = null,
-      ppl_import_state = null,
-      ppl_shipment_state = null,
-      ppl_last_http_status = null,
-      ppl_last_error = null,
-      ppl_label_path = null,
-      ppl_label_url = null,
-      ppl_complete_label_url = null,
-      ppl_bulk_label_urls = null,
-      ppl_tracking_url = null,
-      tracking_number = null,
-      tracking_number_source = null,
-      tracking_number_json_path = null,
-      ppl_raw_create_request = null,
-      ppl_raw_create_response = null,
-      ppl_location_header = null,
-      ppl_raw_batch_status_response = null,
-      ppl_raw_label_response = null,
-      ppl_raw_order_response = null,
-      ppl_raw_shipment_response = null
+      ppl_shipment_status = 'PPL_CANCELLED',
+      ppl_cancel_mode = 'ppl_cancel_then_local_reset',
+      ppl_cancel_attempted = true,
+      ppl_cancel_shipment_number = ${shipmentNumber},
+      ppl_cancel_http_status = 202,
+      ppl_cancel_response = ${jsonForDb(cancelled)},
+      ppl_local_reset_done = false
     where id = ${orderId}
   `;
+  await resetPplFields(sql, orderId, "ppl_cancel_then_local_reset");
   return true;
+}
+
+export async function resetPplShipmentForOrder(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) return false;
+  await sql`
+    update orders
+    set
+      ppl_cancel_mode = 'local_reset_only',
+      ppl_cancel_attempted = false,
+      ppl_cancel_shipment_number = null,
+      ppl_cancel_http_status = null,
+      ppl_cancel_response = null,
+      ppl_local_reset_done = true,
+      ppl_last_error = null
+    where id = ${orderId}
+  `;
+  await resetPplFields(sql, orderId, "local_reset_only");
+  return true;
+}
+
+// Backward-compatible alias; prefer resetPplShipmentForOrder for clarity.
+export async function deletePplShipmentForOrder(orderId: string, market: Market = "RO") {
+  return resetPplShipmentForOrder(orderId, market);
 }
 
 export async function orderPplPickup(market: Market = "RO", note = "") {

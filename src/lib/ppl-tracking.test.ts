@@ -6,6 +6,14 @@ import {
 } from "./ppl-tracking";
 
 describe("PPL tracking selection", () => {
+  it("accepts typical 11-digit shipment number", () => {
+    expect(isLikelyPplTrackingNumber("21491971455")).toBe(true);
+  });
+
+  it("rejects routing-like number with hyphen", () => {
+    expect(isLikelyPplTrackingNumber("25042026006-01")).toBe(false);
+  });
+
   it("batch response overrides stale DB tracking when reference and complete match", () => {
     const resolved = resolveTrackingFromBatch("21491971453", "25042026005", {
       items: [
@@ -85,6 +93,10 @@ describe("PPL tracking selection", () => {
       ],
     });
     expect(resolved).toBe("21491971453");
+  });
+
+  it("uuid candidate is never accepted as tracking", () => {
+    expect(isLikelyPplTrackingNumber("ed61bea9-df39-4177-8e09-242cb4cb4847")).toBe(false);
   });
 });
 

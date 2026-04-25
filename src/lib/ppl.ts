@@ -37,6 +37,31 @@ function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
+export function buildPplBatchLabelFallbackUrl(baseUrl: string, batchId: string): string {
+  return (
+    `${normalizeBaseUrl(baseUrl)}/shipment/batch/${encodeURIComponent(batchId)}/label` +
+    `?pageSize=A4&position=1&limit=200&offset=0`
+  );
+}
+
+export function resolvePplLabelEndpoint(baseUrl: string, labelUrl: string): string {
+  const raw = String(labelUrl || "").trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `${normalizeBaseUrl(baseUrl)}${raw.startsWith("/") ? "" : "/"}${raw}`;
+}
+
+function normalizePplText(input: unknown, maxLen = 250): string {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLen);
+}
+
 function buildApiPath(template: string, shipmentId?: string) {
   if (!shipmentId) return template;
   return template.replaceAll("{id}", encodeURIComponent(shipmentId));
@@ -595,13 +620,13 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
         productType,
         referenceId: ref,
         customerReference: ref,
-        note: [order.additionalNotes?.trim(), `Order ${ref}`].filter(Boolean).join(" | ").slice(0, 250),
+        note: normalizePplText([order.additionalNotes?.trim(), `Order ${ref}`].filter(Boolean).join(" | "), 250),
         depot: process.env.PPL_DEPOT || undefined,
         recipient: {
-          name: order.customerName,
-          contact: order.customerName,
-          street: addr.street,
-          city: addr.city,
+          name: normalizePplText(order.customerName, 120),
+          contact: normalizePplText(order.customerName, 120),
+          street: normalizePplText(addr.street, 120),
+          city: normalizePplText(addr.city, 80),
           zipCode: addr.zipCode,
           country,
           phone: order.phone,
@@ -633,10 +658,10 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
   if (senderName && senderStreet && senderCity && senderZipCode && senderPhone && senderEmail) {
     const first = (payload.shipments as Array<Record<string, unknown>>)[0];
     first.sender = {
-      name: senderName,
-      contact: senderName,
-      street: senderStreet,
-      city: senderCity,
+      name: normalizePplText(senderName, 120),
+      contact: normalizePplText(senderName, 120),
+      street: normalizePplText(senderStreet, 120),
+      city: normalizePplText(senderCity, 80),
       zipCode: senderZipCode,
       country: senderCountry,
       phone: senderPhone,
@@ -1010,9 +1035,7 @@ export async function fetchPplBatchLabelPdf(params: {
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
   const token = await requestToken(baseUrl);
   if (!token) return { ok: false, reason: "ppl_api_token_failed" };
-  const fallbackEndpoint =
-    `${normalizeBaseUrl(baseUrl)}/shipment/batch/${encodeURIComponent(params.batchId)}/label` +
-    `?pageSize=A4&position=1&limit=200&offset=0`;
+  const fallbackEndpoint = buildPplBatchLabelFallbackUrl(baseUrl, params.batchId);
   const endpoint = params.completeLabelUrl?.trim() || fallbackEndpoint;
   const res = await fetch(endpoint, {
     headers: {
@@ -1040,7 +1063,7 @@ export async function fetchPplLabelPdfFromUrl(labelUrl: string): Promise<PplGene
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
   const token = await requestToken(baseUrl);
   if (!token) return { ok: false, reason: "ppl_api_token_failed" };
-  const endpoint = labelUrl.trim();
+  const endpoint = resolvePplLabelEndpoint(baseUrl, labelUrl);
   const res = await fetch(endpoint, {
     headers: {
       Authorization: `Bearer ${token}`,

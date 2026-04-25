@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Order not found" }, { status: 404 });
   }
   const sync = await syncPplBatch(orderId, "RO");
-  const labelPath = order.pplLabelPath || (await ensurePplLabelForOrder(order.id, "RO"));
+  order = (await getOrderById(orderId, "RO")) || order;
+  let labelPath = order.pplLabelPath || (await ensurePplLabelForOrder(order.id, "RO"));
   if (!labelPath) {
     order = (await getOrderById(orderId, "RO")) || order;
     return NextResponse.json(
@@ -35,14 +36,16 @@ export async function GET(request: NextRequest) {
       { status: sync.processing ? 202 : 409 }
     );
   }
-  if (/^https?:\/\//i.test(labelPath)) {
-    return NextResponse.redirect(labelPath);
-  }
   if (!labelPath.startsWith("/")) {
     return NextResponse.json({ ok: false, message: "Neplatna cesta stitku." }, { status: 500 });
   }
-  const absPath = path.resolve(process.cwd(), `.${labelPath}`);
-  const bytes = await readFile(absPath).catch(() => null);
+  let absPath = path.resolve(process.cwd(), `.${labelPath}`);
+  let bytes = await readFile(absPath).catch(() => null);
+  if (!bytes) {
+    labelPath = (await ensurePplLabelForOrder(order.id, "RO")) || labelPath;
+    absPath = path.resolve(process.cwd(), `.${labelPath}`);
+    bytes = await readFile(absPath).catch(() => null);
+  }
   if (!bytes) {
     return NextResponse.json({ ok: false, message: "Soubor stitku nenalezen." }, { status: 404 });
   }
@@ -51,8 +54,8 @@ export async function GET(request: NextRequest) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="ppl-${order.orderNumber}.pdf"`,
-      "Cache-Control": "no-store",
+      "Content-Disposition": `attachment; filename="ppl-${order.orderNumber}.pdf"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }

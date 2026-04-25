@@ -59,6 +59,12 @@ export type Order = {
   trackingNumberSource?: string | null;
   trackingNumberJsonPath?: string | null;
   pplTrackingUrl?: string | null;
+  pplCancelMode?: string | null;
+  pplCancelAttempted?: boolean | null;
+  pplCancelShipmentNumber?: string | null;
+  pplCancelHttpStatus?: number | null;
+  pplCancelResponse?: string | null;
+  pplLocalResetDone?: boolean | null;
   pplShipmentStatus?: string | null;
   pplLabelPath?: string | null;
   dpdShipmentId?: string | null;

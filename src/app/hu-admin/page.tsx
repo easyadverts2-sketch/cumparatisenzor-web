@@ -1,10 +1,10 @@
 import { AdminOrdersList } from "@/components/admin-orders-list";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import {
   autoCancelExpiredOrders,
   cancelDpdShipmentForOrder,
   cancelPplShipmentForOrder,
   deleteDpdShipmentForOrder,
-  deletePplShipmentForOrder,
   debugFindPplTrackingNumber,
   getDpdBulkLabelForOrders,
   getDpdPickups,
@@ -18,7 +18,7 @@ import {
   readStore,
   refreshDpdShipment,
   refreshPplShipment,
-  triggerShipmentCreation,
+  resetPplShipmentForOrder,
   writeStore,
 } from "@/lib/store";
 import { revalidatePath } from "next/cache";
@@ -49,15 +49,6 @@ async function logoutAction() {
   redirect("/hu-admin/login");
 }
 
-async function createShipmentAction(formData: FormData) {
-  "use server";
-  const orderId = String(formData.get("orderId") || "");
-  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
-  const ok = await triggerShipmentCreation(orderId, "HU");
-  revalidatePath("/hu-admin");
-  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "Zasilka+vytvorena" : "Vytvoreni+zasilky+selhalo"}`);
-}
-
 async function refreshShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
@@ -80,9 +71,9 @@ async function deleteShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
   if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
-  const ok = await deletePplShipmentForOrder(orderId, "HU");
+  const ok = await resetPplShipmentForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
-  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+zasilka+smazana" : "Smazani+PPL+zasilky+selhalo"}`);
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+udaje+lokalne+vycisteny" : "Lokalni+reset+PPL+selhal"}`);
 }
 
 async function debugFindTrackingAction(formData: FormData) {
@@ -312,19 +303,30 @@ export default async function HuAdminPage({
                 <td className="px-3 py-2">
                   <a
                     href={`/api/hu-admin/ppl-label?orderId=${encodeURIComponent(o.id)}`}
-                    target="_blank"
-                    rel="noreferrer"
                     className="text-[#0f766e] hover:underline"
                   >
-                    Tisk stitku
+                    Stahnout stitek
                   </a>
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    <form action={createShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Vytvořit</button></form>
                     <form action={refreshShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
-                    <form action={cancelShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
-                    <form action={deleteShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Smazat zasilku</button></form>
+                    <form action={cancelShipmentAction}>
+                      <input type="hidden" name="orderId" value={o.id} />
+                      <ConfirmSubmitButton
+                        className="rounded border px-2 py-1"
+                        label="Stornovat v PPL"
+                        confirmMessage="Tato akce se pokusi stornovat zasilku primo v PPL. Pokud PPL storno potvrdi, lokalni PPL data objednavky se vycisti. Pokud PPL vrati chybu, lokalni data zustanou zachovana. Pokracovat?"
+                      />
+                    </form>
+                    <form action={deleteShipmentAction}>
+                      <input type="hidden" name="orderId" value={o.id} />
+                      <ConfirmSubmitButton
+                        className="rounded border px-2 py-1"
+                        label="Lokalni reset PPL"
+                        confirmMessage="Tato akce pouze vycisti PPL data v e-shopu. Nestornuje zasilku v PPL. Pouzijte jen pokud opravdu chcete odpojit objednavku lokalne. Pokracovat?"
+                      />
+                    </form>
                     <form action={debugFindTrackingAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Debug najit tracking cislo</button></form>
                     <a
                       href={`/api/hu-admin/ppl-diagnostic?orderId=${encodeURIComponent(o.id)}`}
@@ -413,7 +415,6 @@ export default async function HuAdminPage({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    <form action={createShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Vytvořit</button></form>
                     <form action={regenerateDpdLabelAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Generovat stitek</button></form>
                     <form action={refreshDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
                     <form action={cancelDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
