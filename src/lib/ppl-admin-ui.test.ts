@@ -23,6 +23,15 @@ describe("PPL admin UI wiring", () => {
     expect(ro).toContain('attachment; filename="ppl-${order.orderNumber}.pdf"');
     expect(hu).toContain('attachment; filename="ppl-${order.orderNumber}.pdf"');
   });
+
+  it("label routes support debug mode and do not read files from disk", () => {
+    const ro = read("src/app/api/admin/ppl-label/route.ts");
+    const hu = read("src/app/api/hu-admin/ppl-label/route.ts");
+    expect(ro).toContain('get("debug")');
+    expect(hu).toContain('get("debug")');
+    expect(ro).not.toContain("readFile(");
+    expect(hu).not.toContain("readFile(");
+  });
 });
 
 describe("PPL label endpoint helpers", () => {

@@ -1756,7 +1756,11 @@ export async function getPplShipmentsAdmin(market: Market = "RO", limit = 200) {
   return rows.map((r) => toOrder(r as unknown as Row));
 }
 
-export async function syncPplBatch(orderId: string, market: Market = "RO"): Promise<{
+export async function syncPplBatch(
+  orderId: string,
+  market: Market = "RO",
+  options?: { skipLabelPersistence?: boolean }
+): Promise<{
   ok: boolean;
   processing?: boolean;
   labelReady?: boolean;
@@ -1975,7 +1979,7 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
   }
   const refreshedOrder = await getOrderById(orderId, market);
   const isComplete = /^(COMPLETE|COMPLETED|SUCCESS)$/i.test(String(importState || ""));
-  if (refreshedOrder && isComplete && !refreshedOrder.pplLabelPath) {
+  if (refreshedOrder && isComplete && !refreshedOrder.pplLabelPath && !options?.skipLabelPersistence) {
     await savePplLabelFromBatch(sql, refreshedOrder, market).catch(() => null);
   }
   const latest = await getOrderById(orderId, market);
