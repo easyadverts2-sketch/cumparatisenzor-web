@@ -19,6 +19,7 @@ import {
   fetchPplBatchLabelPdf,
   fetchPplBatchStatus,
   fetchPplOrderInfoByCustomerReference,
+  fetchPplShipmentByFilters,
   fetchPplShipmentInfoByCustomerReference,
   fetchPplShipmentInfoByNumber,
 } from "./ppl";
@@ -126,7 +127,41 @@ type DpdPickupRow = {
 
 function isUuidLike(value: string | null | undefined): boolean {
   const raw = String(value || "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+}
+
+function jsonForDb(value: unknown): string | null {
+  try {
+    return JSON.stringify(value ?? null).slice(0, 200000);
+  } catch {
+    return null;
+  }
+}
+
+function collectTrackingCandidates(input: unknown, out: string[] = []): string[] {
+  if (input == null) return out;
+  if (Array.isArray(input)) {
+    for (const item of input) collectTrackingCandidates(item, out);
+    return out;
+  }
+  if (typeof input !== "object") return out;
+  const rec = input as Record<string, unknown>;
+  const keys = ["shipmentNumber", "masterShipmentNumber", "externalShipmentId", "parcelNumber"];
+  for (const key of keys) {
+    const candidate = String(rec[key] || "").trim();
+    if (/^\d{8,20}$/.test(candidate) && !isUuidLike(candidate)) out.push(candidate);
+  }
+  const nums = rec.shipmentNumbers;
+  if (Array.isArray(nums)) {
+    for (const n of nums) {
+      const candidate = String(n || "").trim();
+      if (/^\d{8,20}$/.test(candidate) && !isUuidLike(candidate)) out.push(candidate);
+    }
+  }
+  for (const value of Object.values(rec)) {
+    collectTrackingCandidates(value, out);
+  }
+  return out;
 }
 
 function toOrder(row: Row): Order {
@@ -168,6 +203,23 @@ function toOrder(row: Row): Order {
     market: String(row.market || "RO") as Market,
     pplShipmentId: row.ppl_shipment_id != null ? String(row.ppl_shipment_id) : null,
     pplBatchId: row.ppl_batch_id != null ? String(row.ppl_batch_id) : null,
+    pplOrderBatchId: row.ppl_order_batch_id != null ? String(row.ppl_order_batch_id) : null,
+    pplOrderNumber: row.ppl_order_number != null ? String(row.ppl_order_number) : null,
+    pplOrderReference: row.ppl_order_reference != null ? String(row.ppl_order_reference) : null,
+    pplImportState: row.ppl_import_state != null ? String(row.ppl_import_state) : null,
+    pplShipmentState: row.ppl_shipment_state != null ? String(row.ppl_shipment_state) : null,
+    pplLastHttpStatus: row.ppl_last_http_status != null ? Number(row.ppl_last_http_status) : null,
+    pplLastError: row.ppl_last_error != null ? String(row.ppl_last_error) : null,
+    pplRawCreateRequest: row.ppl_raw_create_request != null ? String(row.ppl_raw_create_request) : null,
+    pplRawCreateResponse: row.ppl_raw_create_response != null ? String(row.ppl_raw_create_response) : null,
+    pplLocationHeader: row.ppl_location_header != null ? String(row.ppl_location_header) : null,
+    pplRawBatchStatusResponse:
+      row.ppl_raw_batch_status_response != null ? String(row.ppl_raw_batch_status_response) : null,
+    pplRawLabelResponse: row.ppl_raw_label_response != null ? String(row.ppl_raw_label_response) : null,
+    pplRawOrderResponse: row.ppl_raw_order_response != null ? String(row.ppl_raw_order_response) : null,
+    pplRawShipmentResponse: row.ppl_raw_shipment_response != null ? String(row.ppl_raw_shipment_response) : null,
+    pplLabelUrl: row.ppl_label_url != null ? String(row.ppl_label_url) : null,
+    pplBulkLabelUrls: row.ppl_bulk_label_urls != null ? String(row.ppl_bulk_label_urls) : null,
     pplShipmentStatus: row.ppl_shipment_status != null ? String(row.ppl_shipment_status) : null,
     pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
     dpdShipmentId: row.dpd_shipment_id != null ? String(row.dpd_shipment_id) : null,
@@ -271,7 +323,9 @@ function shipmentErrorStatus(reason: string, raw?: unknown) {
 
 function numericTrackingOrNull(value: string | null | undefined): string | null {
   const raw = String(value || "").trim();
-  return /^\d{11}$/.test(raw) ? raw : null;
+  if (!/^\d{8,20}$/.test(raw)) return null;
+  if (isUuidLike(raw)) return null;
+  return raw;
 }
 
 export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
@@ -378,6 +432,86 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
   if (pplBatchCol.length === 0) {
     await sql`alter table orders add column ppl_batch_id text`;
   }
+  const pplOrderBatchCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_order_batch_id'
+  `;
+  if (pplOrderBatchCol.length === 0) await sql`alter table orders add column ppl_order_batch_id text`;
+  const pplOrderNumberCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_order_number'
+  `;
+  if (pplOrderNumberCol.length === 0) await sql`alter table orders add column ppl_order_number text`;
+  const pplOrderReferenceCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_order_reference'
+  `;
+  if (pplOrderReferenceCol.length === 0) await sql`alter table orders add column ppl_order_reference text`;
+  const pplImportStateCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_import_state'
+  `;
+  if (pplImportStateCol.length === 0) await sql`alter table orders add column ppl_import_state text`;
+  const pplShipmentStateCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_shipment_state'
+  `;
+  if (pplShipmentStateCol.length === 0) await sql`alter table orders add column ppl_shipment_state text`;
+  const pplLastHttpStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_last_http_status'
+  `;
+  if (pplLastHttpStatusCol.length === 0) await sql`alter table orders add column ppl_last_http_status integer`;
+  const pplLastErrorCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_last_error'
+  `;
+  if (pplLastErrorCol.length === 0) await sql`alter table orders add column ppl_last_error text`;
+  const pplRawCreateReqCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_raw_create_request'
+  `;
+  if (pplRawCreateReqCol.length === 0) await sql`alter table orders add column ppl_raw_create_request text`;
+  const pplRawCreateResCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_raw_create_response'
+  `;
+  if (pplRawCreateResCol.length === 0) await sql`alter table orders add column ppl_raw_create_response text`;
+  const pplLocationCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_location_header'
+  `;
+  if (pplLocationCol.length === 0) await sql`alter table orders add column ppl_location_header text`;
+  const pplRawBatchCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_raw_batch_status_response'
+  `;
+  if (pplRawBatchCol.length === 0) await sql`alter table orders add column ppl_raw_batch_status_response text`;
+  const pplRawLabelCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_raw_label_response'
+  `;
+  if (pplRawLabelCol.length === 0) await sql`alter table orders add column ppl_raw_label_response text`;
+  const pplRawOrderCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_raw_order_response'
+  `;
+  if (pplRawOrderCol.length === 0) await sql`alter table orders add column ppl_raw_order_response text`;
+  const pplRawShipmentCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_raw_shipment_response'
+  `;
+  if (pplRawShipmentCol.length === 0) await sql`alter table orders add column ppl_raw_shipment_response text`;
+  const pplLabelUrlCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_label_url'
+  `;
+  if (pplLabelUrlCol.length === 0) await sql`alter table orders add column ppl_label_url text`;
+  const pplBulkLabelUrlsCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_bulk_label_urls'
+  `;
+  if (pplBulkLabelUrlsCol.length === 0) await sql`alter table orders add column ppl_bulk_label_urls text`;
   await sql`
     update orders
     set ppl_batch_id = tracking_number, tracking_number = null
@@ -590,7 +724,14 @@ async function createShipmentForOrder(
         set
           ppl_shipment_id = ${tracking},
           ppl_batch_id = ${ppl.batchId},
-          ppl_shipment_status = 'CREATED',
+          ppl_order_reference = ${ppl.referenceId || String(order.orderNumber)},
+          ppl_import_state = ${tracking ? "Complete" : "Created"},
+          ppl_shipment_status = ${tracking ? "PPL_TRACKING_READY" : "PPL_BATCH_CREATED"},
+          ppl_last_http_status = 201,
+          ppl_last_error = null,
+          ppl_raw_create_request = ${jsonForDb(ppl.createRequest)},
+          ppl_raw_create_response = ${jsonForDb(ppl.raw)},
+          ppl_location_header = ${ppl.locationHeader || null},
           tracking_number = ${tracking},
           ppl_label_path = ${ppl.labelPublicPath || null}
         where id = ${order.id}
@@ -602,6 +743,12 @@ async function createShipmentForOrder(
         orderNumber: order.orderNumber,
         details: `${auditDetailPrefix || ""} shipment=${tracking || "-"} batch=${ppl.batchId || "-"} label=${ppl.labelPublicPath || "-"}`.trim(),
       });
+      void syncPplBatch(order.id, market).catch(() => undefined);
+      for (const delayMs of [1000, 3000, 10000, 30000]) {
+        setTimeout(() => {
+          void syncPplBatch(order.id, market).catch(() => undefined);
+        }, delayMs);
+      }
       const withTracking = await getOrderById(order.id, market);
       if (withTracking?.trackingNumber && withTracking.paymentMethod !== "COD") {
         const trackingEmail = buildTrackingEmail(withTracking, market, withTracking.trackingNumber);
@@ -687,7 +834,23 @@ async function savePplLabelFromBatch(
   const batchId = order.pplBatchId || (isUuidLike(order.pplShipmentId) ? order.pplShipmentId : null);
   if (!batchId) return order.pplLabelPath || null;
   const labelRes = await fetchPplBatchLabelPdf(batchId);
-  if (!labelRes.ok) return order.pplLabelPath || null;
+  if (!labelRes.ok) {
+    const statusMatch = /ppl_api_http_(\d+)/.exec(labelRes.reason || "");
+    const httpStatus = statusMatch ? Number(statusMatch[1]) : null;
+    await sql`
+      update orders
+      set
+        ppl_last_http_status = ${httpStatus},
+        ppl_raw_label_response = ${jsonForDb({ reason: labelRes.reason, raw: labelRes.raw })},
+        ppl_shipment_status = ${
+          httpStatus === 500 || httpStatus === 503 || httpStatus === 404 || httpStatus === 400
+            ? "PPL_PROCESSING"
+            : "PPL_ERROR"
+        }
+      where id = ${order.id}
+    `;
+    return order.pplLabelPath || null;
+  }
   const relDir = process.env.PPL_LABEL_SAVE_DIR?.trim() || "public/ppl-labels";
   const absDir = path.resolve(process.cwd(), relDir);
   await mkdir(absDir, { recursive: true });
@@ -698,7 +861,15 @@ async function savePplLabelFromBatch(
     ? `/${relDir.replace(/^public\//, "")}/${fileName}`
     : null;
   if (!publicPath) return order.pplLabelPath || null;
-  await sql`update orders set ppl_label_path = ${publicPath} where id = ${order.id}`;
+  await sql`
+    update orders
+    set
+      ppl_label_path = ${publicPath},
+      ppl_shipment_status = 'PPL_LABEL_READY',
+      ppl_last_http_status = 200,
+      ppl_raw_label_response = ${jsonForDb({ contentType: labelRes.data.contentType, bytes: labelRes.data.bytes.length })}
+    where id = ${order.id}
+  `;
   return publicPath;
 }
 
@@ -1330,79 +1501,193 @@ export async function getPplShipmentsAdmin(market: Market = "RO", limit = 200) {
   return rows.map((r) => toOrder(r as unknown as Row));
 }
 
-export async function refreshPplShipment(orderId: string, market: Market = "RO") {
+export async function syncPplBatch(orderId: string, market: Market = "RO"): Promise<{
+  ok: boolean;
+  processing?: boolean;
+  labelReady?: boolean;
+  trackingNumber?: string | null;
+  message: string;
+}> {
   const sql = getSql();
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
-  if (!order) return false;
+  if (!order) return { ok: false, message: "Objednavka nenalezena." };
   const batchId = order.pplBatchId || (isUuidLike(order.pplShipmentId) ? order.pplShipmentId : null);
-  const knownShipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber);
-  if (!batchId && !knownShipmentNumber) return false;
-  const customerRef = String(order.orderNumber);
-  let statusFromBatch:
-    | { ok: true; data: { state: string; trackingNumber: string | null; raw: unknown } }
-    | { ok: false; reason: string; raw?: unknown }
-    | null = null;
+  const knownShipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber) || null;
+  if (!batchId && !knownShipmentNumber) return { ok: false, message: "Chybi pplBatchId i trackingNumber." };
+  const referenceId = String(order.pplOrderReference || order.orderNumber);
+  let importState = String(order.pplImportState || "").trim();
+  let trackingCandidate = knownShipmentNumber;
+  let shipmentState: string | null = null;
+  let labelUrl: string | null = order.pplLabelUrl || null;
+  let bulkLabelUrls: string[] = [];
   if (batchId) {
-    statusFromBatch = await fetchPplBatchStatus(batchId);
-  }
-  const res =
-    statusFromBatch && statusFromBatch.ok
-      ? statusFromBatch
-      : knownShipmentNumber
-        ? await fetchPplShipmentInfoByNumber(knownShipmentNumber)
-        : await fetchPplShipmentInfoByCustomerReference(customerRef);
-  let fallbackTracking: string | null = null;
-  if (!res.ok || !numericTrackingOrNull(res.data.trackingNumber)) {
-    const fromOrder = await fetchPplOrderInfoByCustomerReference(customerRef);
-    if (fromOrder.ok) {
-      fallbackTracking =
-        fromOrder.data.shipmentNumbers.find((x) => /^\d{11}$/.test(String(x || "").trim())) || null;
+    const statusFromBatch = await fetchPplBatchStatus(batchId);
+    if (!statusFromBatch.ok) {
+      const statusMatch = /ppl_api_http_(\d+)/.exec(statusFromBatch.reason || "");
+      await sql`
+        update orders
+        set
+          ppl_batch_id = ${batchId},
+          ppl_last_http_status = ${statusMatch ? Number(statusMatch[1]) : null},
+          ppl_shipment_status = 'PPL_PROCESSING',
+          ppl_last_error = ${shipmentErrorStatus(statusFromBatch.reason, statusFromBatch.raw)},
+          ppl_raw_batch_status_response = ${jsonForDb({ reason: statusFromBatch.reason, raw: statusFromBatch.raw })}
+        where id = ${orderId}
+      `;
+      return {
+        ok: true,
+        processing: true,
+        trackingNumber: trackingCandidate,
+        message: `Zasilka se stale zpracovava (batch=${batchId}, posledni_http=${statusMatch ? Number(statusMatch[1]) : "-"})`,
+      };
+    } else {
+      const batchRaw = statusFromBatch.data.raw && typeof statusFromBatch.data.raw === "object"
+        ? (statusFromBatch.data.raw as Record<string, unknown>)
+        : {};
+      const items = Array.isArray(batchRaw.items) ? batchRaw.items : [];
+      const item =
+        items.find((it) => String((it as Record<string, unknown>)?.referenceId || "").trim() === referenceId) ||
+        items[0] ||
+        null;
+      const itemRec = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      importState = String(itemRec.importState || "").trim();
+      if (!importState) {
+        importState = String(batchRaw.importState || statusFromBatch.data.state || "").trim();
+      }
+      labelUrl = String(itemRec.labelUrl || "").trim() || labelUrl;
+      const completeLabel = batchRaw.completeLabel && typeof batchRaw.completeLabel === "object"
+        ? (batchRaw.completeLabel as Record<string, unknown>)
+        : {};
+      const labelUrlsArr = Array.isArray(completeLabel.labelUrls) ? completeLabel.labelUrls : [];
+      bulkLabelUrls = labelUrlsArr.map((x) => String(x || "").trim()).filter(Boolean);
+      trackingCandidate =
+        numericTrackingOrNull(String(itemRec.shipmentNumber || "").trim()) ||
+        numericTrackingOrNull(collectTrackingCandidates(itemRec)[0]) ||
+        numericTrackingOrNull(collectTrackingCandidates(batchRaw)[0]) ||
+        trackingCandidate;
+
+      const errorDetails = jsonForDb({
+        errors: itemRec.errors || null,
+        relatedItems: itemRec.relatedItems || null,
+        raw: itemRec,
+      });
+      await sql`
+        update orders
+        set
+          ppl_batch_id = ${batchId},
+          ppl_order_reference = ${referenceId},
+          ppl_import_state = ${importState || null},
+          ppl_shipment_status = ${
+            /^(COMPLETE|COMPLETED|SUCCESS)$/i.test(importState)
+              ? "PPL_COMPLETE"
+              : /^(ERROR|FAILED)$/i.test(importState)
+                ? "PPL_ERROR"
+                : "PPL_PROCESSING"
+          },
+          ppl_last_http_status = 200,
+          ppl_last_error = ${
+            /^(ERROR|FAILED)$/i.test(importState)
+              ? shipmentErrorStatus("ppl_batch_error", errorDetails)
+              : null
+          },
+          ppl_raw_batch_status_response = ${jsonForDb(batchRaw)},
+          ppl_label_url = ${labelUrl || null},
+          ppl_bulk_label_urls = ${bulkLabelUrls.length > 0 ? jsonForDb(bulkLabelUrls) : null}
+        where id = ${orderId}
+      `;
+      if (!/^(COMPLETE|COMPLETED|SUCCESS)$/i.test(importState) && !/^(ERROR|FAILED)$/i.test(importState)) {
+        return {
+          ok: true,
+          processing: true,
+          trackingNumber: trackingCandidate,
+          message: "Zasilka se stale zpracovava, zkuste refresh za chvili.",
+        };
+      }
+      if (/^(ERROR|FAILED)$/i.test(importState)) {
+        return { ok: false, message: "PPL vratilo chybu importu.", processing: false };
+      }
     }
   }
-  if (!res.ok) {
-    await sql`
-      update orders
-      set
-        ppl_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)},
-        ppl_batch_id = ${batchId ?? null},
-        tracking_number = ${fallbackTracking || numericTrackingOrNull(order.trackingNumber)}
-      where id = ${orderId}
-    `;
-    return Boolean(fallbackTracking);
+
+  if (!trackingCandidate) {
+    const fromOrder = await fetchPplOrderInfoByCustomerReference(referenceId);
+    await sql`update orders set ppl_raw_order_response = ${jsonForDb(fromOrder.ok ? fromOrder.data.raw : fromOrder)} where id = ${orderId}`;
+    if (fromOrder.ok) {
+      trackingCandidate = numericTrackingOrNull(fromOrder.data.shipmentNumbers[0]) || null;
+    }
   }
+
+  if (!trackingCandidate) {
+    const fromShipment = await fetchPplShipmentInfoByCustomerReference(String(order.orderNumber));
+    await sql`update orders set ppl_raw_shipment_response = ${jsonForDb(fromShipment.ok ? fromShipment.data.raw : fromShipment)} where id = ${orderId}`;
+    if (fromShipment.ok) {
+      trackingCandidate = numericTrackingOrNull(fromShipment.data.trackingNumber) || null;
+      shipmentState = fromShipment.data.state || null;
+    }
+  }
+  if (!trackingCandidate) {
+    const created = new Date(order.createdAt);
+    const dateFrom = new Date(created.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const dateTo = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const codVarSym = String(order.orderNumber).replace(/\D+/g, "").slice(-10);
+    const fromShipmentFilters = await fetchPplShipmentByFilters({
+      customerReference: String(order.orderNumber),
+      variableSymbol: codVarSym || null,
+      dateFromIso: dateFrom,
+      dateToIso: dateTo,
+    });
+    await sql`update orders set ppl_raw_shipment_response = ${jsonForDb(fromShipmentFilters.ok ? fromShipmentFilters.data.raw : fromShipmentFilters)} where id = ${orderId}`;
+    if (fromShipmentFilters.ok) {
+      trackingCandidate = numericTrackingOrNull(fromShipmentFilters.data.trackingNumber) || trackingCandidate;
+      shipmentState = fromShipmentFilters.data.state || shipmentState;
+    }
+  }
+
   await sql`
     update orders
     set
-      ppl_shipment_status = ${res.data.state || "UNKNOWN"},
-      ppl_batch_id = ${batchId ?? null},
-      ppl_shipment_id = ${
-        numericTrackingOrNull(res.data.trackingNumber) ||
-        fallbackTracking ||
-        knownShipmentNumber ||
-        null
-      },
-      tracking_number = ${
-        numericTrackingOrNull(res.data.trackingNumber) ||
-        fallbackTracking ||
-        numericTrackingOrNull(order.trackingNumber)
-      }
+      ppl_shipment_id = ${trackingCandidate},
+      tracking_number = ${trackingCandidate},
+      ppl_shipment_state = ${shipmentState || null},
+      ppl_order_reference = ${referenceId}
     where id = ${orderId}
   `;
   const refreshedOrder = await getOrderById(orderId, market);
-  if (refreshedOrder && !refreshedOrder.pplLabelPath) {
+  const isComplete = /^(COMPLETE|COMPLETED|SUCCESS)$/i.test(String(importState || ""));
+  if (refreshedOrder && isComplete && !refreshedOrder.pplLabelPath) {
     await savePplLabelFromBatch(sql, refreshedOrder, market).catch(() => null);
   }
-  return Boolean(
-    numericTrackingOrNull(res.data.trackingNumber) ||
-      fallbackTracking ||
-      numericTrackingOrNull(order.trackingNumber)
-  );
+  const latest = await getOrderById(orderId, market);
+  const processing = !isComplete || !latest?.pplLabelPath || !latest?.trackingNumber;
+  if (processing) {
+    return {
+      ok: true,
+      processing: true,
+      labelReady: Boolean(latest?.pplLabelPath),
+      trackingNumber: latest?.trackingNumber || null,
+      message: `Zasilka se stale zpracovava (batch=${batchId || "-"}, importState=${importState || "-"})`,
+    };
+  }
+  await sql`update orders set ppl_shipment_status = 'PPL_TRACKING_READY' where id = ${orderId}`;
+  return {
+    ok: true,
+    processing: false,
+    labelReady: true,
+    trackingNumber: latest?.trackingNumber || null,
+    message: "PPL zasilka synchronizovana.",
+  };
+}
+
+export async function refreshPplShipment(orderId: string, market: Market = "RO") {
+  const result = await syncPplBatch(orderId, market);
+  return result.ok;
 }
 
 export async function ensurePplLabelForOrder(orderId: string, market: Market = "RO"): Promise<string | null> {
   const sql = getSql();
   await ensureSchema(sql);
+  await syncPplBatch(orderId, market).catch(() => undefined);
   const order = await getOrderById(orderId, market);
   if (!order) return null;
   if (order.pplLabelPath) return order.pplLabelPath;
@@ -1420,7 +1705,7 @@ export async function cancelPplShipmentForOrder(orderId: string, market: Market 
     await sql`update orders set ppl_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)} where id = ${orderId}`;
     return false;
   }
-  await sql`update orders set ppl_shipment_status = 'CANCELLED' where id = ${orderId}`;
+  await sql`update orders set ppl_shipment_status = 'PPL_CANCELLED' where id = ${orderId}`;
   return true;
 }
 

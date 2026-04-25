@@ -1,5 +1,5 @@
 import { isAdminRequest } from "@/lib/admin-guard";
-import { ensurePplLabelForOrder, getOrderById } from "@/lib/store";
+import { ensurePplLabelForOrder, getOrderById, syncPplBatch } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
@@ -16,9 +16,24 @@ export async function GET(request: NextRequest) {
   if (!order) {
     return NextResponse.json({ ok: false, message: "Order not found" }, { status: 404 });
   }
+  const sync = await syncPplBatch(orderId, "RO");
   const labelPath = order.pplLabelPath || (await ensurePplLabelForOrder(order.id, "RO"));
   if (!labelPath) {
-    return NextResponse.json({ ok: false, message: "Stitek zatim neni pripraven." }, { status: 409 });
+    order = (await getOrderById(orderId, "RO")) || order;
+    return NextResponse.json(
+      {
+        ok: false,
+        processing: Boolean(sync.processing),
+        message:
+          sync.message ||
+          `PPL zasilku stale zpracovava (batchId=${order.pplBatchId || "-"}, importState=${order.pplImportState || "-"})`,
+        batchId: order.pplBatchId || null,
+        importState: order.pplImportState || null,
+        httpStatus: order.pplLastHttpStatus || null,
+        pplError: order.pplLastError || null,
+      },
+      { status: sync.processing ? 202 : 409 }
+    );
   }
   if (/^https?:\/\//i.test(labelPath)) {
     return NextResponse.redirect(labelPath);

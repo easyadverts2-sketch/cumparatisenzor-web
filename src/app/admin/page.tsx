@@ -289,6 +289,7 @@ export default async function AdminPage({
               <th className="px-3 py-2">Služba</th>
               <th className="px-3 py-2">Adresa</th>
               <th className="px-3 py-2">Číslo zásilky</th>
+              <th className="px-3 py-2">Batch / Import</th>
               <th className="px-3 py-2">Stav PPL</th>
               <th className="px-3 py-2">Štítek</th>
               <th className="px-3 py-2">Akce</th>
@@ -305,6 +306,11 @@ export default async function AdminPage({
                 <td className="px-3 py-2">PPL</td>
                 <td className="px-3 py-2 max-w-[220px] truncate">{o.deliveryAddress.replaceAll("\n", ", ")}</td>
                 <td className="px-3 py-2">{validTracking(o.trackingNumber || o.pplShipmentId)}</td>
+                <td className="px-3 py-2 text-xs">
+                  <div>{o.pplBatchId || "-"}</div>
+                  <div>{o.pplImportState || "-"}</div>
+                  <div>HTTP {o.pplLastHttpStatus || "-"}</div>
+                </td>
                 <td className="px-3 py-2">{o.pplShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
                   <a

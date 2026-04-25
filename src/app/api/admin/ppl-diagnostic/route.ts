@@ -1,5 +1,5 @@
 import { isAdminRequest } from "@/lib/admin-guard";
-import { getOrderById } from "@/lib/store";
+import { getOrderById, syncPplBatch } from "@/lib/store";
 import { fetchPplBatchStatus, fetchPplOrderInfoByCustomerReference, fetchPplShipmentInfoByNumber } from "@/lib/ppl";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,28 +15,43 @@ export async function GET(request: NextRequest) {
   if (!order) {
     return NextResponse.json({ ok: false, message: "Order not found" }, { status: 404 });
   }
+  await syncPplBatch(orderId, "RO").catch(() => undefined);
+  const refreshed = (await getOrderById(orderId, "RO")) || order;
   const diagnostic: Record<string, unknown> = {
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    market: order.market,
-    shippingCarrier: order.shippingCarrier,
-    pplShipmentId: order.pplShipmentId,
-    pplBatchId: order.pplBatchId,
-    trackingNumberInDb: order.trackingNumber,
-    pplStatusInDb: order.pplShipmentStatus,
-    pplLabelPathInDb: order.pplLabelPath,
+    orderId: refreshed.id,
+    orderNumber: refreshed.orderNumber,
+    market: refreshed.market,
+    shippingCarrier: refreshed.shippingCarrier,
+    pplShipmentId: refreshed.pplShipmentId,
+    pplBatchId: refreshed.pplBatchId,
+    pplOrderReference: refreshed.pplOrderReference,
+    pplOrderNumber: refreshed.pplOrderNumber,
+    pplImportState: refreshed.pplImportState,
+    pplShipmentState: refreshed.pplShipmentState,
+    pplLastHttpStatus: refreshed.pplLastHttpStatus,
+    pplLastError: refreshed.pplLastError,
+    trackingNumberInDb: refreshed.trackingNumber,
+    pplStatusInDb: refreshed.pplShipmentStatus,
+    pplLabelPathInDb: refreshed.pplLabelPath,
+    rawCreateRequest: refreshed.pplRawCreateRequest,
+    rawCreateResponse: refreshed.pplRawCreateResponse,
+    locationHeader: refreshed.pplLocationHeader,
+    rawBatchStatusResponse: refreshed.pplRawBatchStatusResponse,
+    rawLabelResponse: refreshed.pplRawLabelResponse,
+    rawOrderResponse: refreshed.pplRawOrderResponse,
+    rawShipmentResponse: refreshed.pplRawShipmentResponse,
   };
-  if (order.pplBatchId) {
-    const status = await fetchPplBatchStatus(order.pplBatchId);
+  if (refreshed.pplBatchId) {
+    const status = await fetchPplBatchStatus(refreshed.pplBatchId);
     diagnostic.pplBatchFetch = status;
   }
-  if (order.pplShipmentId) {
-    diagnostic.pplShipmentFetch = await fetchPplShipmentInfoByNumber(order.pplShipmentId);
+  if (refreshed.pplShipmentId) {
+    diagnostic.pplShipmentFetch = await fetchPplShipmentInfoByNumber(refreshed.pplShipmentId);
   }
-  diagnostic.pplOrderFetch = await fetchPplOrderInfoByCustomerReference(String(order.orderNumber));
-  if (order.pplLabelPath && /^https?:\/\//i.test(order.pplLabelPath)) {
+  diagnostic.pplOrderFetch = await fetchPplOrderInfoByCustomerReference(String(refreshed.orderNumber));
+  if (refreshed.pplLabelPath && /^https?:\/\//i.test(refreshed.pplLabelPath)) {
     try {
-      const res = await fetch(order.pplLabelPath);
+      const res = await fetch(refreshed.pplLabelPath);
       diagnostic.labelFetch = {
         ok: res.ok,
         status: res.status,

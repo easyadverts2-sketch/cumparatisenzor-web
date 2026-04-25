@@ -7,7 +7,10 @@ type PplResult =
       ok: true;
       shipmentNumber: string | null;
       batchId: string | null;
+      referenceId: string;
       labelPublicPath?: string | null;
+      locationHeader?: string | null;
+      createRequest?: unknown;
       raw?: unknown;
     }
   | { ok: false; reason: string; raw?: unknown };
@@ -44,7 +47,9 @@ function extractBatchId(rawRec: Record<string, unknown>, location: string): stri
 
 function codVarSymFromOrderNumber(orderNumber: number): string {
   const digits = String(orderNumber).replace(/\D+/g, "");
-  return digits.length <= 10 ? digits : digits.slice(-10);
+  const trimmed = digits.length <= 10 ? digits : digits.slice(-10);
+  if (trimmed) return trimmed;
+  return String(Date.now()).replace(/\D+/g, "").slice(-10) || "1";
 }
 
 function extractShipmentNumberFromAny(source: Record<string, unknown>): string {
@@ -549,10 +554,14 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
     if (!settlement.ok) {
       return { ok: false, reason: settlement.reason };
     }
+    const codVarSym = codVarSymFromOrderNumber(order.orderNumber);
+    if (!codVarSym || codVarSym.length > 10) {
+      return { ok: false, reason: "ppl_cod_varsym_invalid" };
+    }
     first.cashOnDelivery = {
       codCurrency: settlement.currency,
       codPrice: settlement.amount,
-      codVarSym: codVarSymFromOrderNumber(order.orderNumber),
+      codVarSym,
       iban: codIban,
       swift: codSwift,
     };
@@ -597,7 +606,10 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
         ok: true,
         shipmentNumber: immediateShipmentNumber,
         batchId: null,
+        referenceId: ref,
         labelPublicPath: null,
+        locationHeader: location || null,
+        createRequest: payload,
         raw,
       };
     }
@@ -641,7 +653,16 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
               }).catch(() => null)
             : null;
           const labelPublicPath = savedLabelPath || labelUrl || null;
-          return { ok: true, shipmentNumber: shipmentNumber || null, batchId, labelPublicPath, raw: pollRaw };
+          return {
+            ok: true,
+            shipmentNumber: shipmentNumber || null,
+            batchId,
+            referenceId: ref,
+            labelPublicPath,
+            locationHeader: location || null,
+            createRequest: payload,
+            raw: pollRaw,
+          };
         }
         if (state === "ERROR" || state === "FAILED") {
           return { ok: false, reason: "ppl_api_batch_failed", raw: pollRaw };
@@ -653,7 +674,10 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
         ok: true,
         shipmentNumber: fallbackNum || null,
         batchId: batchId || null,
+        referenceId: ref,
         labelPublicPath: null,
+        locationHeader: location || null,
+        createRequest: payload,
         raw,
       };
     }
@@ -673,7 +697,10 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       ok: true,
       shipmentNumber: shipmentNumber || null,
       batchId: batchId || null,
+      referenceId: ref,
       labelPublicPath: null,
+      locationHeader: location || null,
+      createRequest: payload,
       raw,
     };
   } catch (error) {
@@ -691,7 +718,7 @@ export async function fetchPplBatchStatus(
   const state = String(rec.state || rec.status || rec.importState || "").toUpperCase();
   const candidate =
     extractShipmentNumberFromAny(rec) || String(rec.shipmentNumber || rec.parcelNumber || "").trim() || "";
-  const trackingNumber = /^\d{11}$/.test(candidate) ? candidate : null;
+  const trackingNumber = /^\d{8,20}$/.test(candidate) ? candidate : null;
   return { ok: true, data: { state, trackingNumber, raw: rec } };
 }
 
@@ -708,7 +735,7 @@ export async function fetchPplShipmentInfoByNumber(
   if (!result.ok) return result;
   const first = Array.isArray(result.data) && result.data.length > 0 ? toRecord(result.data[0]) : {};
   const candidate = String(first.shipmentNumber || number || "").trim();
-  const trackingNumber = /^\d{11}$/.test(candidate) ? candidate : null;
+  const trackingNumber = /^\d{8,20}$/.test(candidate) ? candidate : null;
   const state = String(first.shipmentState || first.state || "").toUpperCase();
   return { ok: true, data: { state, trackingNumber, raw: first } };
 }
@@ -723,6 +750,32 @@ export async function fetchPplShipmentInfoByCustomerReference(
     Limit: 50,
     Offset: 0,
   });
+  if (!result.ok) return result;
+  const first = Array.isArray(result.data) && result.data.length > 0 ? toRecord(result.data[0]) : {};
+  const candidate = String(first.shipmentNumber || first.parcelNumber || "").trim();
+  const trackingNumber = /^\d{8,20}$/.test(candidate) ? candidate : null;
+  const state = String(first.shipmentState || first.state || "").toUpperCase();
+  return { ok: true, data: { state, trackingNumber, raw: first } };
+}
+
+export async function fetchPplShipmentByFilters(params: {
+  customerReference?: string | null;
+  variableSymbol?: string | null;
+  dateFromIso?: string | null;
+  dateToIso?: string | null;
+}): Promise<PplGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
+  const query: Record<string, string | number | Array<string | number>> = {
+    Limit: 50,
+    Offset: 0,
+  };
+  const customerReference = String(params.customerReference || "").trim();
+  const variableSymbol = String(params.variableSymbol || "").trim();
+  if (customerReference) query.CustomerReferences = [customerReference];
+  if (variableSymbol) query.VariableSymbols = [variableSymbol];
+  if (params.dateFromIso) query.DateFrom = params.dateFromIso;
+  if (params.dateToIso) query.DateTo = params.dateToIso;
+
+  const result = await pplGetJson<Array<Record<string, unknown>>>("/shipment", query);
   if (!result.ok) return result;
   const first = Array.isArray(result.data) && result.data.length > 0 ? toRecord(result.data[0]) : {};
   const candidate = String(first.shipmentNumber || first.parcelNumber || "").trim();
