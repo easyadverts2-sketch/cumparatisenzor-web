@@ -32,11 +32,11 @@ import {
   validatePplShipmentBelongsToOrder,
 } from "./ppl-tracking";
 import {
-  buildDpdLabelForShipment,
-  buildDpdBulkLabel,
+  cancelDpdPickup,
   cancelDpdShipment,
   createDpdPickup,
   createDpdShipment,
+  fetchDpdLabelPdfForShipments,
   fetchDpdShipmentStatus,
 } from "./dpd";
 import {
@@ -324,6 +324,20 @@ function toOrder(row: Row): Order {
     pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
     dpdShipmentId: row.dpd_shipment_id != null ? String(row.dpd_shipment_id) : null,
     dpdShipmentStatus: row.dpd_shipment_status != null ? String(row.dpd_shipment_status) : null,
+    dpdLastHttpStatus: row.dpd_last_http_status != null ? Number(row.dpd_last_http_status) : null,
+    dpdLastError: row.dpd_last_error != null ? String(row.dpd_last_error) : null,
+    dpdRawCreateRequest: row.dpd_raw_create_request != null ? String(row.dpd_raw_create_request) : null,
+    dpdRawCreateResponse: row.dpd_raw_create_response != null ? String(row.dpd_raw_create_response) : null,
+    dpdRawStatusResponse: row.dpd_raw_status_response != null ? String(row.dpd_raw_status_response) : null,
+    dpdRawLabelResponse: row.dpd_raw_label_response != null ? String(row.dpd_raw_label_response) : null,
+    dpdRawCancelResponse: row.dpd_raw_cancel_response != null ? String(row.dpd_raw_cancel_response) : null,
+    dpdCancelMode: row.dpd_cancel_mode != null ? String(row.dpd_cancel_mode) : null,
+    dpdCancelAttempted: row.dpd_cancel_attempted != null ? Boolean(row.dpd_cancel_attempted) : null,
+    dpdCancelHttpStatus: row.dpd_cancel_http_status != null ? Number(row.dpd_cancel_http_status) : null,
+    dpdCancelResponse: row.dpd_cancel_response != null ? String(row.dpd_cancel_response) : null,
+    dpdLocalResetDone: row.dpd_local_reset_done != null ? Boolean(row.dpd_local_reset_done) : null,
+    dpdTrackingSource: row.dpd_tracking_source != null ? String(row.dpd_tracking_source) : null,
+    dpdTrackingJsonPath: row.dpd_tracking_json_path != null ? String(row.dpd_tracking_json_path) : null,
     dpdLabelPath: row.dpd_label_path != null ? String(row.dpd_label_path) : null,
     trackingNumber: row.tracking_number != null ? String(row.tracking_number) : null,
     additionalNotes:
@@ -716,6 +730,76 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
   if (dpdLabelCol.length === 0) {
     await sql`alter table orders add column dpd_label_path text`;
   }
+  const dpdLastHttpCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_last_http_status'
+  `;
+  if (dpdLastHttpCol.length === 0) await sql`alter table orders add column dpd_last_http_status integer`;
+  const dpdLastErrCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_last_error'
+  `;
+  if (dpdLastErrCol.length === 0) await sql`alter table orders add column dpd_last_error text`;
+  const dpdRawCreateReqCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_raw_create_request'
+  `;
+  if (dpdRawCreateReqCol.length === 0) await sql`alter table orders add column dpd_raw_create_request text`;
+  const dpdRawCreateResCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_raw_create_response'
+  `;
+  if (dpdRawCreateResCol.length === 0) await sql`alter table orders add column dpd_raw_create_response text`;
+  const dpdRawStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_raw_status_response'
+  `;
+  if (dpdRawStatusCol.length === 0) await sql`alter table orders add column dpd_raw_status_response text`;
+  const dpdRawLabelCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_raw_label_response'
+  `;
+  if (dpdRawLabelCol.length === 0) await sql`alter table orders add column dpd_raw_label_response text`;
+  const dpdRawCancelCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_raw_cancel_response'
+  `;
+  if (dpdRawCancelCol.length === 0) await sql`alter table orders add column dpd_raw_cancel_response text`;
+  const dpdCancelModeCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_cancel_mode'
+  `;
+  if (dpdCancelModeCol.length === 0) await sql`alter table orders add column dpd_cancel_mode text`;
+  const dpdCancelAttemptedCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_cancel_attempted'
+  `;
+  if (dpdCancelAttemptedCol.length === 0) await sql`alter table orders add column dpd_cancel_attempted boolean`;
+  const dpdCancelHttpStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_cancel_http_status'
+  `;
+  if (dpdCancelHttpStatusCol.length === 0) await sql`alter table orders add column dpd_cancel_http_status integer`;
+  const dpdCancelResponseCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_cancel_response'
+  `;
+  if (dpdCancelResponseCol.length === 0) await sql`alter table orders add column dpd_cancel_response text`;
+  const dpdLocalResetDoneCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_local_reset_done'
+  `;
+  if (dpdLocalResetDoneCol.length === 0) await sql`alter table orders add column dpd_local_reset_done boolean`;
+  const dpdTrackingSourceCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_tracking_source'
+  `;
+  if (dpdTrackingSourceCol.length === 0) await sql`alter table orders add column dpd_tracking_source text`;
+  const dpdTrackingPathCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'dpd_tracking_json_path'
+  `;
+  if (dpdTrackingPathCol.length === 0) await sql`alter table orders add column dpd_tracking_json_path text`;
 }
 
 async function migrateOrderAdditionalNotes(sql: SqlClient) {
@@ -931,13 +1015,19 @@ async function createShipmentForOrder(
   if (order.shippingCarrier === "DPD") {
     const dpd = await createDpdShipment(order, market);
     if (dpd.ok) {
+      const tracking = numericTrackingOrNull(dpd.trackingNumber) || numericTrackingOrNull(order.trackingNumber);
       await sql`
         update orders
         set
           dpd_shipment_id = ${dpd.shipmentId},
-          dpd_shipment_status = 'CREATED',
-          tracking_number = ${numericTrackingOrNull(dpd.shipmentId)},
-          dpd_label_path = ${dpd.labelPublicPath || null}
+          dpd_shipment_status = ${tracking ? "TRACKING_READY" : "CREATED"},
+          tracking_number = ${tracking},
+          dpd_last_http_status = ${dpd.httpStatus || 201},
+          dpd_last_error = null,
+          dpd_raw_create_request = ${jsonForDb(dpd.createRequest || null)},
+          dpd_raw_create_response = ${jsonForDb(dpd.raw || null)},
+          dpd_tracking_source = ${tracking ? "create_response" : null},
+          dpd_tracking_json_path = ${tracking ? "auto:parcelLabelNumber|parcelNumber|trackingNumber" : null}
         where id = ${order.id}
       `;
       await insertAuditLog(sql, {
@@ -945,7 +1035,7 @@ async function createShipmentForOrder(
         action: "DPD_SHIPMENT_CREATED",
         orderId: order.id,
         orderNumber: order.orderNumber,
-        details: `${auditDetailPrefix || ""} shipment=${dpd.shipmentId} label=${dpd.labelPublicPath || "-"}`.trim(),
+        details: `${auditDetailPrefix || ""} shipment=${dpd.shipmentId} tracking=${tracking || "-"}`.trim(),
       });
       const withTracking = await getOrderById(order.id, market);
       if (withTracking?.trackingNumber && withTracking.paymentMethod !== "COD") {
@@ -1738,6 +1828,9 @@ export async function triggerShipmentCreation(orderId: string, market: Market = 
     const refreshed = await syncPplBatch(orderId, market);
     return refreshed.ok;
   }
+  if (order.shippingCarrier === "DPD" && (order.dpdShipmentId || order.trackingNumber)) {
+    return refreshDpdShipment(orderId, market);
+  }
   const senderFrom = senderEmailForMarket(market);
   await createShipmentForOrder(sql, order, market, senderFrom, "manual_debug_trigger");
   return true;
@@ -2289,14 +2382,28 @@ export async function refreshDpdShipment(orderId: string, market: Market = "RO")
   if (!order?.dpdShipmentId) return false;
   const res = await fetchDpdShipmentStatus(order.dpdShipmentId);
   if (!res.ok) {
-    await sql`update orders set dpd_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)} where id = ${orderId}`;
+    await sql`
+      update orders
+      set
+        dpd_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)},
+        dpd_last_http_status = ${res.httpStatus || null},
+        dpd_last_error = ${shipmentErrorStatus(res.reason, res.raw)},
+        dpd_raw_status_response = ${jsonForDb(res.raw || null)}
+      where id = ${orderId}
+    `;
     return false;
   }
+  const resolvedTracking = numericTrackingOrNull(res.data.trackingNumber) || numericTrackingOrNull(order.trackingNumber) || null;
   await sql`
     update orders
     set
       dpd_shipment_status = ${res.data.state || "UNKNOWN"},
-      tracking_number = ${numericTrackingOrNull(res.data.trackingNumber) || numericTrackingOrNull(order.trackingNumber)}
+      tracking_number = ${resolvedTracking},
+      dpd_last_http_status = 200,
+      dpd_last_error = null,
+      dpd_raw_status_response = ${jsonForDb(res.data.raw || null)},
+      dpd_tracking_source = ${resolvedTracking ? "shipment_status" : order.dpdTrackingSource || null},
+      dpd_tracking_json_path = ${resolvedTracking ? "auto:parcelLabelNumber|parcelNumber|trackingNumber" : order.dpdTrackingJsonPath || null}
     where id = ${orderId}
   `;
   return true;
@@ -2305,40 +2412,115 @@ export async function refreshDpdShipment(orderId: string, market: Market = "RO")
 export async function cancelDpdShipmentForOrder(orderId: string, market: Market = "RO") {
   const sql = getSql();
   await ensureSchema(sql);
-  const order = await getOrderById(orderId, market);
+  let order = await getOrderById(orderId, market);
   if (!order?.dpdShipmentId) return false;
+  await refreshDpdShipment(orderId, market).catch(() => undefined);
+  order = (await getOrderById(orderId, market)) || order;
+  if (!order.dpdShipmentId) return false;
   const cancelled = await cancelDpdShipment(order.dpdShipmentId);
   if (!cancelled.ok) {
-    await sql`update orders set dpd_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)} where id = ${orderId}`;
+    await sql`
+      update orders
+      set
+        dpd_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)},
+        dpd_cancel_mode = 'dpd_cancel_failed_no_local_reset',
+        dpd_cancel_attempted = true,
+        dpd_cancel_http_status = ${cancelled.httpStatus || null},
+        dpd_cancel_response = ${jsonForDb(cancelled.raw || cancelled.reason)},
+        dpd_local_reset_done = false,
+        dpd_last_http_status = ${cancelled.httpStatus || null},
+        dpd_last_error = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)},
+        dpd_raw_cancel_response = ${jsonForDb(cancelled.raw || null)}
+      where id = ${orderId}
+    `;
     return false;
   }
-  await sql`update orders set dpd_shipment_status = 'CANCELLED' where id = ${orderId}`;
-  return true;
-}
-
-export async function deleteDpdShipmentForOrder(orderId: string, market: Market = "RO") {
-  const sql = getSql();
-  await ensureSchema(sql);
-  const order = await getOrderById(orderId, market);
-  if (!order) return false;
-  if (order.dpdShipmentId) {
-    await cancelDpdShipment(order.dpdShipmentId).catch(() => ({ ok: false as const }));
-  }
+  await sql`
+    update orders
+    set
+      dpd_shipment_status = 'CANCELLED',
+      dpd_cancel_mode = 'dpd_cancel_then_local_reset',
+      dpd_cancel_attempted = true,
+      dpd_cancel_http_status = 200,
+      dpd_cancel_response = ${jsonForDb(cancelled.data || null)},
+      dpd_local_reset_done = false,
+      dpd_last_http_status = 200,
+      dpd_last_error = null,
+      dpd_raw_cancel_response = ${jsonForDb(cancelled.data || null)}
+    where id = ${orderId}
+  `;
   await sql`
     update orders
     set
       dpd_shipment_id = null,
       dpd_shipment_status = null,
-      dpd_label_path = null
+      dpd_label_path = null,
+      dpd_last_http_status = null,
+      dpd_last_error = null,
+      dpd_raw_create_request = null,
+      dpd_raw_create_response = null,
+      dpd_raw_status_response = null,
+      dpd_raw_label_response = null,
+      tracking_number = null,
+      dpd_tracking_source = null,
+      dpd_tracking_json_path = null,
+      dpd_local_reset_done = true
     where id = ${orderId}
   `;
   return true;
 }
 
-export async function orderDpdPickup(market: Market = "RO", note = "") {
+export async function resetDpdShipmentForOrder(orderId: string, market: Market = "RO") {
   const sql = getSql();
   await ensureSchema(sql);
-  const result = await createDpdPickup(market, note);
+  const order = await getOrderById(orderId, market);
+  if (!order) return false;
+  await sql`
+    update orders
+    set
+      dpd_shipment_id = null,
+      dpd_shipment_status = null,
+      dpd_label_path = null,
+      dpd_last_http_status = null,
+      dpd_last_error = null,
+      dpd_raw_create_request = null,
+      dpd_raw_create_response = null,
+      dpd_raw_status_response = null,
+      dpd_raw_label_response = null,
+      dpd_raw_cancel_response = null,
+      dpd_cancel_mode = 'local_reset_only',
+      dpd_cancel_attempted = false,
+      dpd_cancel_http_status = null,
+      dpd_cancel_response = null,
+      dpd_local_reset_done = true,
+      tracking_number = null,
+      dpd_tracking_source = null,
+      dpd_tracking_json_path = null
+    where id = ${orderId}
+  `;
+  return true;
+}
+
+export async function deleteDpdShipmentForOrder(orderId: string, market: Market = "RO") {
+  return resetDpdShipmentForOrder(orderId, market);
+}
+
+export async function orderDpdPickup(
+  market: Market = "RO",
+  input: {
+    pickupDate: string;
+    fromTime: string;
+    toTime: string;
+    note?: string;
+    contactName: string;
+    phone: string;
+    parcelCount: number;
+    totalWeight: number;
+  }
+) {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const result = await createDpdPickup(market, input);
   if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
   await sql`
     insert into dpd_pickups (id, market, pickup_id, pickup_date, note, status)
@@ -2347,7 +2529,7 @@ export async function orderDpdPickup(market: Market = "RO", note = "") {
       ${market},
       ${result.data.pickupId},
       ${result.data.pickupDate},
-      ${note.slice(0, 300) || null},
+      ${String(input.note || "").slice(0, 300) || null},
       'ORDERED'
     )
   `;
@@ -2373,10 +2555,27 @@ export async function getDpdPickups(market: Market = "RO", limit = 50) {
   }));
 }
 
+export async function cancelDpdPickupOrder(pickupId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const cleanId = String(pickupId || "").trim();
+  if (!cleanId) return { ok: false, message: "Chybi pickupId" };
+  const res = await cancelDpdPickup(cleanId);
+  if (!res.ok) {
+    return { ok: false, message: shipmentErrorStatus(res.reason, res.raw) };
+  }
+  await sql`
+    update dpd_pickups
+    set status = 'CANCELLED'
+    where market = ${market} and pickup_id = ${cleanId}
+  `;
+  return { ok: true, message: `DPD svoz stornovan: ${cleanId}` };
+}
+
 export async function getDpdBulkLabelForOrders(orderIds: string[], market: Market = "RO") {
   const sql = getSql();
   await ensureSchema(sql);
-  if (orderIds.length === 0) return null;
+  if (orderIds.length === 0) return { ok: false as const, reason: "no_orders_selected", failedOrders: [] as Array<{ orderId: string; reason: string }> };
   const rows = await sql`
     select * from orders
     where market = ${market}
@@ -2387,10 +2586,39 @@ export async function getDpdBulkLabelForOrders(orderIds: string[], market: Marke
   const shipmentIds = rows
     .map((r) => String((r as Row).dpd_shipment_id || "").trim())
     .filter(Boolean);
-  if (shipmentIds.length === 0) return null;
-  const built = await buildDpdBulkLabel(shipmentIds, market);
-  if (!built.ok) return null;
-  return built.data;
+  const missing = orderIds.filter((id) => !rows.some((r) => String((r as Row).id) === id));
+  if (missing.length > 0) {
+    return {
+      ok: false as const,
+      reason: "bulk_requires_all_orders_with_dpd_shipment_id",
+      failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+      endpointAttemptResults: null,
+    };
+  }
+  if (shipmentIds.length === 0) {
+    return {
+      ok: false as const,
+      reason: "missing_dpd_shipment_ids",
+      failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+    };
+  }
+  const labelRes = await fetchDpdLabelPdfForShipments(shipmentIds);
+  if (!labelRes.ok) {
+    return {
+      ok: false as const,
+      reason: labelRes.reason,
+      failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+      endpointAttemptResults: labelRes.raw,
+    };
+  }
+  return {
+    ok: true as const,
+    bytes: labelRes.data.bytes,
+    contentType: labelRes.data.contentType,
+    failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+    endpointAttemptResults: labelRes.data.attempt,
+    fileName: `dpd-bulk-labels-${new Date().toISOString().replace(/[:.]/g, "-")}.pdf`,
+  };
 }
 
 export async function getPplBulkLabelForOrders(orderIds: string[], market: Market = "RO") {
@@ -2458,10 +2686,32 @@ export async function regenerateDpdLabelForOrder(orderId: string, market: Market
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
   if (!order?.dpdShipmentId) return null;
-  const built = await buildDpdLabelForShipment(order.dpdShipmentId, order.orderNumber, market);
-  if (!built.ok) return null;
-  await sql`update orders set dpd_label_path = ${built.data} where id = ${orderId}`;
-  return built.data;
+  const built = await fetchDpdLabelPdfForShipments([order.dpdShipmentId]);
+  if (!built.ok) {
+    await sql`
+      update orders
+      set
+        dpd_last_http_status = ${built.httpStatus || null},
+        dpd_last_error = ${shipmentErrorStatus(built.reason, built.raw)},
+        dpd_raw_label_response = ${jsonForDb({ ok: false, reason: built.reason, raw: built.raw })}
+      where id = ${orderId}
+    `;
+    return null;
+  }
+  await sql`
+    update orders
+    set
+      dpd_last_http_status = 200,
+      dpd_last_error = null,
+      dpd_raw_label_response = ${jsonForDb({
+        ok: true,
+        contentType: built.data.contentType,
+        contentLength: built.data.bytes.length,
+        endpointAttemptResults: built.data.attempt,
+      })}
+    where id = ${orderId}
+  `;
+  return built.data.bytes;
 }
 
 export async function getRecentAdminAuditLogs(market: Market = "RO", limit = 25) {

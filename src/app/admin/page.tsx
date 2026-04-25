@@ -2,11 +2,10 @@ import { AdminOrdersList } from "@/components/admin-orders-list";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import {
   autoCancelExpiredOrders,
+  cancelDpdPickupOrder,
   cancelDpdShipmentForOrder,
   cancelPplShipmentForOrder,
-  deleteDpdShipmentForOrder,
   debugFindPplTrackingNumber,
-  getDpdBulkLabelForOrders,
   getDpdPickups,
   getDpdShipmentsAdmin,
   getPplPickups,
@@ -14,9 +13,9 @@ import {
   getPplShipmentsAdmin,
   orderDpdPickup,
   orderPplPickup,
-  regenerateDpdLabelForOrder,
   refreshDpdShipment,
   refreshPplShipment,
+  resetDpdShipmentForOrder,
   resetPplShipmentForOrder,
   readStore,
   updateOrderStatus,
@@ -137,38 +136,33 @@ async function deleteDpdShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
   if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
-  const ok = await deleteDpdShipmentForOrder(orderId, "RO");
+  const ok = await resetDpdShipmentForOrder(orderId, "RO");
   revalidatePath("/admin");
-  redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+zasilka+smazana" : "Smazani+DPD+zasilky+selhalo"}`);
-}
-
-async function regenerateDpdLabelAction(formData: FormData) {
-  "use server";
-  const orderId = String(formData.get("orderId") || "");
-  if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
-  const path = await regenerateDpdLabelForOrder(orderId, "RO");
-  revalidatePath("/admin");
-  redirect(`/admin?ok=${path ? "1" : "0"}&msg=${path ? "DPD+stitek+vygenerovan" : "DPD+stitek+nelze+vygenerovat"}`);
+  redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+udaje+lokalne+vycisteny" : "Lokalni+reset+DPD+selhal"}`);
 }
 
 async function orderDpdPickupAction(formData: FormData) {
   "use server";
-  const note = String(formData.get("note") || "");
-  const result = await orderDpdPickup("RO", note);
+  const result = await orderDpdPickup("RO", {
+    pickupDate: String(formData.get("pickupDate") || "").trim(),
+    fromTime: String(formData.get("fromTime") || "").trim(),
+    toTime: String(formData.get("toTime") || "").trim(),
+    note: String(formData.get("note") || "").trim(),
+    contactName: String(formData.get("contactName") || "").trim(),
+    phone: String(formData.get("phone") || "").trim(),
+    parcelCount: Number(formData.get("parcelCount") || 1),
+    totalWeight: Number(formData.get("totalWeight") || 1),
+  });
   revalidatePath("/admin");
   redirect(`/admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
 }
 
-async function bulkDpdLabelsAction(formData: FormData) {
+async function cancelDpdPickupAction(formData: FormData) {
   "use server";
-  const orderIds = formData
-    .getAll("orderIds")
-    .map((v) => String(v || "").trim())
-    .filter(Boolean);
-  const path = await getDpdBulkLabelForOrders(orderIds, "RO");
+  const pickupId = String(formData.get("pickupId") || "").trim();
+  const result = await cancelDpdPickupOrder(pickupId, "RO");
   revalidatePath("/admin");
-  if (path) revalidatePath(path);
-  redirect(`/admin?ok=${path ? "1" : "0"}&msg=${path ? "DPD+bulk+stitky+vygenerovany" : "DPD+bulk+stitky+selhaly"}`);
+  redirect(`/admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
 }
 
 async function bulkPplLabelsAction(formData: FormData) {
@@ -365,31 +359,66 @@ export default async function AdminPage({
 
       <h2 className="mt-12 text-2xl font-semibold">DPD zásilky a svozy</h2>
       <form action={orderDpdPickupAction} className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+        <label className="min-w-[150px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Datum svozu</span>
+          <input name="pickupDate" type="date" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[120px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Čas od</span>
+          <input name="fromTime" type="time" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[120px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Čas do</span>
+          <input name="toTime" type="time" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[180px] flex-1 text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Kontaktní osoba</span>
+          <input name="contactName" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[160px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Telefon</span>
+          <input name="phone" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[120px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Počet balíků</span>
+          <input name="parcelCount" type="number" min={1} defaultValue={1} className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[120px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Váha (kg)</span>
+          <input name="totalWeight" type="number" min={0.1} step={0.1} defaultValue={1} className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
         <label className="min-w-[260px] flex-1 text-sm">
-          <span className="mb-1 block text-[#1a4d47]">Poznámka pro DPD svoz (volitelné)</span>
-          <input name="note" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Např. svoz zítra 10:00-14:00" />
+          <span className="mb-1 block text-[#1a4d47]">Poznámka pro řidiče</span>
+          <input name="note" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Volitelně" />
         </label>
         <button className="rounded-lg bg-[#6f2147] px-4 py-2 text-white">Objednat DPD svoz</button>
       </form>
       <div className="mt-3 space-y-1 text-sm text-[#1a4d47]">
         {dpdPickups.slice(0, 5).map((p) => (
-          <p key={p.id}>
+          <form key={p.id} action={cancelDpdPickupAction} className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="pickupId" value={p.pickupId} />
             {new Date(p.createdAt).toLocaleString("cs-CZ")} · {p.pickupId}
             {p.pickupDate ? ` · ${p.pickupDate}` : ""} · {p.status}
             {p.note ? ` · ${p.note}` : ""}
-          </p>
+            <ConfirmSubmitButton
+              className="rounded border px-2 py-1"
+              label="Stornovat svoz v DPD"
+              confirmMessage="Tato akce se pokusi stornovat svoz v DPD. Pokracovat?"
+            />
+          </form>
         ))}
       </div>
       <form
         id="dpd-bulk-form-ro"
-        action={bulkDpdLabelsAction}
+        action="/api/admin/dpd-bulk-label"
+        method="get"
         className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3"
       >
         <p className="min-w-[320px] flex-1 text-sm text-[#1a4d47]">
           Vyber objednavky pres checkbox ve sloupci &quot;Vybrat&quot; a klikni na bulk tisk.
         </p>
         <button className="rounded-lg bg-[#6f2147] px-4 py-2 text-white">
-          Vygenerovat bulk DPD štítky
+          Stáhnout bulk DPD štítky
         </button>
       </form>
       <div className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white">
@@ -426,20 +455,30 @@ export default async function AdminPage({
                 <td className="px-3 py-2">{validTracking(o.trackingNumber || o.dpdShipmentId)}</td>
                 <td className="px-3 py-2">{o.dpdShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
-                  {o.dpdLabelPath ? (
-                    <a href={o.dpdLabelPath} target="_blank" rel="noreferrer" className="text-[#6f2147] hover:underline">
-                      Tisk stitku
-                    </a>
-                  ) : (
-                    "-"
-                  )}
+                  <a href={`/api/admin/dpd-label?orderId=${encodeURIComponent(o.id)}`} className="text-[#6f2147] hover:underline">
+                    Stáhnout DPD štítek
+                  </a>
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    <form action={regenerateDpdLabelAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Generovat stitek</button></form>
-                    <form action={refreshDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
-                    <form action={cancelDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
-                    <form action={deleteDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Smazat zasilku</button></form>
+                    <form action={refreshDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh DPD</button></form>
+                    <form action={cancelDpdShipmentAction}>
+                      <input type="hidden" name="orderId" value={o.id} />
+                      <ConfirmSubmitButton
+                        className="rounded border px-2 py-1"
+                        label="Stornovat v DPD"
+                        confirmMessage="Tato akce se pokusi stornovat zasilku v DPD. Po uspechu se lokalne vycisti DPD data."
+                      />
+                    </form>
+                    <form action={deleteDpdShipmentAction}>
+                      <input type="hidden" name="orderId" value={o.id} />
+                      <ConfirmSubmitButton
+                        className="rounded border px-2 py-1"
+                        label="Lokální reset DPD"
+                        confirmMessage="Tato akce pouze vycisti lokalni DPD data v e-shopu. Zasilka v DPD tim nemusi byt zrusena."
+                      />
+                    </form>
+                    <a href={`/api/admin/dpd-diagnostic?orderId=${encodeURIComponent(o.id)}`} target="_blank" rel="noreferrer" className="rounded border px-2 py-1">Diagnostika JSON</a>
                   </div>
                 </td>
               </tr>
