@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 
 function validTracking(value: string | null | undefined) {
   const raw = String(value || "").trim();
-  return /^\d{11}$/.test(raw) ? raw : "-";
+  return /^\d{8,20}$/.test(raw) ? raw : "-";
 }
 
 async function updateStatus(formData: FormData) {
@@ -307,13 +307,14 @@ export default async function AdminPage({
                 <td className="px-3 py-2">{validTracking(o.trackingNumber || o.pplShipmentId)}</td>
                 <td className="px-3 py-2">{o.pplShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
-                  {o.pplLabelPath ? (
-                    <a href={o.pplLabelPath} target="_blank" rel="noreferrer" className="text-[#0f766e] hover:underline">
-                      Tisk stitku
-                    </a>
-                  ) : (
-                    "-"
-                  )}
+                  <a
+                    href={`/api/admin/ppl-label?orderId=${encodeURIComponent(o.id)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#0f766e] hover:underline"
+                  >
+                    Tisk stitku
+                  </a>
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">

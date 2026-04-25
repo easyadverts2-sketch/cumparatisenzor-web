@@ -16,8 +16,10 @@ import {
   cancelPplShipment,
   createPplPickup,
   createPplShipment,
+  fetchPplBatchLabelPdf,
   fetchPplBatchStatus,
   fetchPplOrderInfoByCustomerReference,
+  fetchPplShipmentInfoByCustomerReference,
   fetchPplShipmentInfoByNumber,
 } from "./ppl";
 import {
@@ -376,6 +378,12 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
   if (pplBatchCol.length === 0) {
     await sql`alter table orders add column ppl_batch_id text`;
   }
+  await sql`
+    update orders
+    set ppl_batch_id = tracking_number, tracking_number = null
+    where tracking_number ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+      and (ppl_batch_id is null or ppl_batch_id = '')
+  `;
 
   const pplStatusCol = await sql`
     select column_name from information_schema.columns
@@ -669,6 +677,29 @@ async function createShipmentForOrder(
       details: `${auditDetailPrefix || ""} ${dpdErr}`.trim().slice(0, 4000),
     });
   }
+}
+
+async function savePplLabelFromBatch(
+  sql: SqlClient,
+  order: Order,
+  market: Market
+): Promise<string | null> {
+  const batchId = order.pplBatchId || (isUuidLike(order.pplShipmentId) ? order.pplShipmentId : null);
+  if (!batchId) return order.pplLabelPath || null;
+  const labelRes = await fetchPplBatchLabelPdf(batchId);
+  if (!labelRes.ok) return order.pplLabelPath || null;
+  const relDir = process.env.PPL_LABEL_SAVE_DIR?.trim() || "public/ppl-labels";
+  const absDir = path.resolve(process.cwd(), relDir);
+  await mkdir(absDir, { recursive: true });
+  const fileName = `${market.toLowerCase()}-${order.orderNumber}-${Date.now()}.pdf`;
+  const outPath = path.join(absDir, fileName);
+  await writeFile(outPath, labelRes.data.bytes);
+  const publicPath = relDir.startsWith("public/")
+    ? `/${relDir.replace(/^public\//, "")}/${fileName}`
+    : null;
+  if (!publicPath) return order.pplLabelPath || null;
+  await sql`update orders set ppl_label_path = ${publicPath} where id = ${order.id}`;
+  return publicPath;
 }
 
 async function nextInvoiceSequence(sql: SqlClient, market: Market, kind: InvoiceKind): Promise<number> {
@@ -997,11 +1028,9 @@ export async function createOrder(input: {
             set status = 'ORDERED_PPLRDY'
             where id = ${order.id}
           `;
-          await createShipmentForOrder(sql, order, market, senderFrom, "immediate_cod_shipment");
-          const refreshedForMail = await getOrderById(order.id, market);
-          if (refreshedForMail) {
-            customerMailOrder = refreshedForMail;
-          }
+          void createShipmentForOrder(sql, order, market, senderFrom, "immediate_cod_shipment_async").catch(
+            () => undefined
+          );
         }
       }
 
@@ -1322,7 +1351,7 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
       ? statusFromBatch
       : knownShipmentNumber
         ? await fetchPplShipmentInfoByNumber(knownShipmentNumber)
-        : statusFromBatch || { ok: false as const, reason: "missing_ppl_identifiers" };
+        : await fetchPplShipmentInfoByCustomerReference(customerRef);
   let fallbackTracking: string | null = null;
   if (!res.ok || !numericTrackingOrNull(res.data.trackingNumber)) {
     const fromOrder = await fetchPplOrderInfoByCustomerReference(customerRef);
@@ -1360,11 +1389,24 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
       }
     where id = ${orderId}
   `;
+  const refreshedOrder = await getOrderById(orderId, market);
+  if (refreshedOrder && !refreshedOrder.pplLabelPath) {
+    await savePplLabelFromBatch(sql, refreshedOrder, market).catch(() => null);
+  }
   return Boolean(
     numericTrackingOrNull(res.data.trackingNumber) ||
       fallbackTracking ||
       numericTrackingOrNull(order.trackingNumber)
   );
+}
+
+export async function ensurePplLabelForOrder(orderId: string, market: Market = "RO"): Promise<string | null> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) return null;
+  if (order.pplLabelPath) return order.pplLabelPath;
+  return savePplLabelFromBatch(sql, order, market);
 }
 
 export async function cancelPplShipmentForOrder(orderId: string, market: Market = "RO") {
@@ -1562,6 +1604,18 @@ export async function getPplBulkLabelForOrders(orderIds: string[], market: Marke
   const sql = getSql();
   await ensureSchema(sql);
   if (orderIds.length === 0) return null;
+  const selectedRows = await sql`
+    select * from orders
+    where market = ${market}
+      and id = any(${orderIds})
+      and shipping_carrier = 'PPL'
+  `;
+  for (const row of selectedRows) {
+    const order = toOrder(row as unknown as Row);
+    if (!order.pplLabelPath) {
+      await savePplLabelFromBatch(sql, order, market).catch(() => null);
+    }
+  }
   const rows = await sql`
     select * from orders
     where market = ${market}

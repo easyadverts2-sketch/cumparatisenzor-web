@@ -66,6 +66,19 @@ function extractShipmentNumberFromAny(source: Record<string, unknown>): string {
   return "";
 }
 
+function dedupeStrings(values: Array<string | null | undefined>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const s = String(value || "").trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
 function pplLabelReturnEmail(market: Market): string {
   if (market === "HU") {
     return (
@@ -466,6 +479,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       {
         productType,
         referenceId: ref,
+        customerReference: ref,
         note: [order.additionalNotes?.trim(), `Order ${ref}`].filter(Boolean).join(" | ").slice(0, 250),
         depot: process.env.PPL_DEPOT || undefined,
         recipient: {
@@ -591,9 +605,9 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 
     // CPL async mode: poll status endpoint by batch ID.
     if (batchId) {
-      const maxPolls = Number(process.env.PPL_API_MAX_POLLS || 10);
+      const maxPolls = Number(process.env.PPL_API_CREATE_SYNC_POLLS || 0);
       const delayMs = Number(process.env.PPL_API_POLL_DELAY_MS || 900);
-      for (let i = 0; i < maxPolls; i += 1) {
+      for (let i = 0; i < Math.max(0, maxPolls); i += 1) {
         const pollUrl = location.startsWith("http")
           ? location
           : `${normalizedBase}${pollPath}/${batchId}`;
@@ -699,6 +713,24 @@ export async function fetchPplShipmentInfoByNumber(
   return { ok: true, data: { state, trackingNumber, raw: first } };
 }
 
+export async function fetchPplShipmentInfoByCustomerReference(
+  customerReference: string
+): Promise<PplGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
+  const ref = customerReference.trim();
+  if (!ref) return { ok: false, reason: "missing_customer_reference" };
+  const result = await pplGetJson<Array<Record<string, unknown>>>("/shipment", {
+    CustomerReferences: [ref],
+    Limit: 50,
+    Offset: 0,
+  });
+  if (!result.ok) return result;
+  const first = Array.isArray(result.data) && result.data.length > 0 ? toRecord(result.data[0]) : {};
+  const candidate = String(first.shipmentNumber || first.parcelNumber || "").trim();
+  const trackingNumber = /^\d{8,20}$/.test(candidate) ? candidate : null;
+  const state = String(first.shipmentState || first.state || "").toUpperCase();
+  return { ok: true, data: { state, trackingNumber, raw: first } };
+}
+
 export async function cancelPplShipment(shipmentNumber: string): Promise<PplGenericResult<Record<string, unknown>>> {
   const path = process.env.PPL_API_CANCEL_PATH?.trim() || "/shipment/{id}/cancel";
   return pplJsonRequest<Record<string, unknown>>("POST", path, {}, shipmentNumber);
@@ -779,20 +811,55 @@ export async function fetchPplOrderInfoByCustomerReference(
 ): Promise<PplGenericResult<{ shipmentNumbers: string[]; raw: unknown }>> {
   const ref = customerReference.trim();
   if (!ref) return { ok: false, reason: "missing_customer_reference" };
-  const result = await pplGetJson<Array<Record<string, unknown>>>("/order", {
-    CustomerReferences: [ref],
-    Limit: 50,
-    Offset: 0,
-  });
-  if (!result.ok) return result;
-  const list = Array.isArray(result.data) ? result.data : [];
-  const shipmentNumbers: string[] = [];
-  for (const order of list) {
-    const nums = Array.isArray(order.shipmentNumbers) ? order.shipmentNumbers : [];
-    for (const n of nums) {
-      const s = String(n || "").trim();
-      if (s) shipmentNumbers.push(s);
+  const variants: Array<Record<string, string | number | Array<string | number>>> = [
+    { OrderReferences: [ref], Limit: 50, Offset: 0 },
+    { CustomerReferences: [ref], Limit: 50, Offset: 0 },
+    { OrderNumbers: [ref], Limit: 50, Offset: 0 },
+  ];
+  const raws: unknown[] = [];
+  const numbers: string[] = [];
+  for (const query of variants) {
+    const result = await pplGetJson<Array<Record<string, unknown>>>("/order", query);
+    if (!result.ok) {
+      raws.push({ query, ok: false, reason: result.reason, raw: result.raw });
+      continue;
     }
+    const list = Array.isArray(result.data) ? result.data : [];
+    raws.push({ query, ok: true, raw: list });
+    for (const order of list) {
+      const nums = Array.isArray(order.shipmentNumbers) ? order.shipmentNumbers : [];
+      for (const n of nums) {
+        const s = String(n || "").trim();
+        if (/^\d{8,20}$/.test(s)) numbers.push(s);
+      }
+    }
+    if (numbers.length > 0) break;
   }
-  return { ok: true, data: { shipmentNumbers, raw: list } };
+  return { ok: true, data: { shipmentNumbers: dedupeStrings(numbers), raw: raws } };
+}
+
+export async function fetchPplBatchLabelPdf(batchId: string): Promise<PplGenericResult<{ bytes: Buffer; contentType: string }>> {
+  const baseUrl = process.env.PPL_API_BASE_URL?.trim();
+  if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
+  const token = await requestToken(baseUrl);
+  if (!token) return { ok: false, reason: "ppl_api_token_failed" };
+  const endpoint = `${normalizeBaseUrl(baseUrl)}/shipment/batch/${encodeURIComponent(batchId)}/label`;
+  const res = await fetch(endpoint, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
+    },
+  });
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    return { ok: false, reason: `ppl_api_http_${res.status}`, raw };
+  }
+  const arr = await res.arrayBuffer();
+  return {
+    ok: true,
+    data: {
+      bytes: Buffer.from(arr),
+      contentType: res.headers.get("content-type") || "application/pdf",
+    },
+  };
 }
