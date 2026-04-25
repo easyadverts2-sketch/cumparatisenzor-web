@@ -27,6 +27,11 @@ import {
   type PplDebugRequestResult,
 } from "./ppl";
 import {
+  isLikelyPplTrackingNumber,
+  isUuid as isUuidStrict,
+  validatePplShipmentBelongsToOrder,
+} from "./ppl-tracking";
+import {
   buildDpdLabelForShipment,
   buildDpdBulkLabel,
   cancelDpdShipment,
@@ -130,7 +135,7 @@ type DpdPickupRow = {
 
 function isUuidLike(value: string | null | undefined): boolean {
   const raw = String(value || "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+  return isUuidStrict(raw);
 }
 
 function jsonForDb(value: unknown): string | null {
@@ -226,23 +231,6 @@ function valuesWithPaths(input: unknown, path = "", out: JsonPathMatch[] = []): 
 function parseRecipientZip(deliveryAddress: string): string {
   const m = deliveryAddress.match(/\b(\d{4,6})\b/);
   return m ? m[1] : "";
-}
-
-function isLikelyPhone(value: string): boolean {
-  return /^\+?[0-9]{9,15}$/.test(value);
-}
-
-function isLikelyPplTrackingNumber(
-  value: unknown,
-  context: { phone?: string; zip?: string; codVarSym?: string }
-): boolean {
-  const raw = String(value ?? "").replace(/\s+/g, "");
-  if (!/^[0-9]{10,14}$/.test(raw)) return false;
-  if (isUuidLike(raw)) return false;
-  if (context.phone && raw === String(context.phone).replace(/\s+/g, "")) return false;
-  if (context.zip && raw === String(context.zip).replace(/\s+/g, "")) return false;
-  if (context.codVarSym && String(context.codVarSym).length < 10 && raw === context.codVarSym) return false;
-  return true;
 }
 
 function getByJsonPath(input: unknown, jsonPath: string): unknown {
@@ -1686,10 +1674,17 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
         ? (statusFromBatch.data.raw as Record<string, unknown>)
         : {};
       const items = Array.isArray(batchRaw.items) ? batchRaw.items : [];
+      const matchedItem =
+        items.find((it) => {
+          const rec = it as Record<string, unknown>;
+          const ref = String(rec?.referenceId || "").trim();
+          return ref === String(order.orderNumber) || ref === referenceId;
+        }) || null;
       const item =
-        items.find((it) => String((it as Record<string, unknown>)?.referenceId || "").trim() === referenceId) ||
-        items[0] ||
-        null;
+        matchedItem ||
+        (items.length === 1
+          ? items[0]
+          : null);
       const itemRec = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
       importState = String(itemRec.importState || "").trim();
       if (!importState) {
@@ -1706,12 +1701,23 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
       const labelUrlsArr = Array.isArray(completeLabel.labelUrls) ? completeLabel.labelUrls : [];
       bulkLabelUrls = labelUrlsArr.map((x) => String(x || "").trim()).filter(Boolean);
       completeLabelUrl = bulkLabelUrls[0] || completeLabelUrl;
-      trackingCandidate =
-        numericTrackingOrNull(String(preferredValue || "").trim()) ||
-        numericTrackingOrNull(String(itemRec.shipmentNumber || "").trim()) ||
-        numericTrackingOrNull(collectTrackingCandidates(itemRec)[0]) ||
-        numericTrackingOrNull(collectTrackingCandidates(batchRaw)[0]) ||
-        trackingCandidate;
+      const batchOwnership = validatePplShipmentBelongsToOrder(
+        {
+          orderNumber: order.orderNumber,
+          pplOrderReference: order.pplOrderReference,
+          customerName: order.customerName,
+          deliveryAddress: order.deliveryAddress,
+          totalPrice: order.totalPrice,
+        },
+        itemRec,
+        "batch"
+      );
+      if (batchOwnership.ok && /^(COMPLETE|COMPLETED|SUCCESS)$/i.test(importState)) {
+        trackingCandidate =
+          numericTrackingOrNull(String(itemRec.shipmentNumber || "").trim()) ||
+          numericTrackingOrNull(String(preferredValue || "").trim()) ||
+          trackingCandidate;
+      }
 
       const errorDetails = jsonForDb({
         errors: itemRec.errors || null,
@@ -1768,10 +1774,28 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
       dateFromIso: dateFrom,
       dateToIso: dateTo,
     });
-    await sql`update orders set ppl_raw_shipment_response = ${jsonForDb(fromShipmentFilters.ok ? fromShipmentFilters.data.raw : fromShipmentFilters)} where id = ${orderId}`;
     if (fromShipmentFilters.ok) {
-      trackingCandidate = numericTrackingOrNull(fromShipmentFilters.data.trackingNumber) || trackingCandidate;
-      shipmentState = fromShipmentFilters.data.state || shipmentState;
+      const lookupRec =
+        fromShipmentFilters.data.raw && typeof fromShipmentFilters.data.raw === "object"
+          ? (fromShipmentFilters.data.raw as Record<string, unknown>)
+          : {};
+      const valid = validatePplShipmentBelongsToOrder(
+        {
+          orderNumber: order.orderNumber,
+          pplOrderReference: order.pplOrderReference,
+          customerName: order.customerName,
+          deliveryAddress: order.deliveryAddress,
+          totalPrice: order.totalPrice,
+        },
+        lookupRec,
+        "shipment_lookup",
+        codVarSym
+      );
+      if (valid.ok) {
+        trackingCandidate = numericTrackingOrNull(fromShipmentFilters.data.trackingNumber) || trackingCandidate;
+        shipmentState = fromShipmentFilters.data.state || shipmentState;
+        await sql`update orders set ppl_raw_shipment_response = ${jsonForDb(fromShipmentFilters.data.raw)} where id = ${orderId}`;
+      }
     }
   }
   if (!trackingCandidate) {
@@ -1855,6 +1879,9 @@ export async function debugFindPplTrackingNumber(
   matches: Array<{ source: string; path: string; value: string | number }>;
   requests: Array<PplDebugRequestResult & { step: string }>;
   trackingNumberCandidates: Array<{ source: string; path: string; value: string | number }>;
+  rejectedTrackingCandidates?: Array<{ source: string; value: string | number; reason: string }>;
+  selectedTrackingCandidate?: { source: string; path: string; value: string; reason: string } | null;
+  cachedVsCurrent?: Record<string, unknown>;
 }> {
   const sql = getSql();
   await ensureSchema(sql);
@@ -1912,17 +1939,14 @@ export async function debugFindPplTrackingNumber(
 
   const matches: Array<{ source: string; path: string; value: string | number }> = [];
   const candidates: Array<{ source: string; path: string; value: string | number }> = [];
+  const rejected: Array<{ source: string; value: string | number; reason: string }> = [];
   for (const req of requests) {
     const found = findValuePaths(req.data, knownTrackingNumber);
     for (const m of found) matches.push({ source: req.step, path: m.path, value: m.value });
     const vals = valuesWithPaths(req.data);
     for (const v of vals) {
       if (
-        isLikelyPplTrackingNumber(v.value, {
-          phone: order.phone,
-          zip: recipientZip,
-          codVarSym,
-        })
+        isLikelyPplTrackingNumber(v.value)
         && String(v.value) !== String(order.orderNumber)
         && String(v.value) !== String(referenceId)
       ) {
@@ -1931,41 +1955,53 @@ export async function debugFindPplTrackingNumber(
     }
   }
 
-  let saved = false;
-  if (matches.length > 0) {
-    const chosen = matches[0];
-    const sourceReq = requests.find((r) => r.step === chosen.source);
-    const sourceData = sourceReq?.data && typeof sourceReq.data === "object" ? (sourceReq.data as Record<string, unknown>) : {};
-    const shipmentState = String((sourceData.shipmentState as string | undefined) || (sourceData.state as string | undefined) || "").trim();
-    const trackingUrl =
-      String((sourceData?.trackAndTrace as Record<string, unknown> | undefined)?.partnerUrl || "").trim() || null;
-    const labelUrl = String((sourceData.labelUrl as string | undefined) || "").trim() || null;
-    await sql`
-      update orders
-      set
-        tracking_number = ${knownTrackingNumber},
-        ppl_shipment_id = ${knownTrackingNumber},
-        tracking_number_source = ${chosen.source},
-        tracking_number_json_path = ${chosen.path},
-        ppl_shipment_status = 'PPL_TRACKING_READY',
-        ppl_shipment_state = ${shipmentState || null},
-        ppl_tracking_url = ${trackingUrl},
-        ppl_label_url = ${labelUrl},
-        ppl_raw_order_response = ${jsonForDb(requests.find((r) => r.step.startsWith("C_") || r.step.startsWith("D_") || r.step.startsWith("E_") || r.step.startsWith("F_"))?.data || null)},
-        ppl_raw_shipment_response = ${jsonForDb(requests.find((r) => r.step.startsWith("G_") || r.step.startsWith("H_") || r.step.startsWith("I_"))?.data || null)}
-      where id = ${orderId}
-    `;
-    saved = true;
+  let selected: { source: string; path: string; value: string; reason: string } | null = null;
+  const batchReq = requests.find((r) => r.step === "A_batch_status");
+  if (batchReq?.ok && batchReq.data && typeof batchReq.data === "object") {
+    const rec = batchReq.data as Record<string, unknown>;
+    const items = Array.isArray(rec.items) ? rec.items : [];
+    const m = items.find((it) => {
+      const r = it as Record<string, unknown>;
+      const ref = String(r.referenceId || "").trim();
+      return ref === String(order.orderNumber) || ref === String(order.pplOrderReference || order.orderNumber);
+    }) as Record<string, unknown> | undefined;
+    const shipment = m ? String(m.shipmentNumber || "").trim() : "";
+    if (numericTrackingOrNull(shipment)) {
+      selected = {
+        source: "batch_status",
+        path: "items[0].shipmentNumber",
+        value: shipment,
+        reason: `Matched current pplBatchId and referenceId ${String(order.pplOrderReference || order.orderNumber)}`,
+      };
+    }
+  }
+  if (!selected && matches.length > 0) {
+    for (const m of matches) {
+      if (m.source === "G_shipment_by_known_number") {
+        rejected.push({
+          source: m.source,
+          value: m.value,
+          reason: "Rejected: known tracking debug lookup is non-authoritative for saving",
+        });
+      }
+    }
   }
 
   return {
     ok: true,
     knownTrackingNumber,
-    found: matches.length > 0,
-    saved,
+    found: Boolean(selected) || matches.length > 0,
+    saved: false,
     matches,
     requests,
     trackingNumberCandidates: candidates,
+    rejectedTrackingCandidates: rejected,
+    selectedTrackingCandidate: selected,
+    cachedVsCurrent: {
+      cachedTrackingNumber: order.trackingNumber || null,
+      currentBatchShipmentNumber: selected?.value || null,
+      overwritten: false,
+    },
   };
 }
 

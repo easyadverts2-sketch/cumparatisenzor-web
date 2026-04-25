@@ -77,6 +77,9 @@ export async function GET(request: NextRequest) {
       matches: debugSearch.matches,
     };
     diagnostic.trackingNumberCandidates = debugSearch.trackingNumberCandidates;
+    diagnostic.rejectedTrackingCandidates = debugSearch.rejectedTrackingCandidates || [];
+    diagnostic.selectedTrackingCandidate = debugSearch.selectedTrackingCandidate || null;
+    diagnostic.cachedVsCurrent = debugSearch.cachedVsCurrent || null;
     diagnostic.debugRequests = debugSearch.requests;
   }
   return NextResponse.json({ ok: true, diagnostic }, { status: 200 });
