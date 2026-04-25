@@ -990,12 +990,18 @@ export async function fetchPplOrderInfoByCustomerReference(
   return { ok: true, data: { shipmentNumbers: dedupeStrings(numbers), raw: raws } };
 }
 
-export async function fetchPplBatchLabelPdf(batchId: string): Promise<PplGenericResult<{ bytes: Buffer; contentType: string }>> {
+export async function fetchPplBatchLabelPdf(params: {
+  batchId: string;
+  completeLabelUrl?: string | null;
+}): Promise<PplGenericResult<{ bytes: Buffer; contentType: string; finalUrl: string }>> {
   const baseUrl = process.env.PPL_API_BASE_URL?.trim();
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
   const token = await requestToken(baseUrl);
   if (!token) return { ok: false, reason: "ppl_api_token_failed" };
-  const endpoint = `${normalizeBaseUrl(baseUrl)}/shipment/batch/${encodeURIComponent(batchId)}/label`;
+  const fallbackEndpoint =
+    `${normalizeBaseUrl(baseUrl)}/shipment/batch/${encodeURIComponent(params.batchId)}/label` +
+    `?pageSize=A4&position=1&limit=200&offset=0`;
+  const endpoint = params.completeLabelUrl?.trim() || fallbackEndpoint;
   const res = await fetch(endpoint, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -1012,6 +1018,34 @@ export async function fetchPplBatchLabelPdf(batchId: string): Promise<PplGeneric
     data: {
       bytes: Buffer.from(arr),
       contentType: res.headers.get("content-type") || "application/pdf",
+      finalUrl: endpoint,
+    },
+  };
+}
+
+export async function fetchPplLabelPdfFromUrl(labelUrl: string): Promise<PplGenericResult<{ bytes: Buffer; contentType: string; finalUrl: string }>> {
+  const baseUrl = process.env.PPL_API_BASE_URL?.trim();
+  if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
+  const token = await requestToken(baseUrl);
+  if (!token) return { ok: false, reason: "ppl_api_token_failed" };
+  const endpoint = labelUrl.trim();
+  const res = await fetch(endpoint, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
+    },
+  });
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    return { ok: false, reason: `ppl_api_http_${res.status}`, raw };
+  }
+  const arr = await res.arrayBuffer();
+  return {
+    ok: true,
+    data: {
+      bytes: Buffer.from(arr),
+      contentType: res.headers.get("content-type") || "application/pdf",
+      finalUrl: endpoint,
     },
   };
 }
