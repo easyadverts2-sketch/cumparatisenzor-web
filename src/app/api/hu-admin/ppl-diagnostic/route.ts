@@ -1,6 +1,6 @@
 import { isHuAdminRequest } from "@/lib/admin-guard";
 import { getOrderById } from "@/lib/store";
-import { fetchPplOrderInfoByCustomerReference, fetchPplShipmentStatus } from "@/lib/ppl";
+import { fetchPplBatchStatus, fetchPplOrderInfoByCustomerReference, fetchPplShipmentInfoByNumber } from "@/lib/ppl";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -21,13 +21,17 @@ export async function GET(request: NextRequest) {
     market: order.market,
     shippingCarrier: order.shippingCarrier,
     pplShipmentId: order.pplShipmentId,
+    pplBatchId: order.pplBatchId,
     trackingNumberInDb: order.trackingNumber,
     pplStatusInDb: order.pplShipmentStatus,
     pplLabelPathInDb: order.pplLabelPath,
   };
-  if (order.pplShipmentId) {
-    const status = await fetchPplShipmentStatus(order.pplShipmentId);
+  if (order.pplBatchId) {
+    const status = await fetchPplBatchStatus(order.pplBatchId);
     diagnostic.pplBatchFetch = status;
+  }
+  if (order.pplShipmentId) {
+    diagnostic.pplShipmentFetch = await fetchPplShipmentInfoByNumber(order.pplShipmentId);
   }
   diagnostic.pplOrderFetch = await fetchPplOrderInfoByCustomerReference(String(order.orderNumber));
   if (order.pplLabelPath && /^https?:\/\//i.test(order.pplLabelPath)) {

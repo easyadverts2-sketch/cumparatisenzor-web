@@ -38,6 +38,7 @@ export type Order = {
   status: OrderStatus;
   market?: Market;
   pplShipmentId?: string | null;
+  pplBatchId?: string | null;
   pplShipmentStatus?: string | null;
   pplLabelPath?: string | null;
   dpdShipmentId?: string | null;

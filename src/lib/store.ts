@@ -16,8 +16,9 @@ import {
   cancelPplShipment,
   createPplPickup,
   createPplShipment,
+  fetchPplBatchStatus,
   fetchPplOrderInfoByCustomerReference,
-  fetchPplShipmentStatus,
+  fetchPplShipmentInfoByNumber,
 } from "./ppl";
 import {
   buildDpdLabelForShipment,
@@ -121,6 +122,11 @@ type DpdPickupRow = {
   status: string;
 };
 
+function isUuidLike(value: string | null | undefined): boolean {
+  const raw = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw);
+}
+
 function toOrder(row: Row): Order {
   const orderNumber =
     row.order_number !== undefined && row.order_number !== null
@@ -159,6 +165,7 @@ function toOrder(row: Row): Order {
     status: String(row.status) as OrderStatus,
     market: String(row.market || "RO") as Market,
     pplShipmentId: row.ppl_shipment_id != null ? String(row.ppl_shipment_id) : null,
+    pplBatchId: row.ppl_batch_id != null ? String(row.ppl_batch_id) : null,
     pplShipmentStatus: row.ppl_shipment_status != null ? String(row.ppl_shipment_status) : null,
     pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
     dpdShipmentId: row.dpd_shipment_id != null ? String(row.dpd_shipment_id) : null,
@@ -362,6 +369,14 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
     await sql`alter table orders add column ppl_shipment_id text`;
   }
 
+  const pplBatchCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_batch_id'
+  `;
+  if (pplBatchCol.length === 0) {
+    await sql`alter table orders add column ppl_batch_id text`;
+  }
+
   const pplStatusCol = await sql`
     select column_name from information_schema.columns
     where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_shipment_status'
@@ -561,12 +576,14 @@ async function createShipmentForOrder(
   if (order.shippingCarrier === "PPL") {
     const ppl = await createPplShipment(order, market);
     if (ppl.ok) {
+      const tracking = numericTrackingOrNull(ppl.shipmentNumber);
       await sql`
         update orders
         set
-          ppl_shipment_id = ${ppl.shipmentId},
+          ppl_shipment_id = ${tracking},
+          ppl_batch_id = ${ppl.batchId},
           ppl_shipment_status = 'CREATED',
-          tracking_number = ${numericTrackingOrNull(ppl.shipmentId)},
+          tracking_number = ${tracking},
           ppl_label_path = ${ppl.labelPublicPath || null}
         where id = ${order.id}
       `;
@@ -575,7 +592,7 @@ async function createShipmentForOrder(
         action: "PPL_SHIPMENT_CREATED",
         orderId: order.id,
         orderNumber: order.orderNumber,
-        details: `${auditDetailPrefix || ""} shipment=${ppl.shipmentId} label=${ppl.labelPublicPath || "-"}`.trim(),
+        details: `${auditDetailPrefix || ""} shipment=${tracking || "-"} batch=${ppl.batchId || "-"} label=${ppl.labelPublicPath || "-"}`.trim(),
       });
       const withTracking = await getOrderById(order.id, market);
       if (withTracking?.trackingNumber && withTracking.paymentMethod !== "COD") {
@@ -1288,9 +1305,24 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
   const sql = getSql();
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
-  if (!order?.pplShipmentId) return false;
+  if (!order) return false;
+  const batchId = order.pplBatchId || (isUuidLike(order.pplShipmentId) ? order.pplShipmentId : null);
+  const knownShipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber);
+  if (!batchId && !knownShipmentNumber) return false;
   const customerRef = String(order.orderNumber);
-  const res = await fetchPplShipmentStatus(order.pplShipmentId);
+  let statusFromBatch:
+    | { ok: true; data: { state: string; trackingNumber: string | null; raw: unknown } }
+    | { ok: false; reason: string; raw?: unknown }
+    | null = null;
+  if (batchId) {
+    statusFromBatch = await fetchPplBatchStatus(batchId);
+  }
+  const res =
+    statusFromBatch && statusFromBatch.ok
+      ? statusFromBatch
+      : knownShipmentNumber
+        ? await fetchPplShipmentInfoByNumber(knownShipmentNumber)
+        : statusFromBatch || { ok: false as const, reason: "missing_ppl_identifiers" };
   let fallbackTracking: string | null = null;
   if (!res.ok || !numericTrackingOrNull(res.data.trackingNumber)) {
     const fromOrder = await fetchPplOrderInfoByCustomerReference(customerRef);
@@ -1304,6 +1336,7 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
       update orders
       set
         ppl_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)},
+        ppl_batch_id = ${batchId ?? null},
         tracking_number = ${fallbackTracking || numericTrackingOrNull(order.trackingNumber)}
       where id = ${orderId}
     `;
@@ -1313,6 +1346,13 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
     update orders
     set
       ppl_shipment_status = ${res.data.state || "UNKNOWN"},
+      ppl_batch_id = ${batchId ?? null},
+      ppl_shipment_id = ${
+        numericTrackingOrNull(res.data.trackingNumber) ||
+        fallbackTracking ||
+        knownShipmentNumber ||
+        null
+      },
       tracking_number = ${
         numericTrackingOrNull(res.data.trackingNumber) ||
         fallbackTracking ||
@@ -1331,8 +1371,9 @@ export async function cancelPplShipmentForOrder(orderId: string, market: Market 
   const sql = getSql();
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
-  if (!order?.pplShipmentId) return false;
-  const cancelled = await cancelPplShipment(order.pplShipmentId);
+  const shipmentNumber = numericTrackingOrNull(order?.pplShipmentId) || numericTrackingOrNull(order?.trackingNumber);
+  if (!shipmentNumber) return false;
+  const cancelled = await cancelPplShipment(shipmentNumber);
   if (!cancelled.ok) {
     await sql`update orders set ppl_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)} where id = ${orderId}`;
     return false;
@@ -1346,15 +1387,18 @@ export async function deletePplShipmentForOrder(orderId: string, market: Market 
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
   if (!order) return false;
-  if (order.pplShipmentId) {
-    await cancelPplShipment(order.pplShipmentId).catch(() => ({ ok: false as const }));
+  const shipmentNumber = numericTrackingOrNull(order.pplShipmentId) || numericTrackingOrNull(order.trackingNumber);
+  if (shipmentNumber) {
+    await cancelPplShipment(shipmentNumber).catch(() => ({ ok: false as const }));
   }
   await sql`
     update orders
     set
       ppl_shipment_id = null,
+      ppl_batch_id = null,
       ppl_shipment_status = null,
-      ppl_label_path = null
+      ppl_label_path = null,
+      tracking_number = null
     where id = ${orderId}
   `;
   return true;
