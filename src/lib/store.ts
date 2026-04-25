@@ -1,8 +1,11 @@
 import { Market, Order, OrderStatus, ShippingCarrier, Store } from "./types";
 import { sendEmail } from "./email";
 import { getSql } from "./db";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { formatOrderNumber } from "./order-format";
 import { getStripe } from "./stripe-checkout";
+import { PDFDocument } from "pdf-lib";
 import {
   marketCurrency,
   renderInvoiceHtml,
@@ -1475,6 +1478,46 @@ export async function getDpdBulkLabelForOrders(orderIds: string[], market: Marke
   const built = await buildDpdBulkLabel(shipmentIds, market);
   if (!built.ok) return null;
   return built.data;
+}
+
+export async function getPplBulkLabelForOrders(orderIds: string[], market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  if (orderIds.length === 0) return null;
+  const rows = await sql`
+    select * from orders
+    where market = ${market}
+      and id = any(${orderIds})
+      and shipping_carrier = 'PPL'
+      and ppl_label_path is not null
+  `;
+  const labelPaths = rows
+    .map((r) => String((r as Row).ppl_label_path || "").trim())
+    .filter((p) => p.startsWith("/"));
+  if (labelPaths.length === 0) return null;
+  const merged = await PDFDocument.create();
+  for (const publicPath of labelPaths) {
+    const absPath = path.resolve(process.cwd(), `.${publicPath}`);
+    const bytes = await readFile(absPath).catch(() => null);
+    if (!bytes) continue;
+    const src = await PDFDocument.load(bytes).catch(() => null);
+    if (!src) continue;
+    const copied = await merged.copyPages(src, src.getPageIndices());
+    copied.forEach((p) => merged.addPage(p));
+  }
+  if (merged.getPageCount() === 0) return null;
+  const relDir = process.env.PPL_LABEL_SAVE_DIR?.trim() || "public/ppl-labels";
+  const absDir = path.resolve(process.cwd(), relDir);
+  await mkdir(absDir, { recursive: true });
+  const fileName = `${market.toLowerCase()}-bulk-${Date.now()}.pdf`;
+  const outPath = path.join(absDir, fileName);
+  const outBytes = await merged.save();
+  await writeFile(outPath, Buffer.from(outBytes));
+  if (relDir.startsWith("public/")) {
+    const publicPrefix = relDir.replace(/^public\//, "");
+    return `/${publicPrefix}/${fileName}`;
+  }
+  return null;
 }
 
 export async function regenerateDpdLabelForOrder(orderId: string, market: Market = "RO") {

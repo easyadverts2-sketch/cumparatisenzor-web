@@ -9,6 +9,7 @@ import {
   getDpdPickups,
   getDpdShipmentsAdmin,
   getPplPickups,
+  getPplBulkLabelForOrders,
   getPplShipmentsAdmin,
   orderDpdPickup,
   orderPplPickup,
@@ -24,6 +25,11 @@ import { clearHuAdminSessionCookie } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+
+function validTracking(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  return /^\d{11}$/.test(raw) ? raw : "-";
+}
 
 async function updateInventory(formData: FormData) {
   "use server";
@@ -45,71 +51,89 @@ async function logoutAction() {
 async function createShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await triggerShipmentCreation(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await triggerShipmentCreation(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "Zasilka+vytvorena" : "Vytvoreni+zasilky+selhalo"}`);
 }
 
 async function refreshShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await refreshPplShipment(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await refreshPplShipment(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+stav+obnoven" : "PPL+refresh+selhal"}`);
 }
 
 async function cancelShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await cancelPplShipmentForOrder(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await cancelPplShipmentForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+zasilka+stornovana" : "PPL+storno+selhalo"}`);
 }
 
 async function deleteShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await deletePplShipmentForOrder(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await deletePplShipmentForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+zasilka+smazana" : "Smazani+PPL+zasilky+selhalo"}`);
 }
 
 async function orderPickupAction(formData: FormData) {
   "use server";
   const note = String(formData.get("note") || "");
-  await orderPplPickup("HU", note);
+  const result = await orderPplPickup("HU", note);
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
 }
 
 async function refreshDpdShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await refreshDpdShipment(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await refreshDpdShipment(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+stav+obnoven" : "DPD+refresh+selhal"}`);
 }
 
 async function cancelDpdShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await cancelDpdShipmentForOrder(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await cancelDpdShipmentForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+zasilka+stornovana" : "DPD+storno+selhalo"}`);
 }
 
 async function deleteDpdShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await deleteDpdShipmentForOrder(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await deleteDpdShipmentForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+zasilka+smazana" : "Smazani+DPD+zasilky+selhalo"}`);
 }
 
 async function regenerateDpdLabelAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
-  if (orderId) await regenerateDpdLabelForOrder(orderId, "HU");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const path = await regenerateDpdLabelForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${path ? "1" : "0"}&msg=${path ? "DPD+stitek+vygenerovan" : "DPD+stitek+nelze+vygenerovat"}`);
 }
 
 async function orderDpdPickupAction(formData: FormData) {
   "use server";
   const note = String(formData.get("note") || "");
-  await orderDpdPickup("HU", note);
+  const result = await orderDpdPickup("HU", note);
   revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
 }
 
 async function bulkDpdLabelsAction(formData: FormData) {
@@ -120,12 +144,27 @@ async function bulkDpdLabelsAction(formData: FormData) {
     .filter(Boolean);
   const path = await getDpdBulkLabelForOrders(orderIds, "HU");
   revalidatePath("/hu-admin");
-  if (path) {
-    revalidatePath(path);
-  }
+  if (path) revalidatePath(path);
+  redirect(`/hu-admin?ok=${path ? "1" : "0"}&msg=${path ? "DPD+bulk+stitky+vygenerovany" : "DPD+bulk+stitky+selhaly"}`);
 }
 
-export default async function HuAdminPage() {
+async function bulkPplLabelsAction(formData: FormData) {
+  "use server";
+  const orderIds = formData
+    .getAll("orderIds")
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
+  const path = await getPplBulkLabelForOrders(orderIds, "HU");
+  revalidatePath("/hu-admin");
+  if (path) revalidatePath(path);
+  redirect(`/hu-admin?ok=${path ? "1" : "0"}&msg=${path ? "PPL+bulk+stitky+vygenerovany" : "PPL+bulk+stitky+selhaly"}`);
+}
+
+export default async function HuAdminPage({
+  searchParams,
+}: {
+  searchParams?: { ok?: string; msg?: string };
+}) {
   await autoCancelExpiredOrders();
   const [store, pplShipments, pickups, dpdShipments, dpdPickups] = await Promise.all([
     readStore("HU"),
@@ -148,6 +187,17 @@ export default async function HuAdminPage() {
           Odhlásit
         </button>
       </form>
+      {searchParams?.msg ? (
+        <p
+          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+            searchParams.ok === "1"
+              ? "bg-emerald-50 text-emerald-900 border border-emerald-200"
+              : "bg-red-50 text-red-900 border border-red-200"
+          }`}
+        >
+          {decodeURIComponent(searchParams.msg)}
+        </p>
+      ) : null}
       <p className="mt-4 font-medium text-[#0a2624]">Aktuální sklad: {store.inventory} ks</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -204,14 +254,22 @@ export default async function HuAdminPage() {
           </p>
         ))}
       </div>
+      <form id="ppl-bulk-form-hu" action={bulkPplLabelsAction} className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+        <p className="min-w-[320px] flex-1 text-sm text-[#1a4d47]">
+          Vyber objednavky PPL pres checkbox a klikni na bulk tisk stitku.
+        </p>
+        <button className="rounded-lg bg-[#0f766e] px-4 py-2 text-white">Vygenerovat bulk PPL stitky</button>
+      </form>
       <div className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
+              <th className="px-3 py-2">Vybrat</th>
               <th className="px-3 py-2">Objednávka</th>
-              <th className="px-3 py-2">Zákazník</th>
-              <th className="px-3 py-2">Shipment ID</th>
-              <th className="px-3 py-2">Tracking</th>
+              <th className="px-3 py-2">Datum zásilky</th>
+              <th className="px-3 py-2">Služba</th>
+              <th className="px-3 py-2">Adresa</th>
+              <th className="px-3 py-2">Číslo zásilky</th>
               <th className="px-3 py-2">Stav PPL</th>
               <th className="px-3 py-2">Štítek</th>
               <th className="px-3 py-2">Akce</th>
@@ -220,10 +278,14 @@ export default async function HuAdminPage() {
           <tbody>
             {pplShipments.map((o) => (
               <tr key={o.id} className="border-t border-slate-100">
+                <td className="px-3 py-2">
+                  <input type="checkbox" name="orderIds" value={o.id} form="ppl-bulk-form-hu" className="h-4 w-4" />
+                </td>
                 <td className="px-3 py-2">{String(o.orderNumber)}</td>
-                <td className="px-3 py-2">{o.customerName}</td>
-                <td className="px-3 py-2">{o.pplShipmentId || "-"}</td>
-                <td className="px-3 py-2">{o.trackingNumber || "-"}</td>
+                <td className="px-3 py-2">{new Date(o.createdAt).toLocaleString("cs-CZ")}</td>
+                <td className="px-3 py-2">PPL</td>
+                <td className="px-3 py-2 max-w-[220px] truncate">{o.deliveryAddress.replaceAll("\n", ", ")}</td>
+                <td className="px-3 py-2">{validTracking(o.trackingNumber || o.pplShipmentId)}</td>
                 <td className="px-3 py-2">{o.pplShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
                   {o.pplLabelPath ? (
@@ -281,9 +343,10 @@ export default async function HuAdminPage() {
             <tr>
               <th className="px-3 py-2">Vybrat</th>
               <th className="px-3 py-2">Objednávka</th>
-              <th className="px-3 py-2">Zákazník</th>
-              <th className="px-3 py-2">Shipment ID</th>
-              <th className="px-3 py-2">Tracking</th>
+              <th className="px-3 py-2">Datum zásilky</th>
+              <th className="px-3 py-2">Služba</th>
+              <th className="px-3 py-2">Adresa</th>
+              <th className="px-3 py-2">Číslo zásilky</th>
               <th className="px-3 py-2">Stav DPD</th>
               <th className="px-3 py-2">Štítek</th>
               <th className="px-3 py-2">Akce</th>
@@ -302,9 +365,10 @@ export default async function HuAdminPage() {
                   />
                 </td>
                 <td className="px-3 py-2">{String(o.orderNumber)}</td>
-                <td className="px-3 py-2">{o.customerName}</td>
-                <td className="px-3 py-2">{o.dpdShipmentId || "-"}</td>
-                <td className="px-3 py-2">{o.trackingNumber || "-"}</td>
+                <td className="px-3 py-2">{new Date(o.createdAt).toLocaleString("cs-CZ")}</td>
+                <td className="px-3 py-2">DPD</td>
+                <td className="px-3 py-2 max-w-[220px] truncate">{o.deliveryAddress.replaceAll("\n", ", ")}</td>
+                <td className="px-3 py-2">{validTracking(o.trackingNumber || o.dpdShipmentId)}</td>
                 <td className="px-3 py-2">{o.dpdShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
                   {o.dpdLabelPath ? (
