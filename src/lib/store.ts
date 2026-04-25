@@ -14,6 +14,7 @@ import {
 import { createPplShipment } from "./ppl";
 import { createDpdShipment } from "./dpd";
 import {
+  buildInternalOrderAlertEmail,
   buildOrderCreatedEmail,
   buildPaymentReceivedEmail,
   buildTrackingEmail,
@@ -39,6 +40,21 @@ function senderEmailForMarket(market: Market) {
     return process.env.SMTP_FROM_HU || "info@szenzorvasarlas.hu";
   }
   return process.env.SMTP_FROM || "info@cumparatisenzor.ro";
+}
+
+function internalOrderEmailForMarket(market: Market) {
+  if (market === "HU") {
+    return (
+      process.env.INTERNAL_ORDER_EMAIL_HU ||
+      process.env.INTERNAL_ORDER_EMAIL ||
+      "info@szenzorvasarlas.hu"
+    );
+  }
+  return (
+    process.env.INTERNAL_ORDER_EMAIL_RO ||
+    process.env.INTERNAL_ORDER_EMAIL ||
+    "info@cumparatisenzor.ro"
+  );
 }
 
 function settingKey(market: Market, key: "inventory" | "sku" | "price" | "shipping") {
@@ -796,23 +812,14 @@ export async function createOrder(input: {
         }).catch(() => undefined);
       }
 
-      const internal = process.env.INTERNAL_ORDER_EMAIL;
+      const internal = internalOrderEmailForMarket(market);
       if (internal) {
-        const internalText = [
-          `Comanda noua #${nr}`,
-          `Client: ${order.customerName}`,
-          `Email: ${order.email}`,
-          `Telefon: ${order.phone}`,
-          `Cantitate: ${order.quantity}`,
-          `Livrare: ${formatShippingLine(order)}`,
-          `Total: ${order.totalPrice} ${market === "HU" ? "HUF" : "RON"}`,
-          `Plata: ${formatPaymentMethodLabel(input.paymentMethod)}`,
-          `Status: ${order.status}`,
-        ].join("\n");
+        const internalAlert = buildInternalOrderAlertEmail(order, market);
         await sendEmail({
           to: internal,
-          subject: `Comanda noua #${nr} - ${market === "HU" ? "szenzorvasarlas.hu" : "cumparatisenzor.ro"}`,
-          text: internalText,
+          subject: internalAlert.subject,
+          text: internalAlert.text,
+          html: internalAlert.html,
           from: senderFrom,
         }).catch(() => undefined);
       }

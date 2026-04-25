@@ -90,12 +90,6 @@ export default function RootLayout({
         {children}
         {!isHu ? (
           <>
-            <Link
-              href="/admin"
-              className={`fixed bottom-2 right-2 z-40 rounded-full border border-white/25 bg-[#4d1d35]/70 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-lg backdrop-blur hover:bg-[#4d1d35] ${plusJakarta.className}`}
-            >
-              Admin
-            </Link>
             <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
               <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#ffe7d6]">
                 <div className="mb-5 inline-flex items-center gap-2 text-base font-semibold text-white">
@@ -117,6 +111,12 @@ export default function RootLayout({
                     className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20 hover:text-white"
                   >
                     GDPR
+                  </Link>
+                  <Link
+                    href="/kontakt"
+                    className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20 hover:text-white"
+                  >
+                    Kontaktujte nás
                   </Link>
                 </div>
                 <SiteContactBar />

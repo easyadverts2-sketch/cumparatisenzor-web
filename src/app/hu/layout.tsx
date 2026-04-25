@@ -56,7 +56,6 @@ export default function HuLayout({ children }: { children: ReactNode }) {
           </Link>
           <nav className="flex flex-1 flex-wrap gap-2 text-[15px] font-semibold lg:justify-center">
             {[
-              ["/hu/despre-libre", "Libre 2 Plus"],
               ["/hu/rolunk", "Rolunk"],
               ["/hu/comanda", "Rendeles"],
               ["/hu/aszf", "ASZF"],
@@ -82,12 +81,6 @@ export default function HuLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
       {children}
-      <Link
-        href="/hu-admin"
-        className="fixed bottom-2 right-2 z-40 rounded-full border border-white/25 bg-[#4d1d35]/70 px-3 py-1.5 text-xs font-semibold text-white no-underline shadow-lg backdrop-blur hover:bg-[#4d1d35]"
-      >
-        Admin
-      </Link>
       <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
         <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#ffe7d6]">
           <p className="font-medium text-white">Operator: Česká maloobchodní s.r.o.</p>
@@ -99,6 +92,9 @@ export default function HuLayout({ children }: { children: ReactNode }) {
             </Link>
             <Link href="/hu/adatkezeles" className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20">
               Adatkezeles
+            </Link>
+            <Link href="/hu/kontakt" className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20">
+              Lepjen kapcsolatba velunk
             </Link>
           </div>
           <div className="mt-6">

@@ -12,6 +12,10 @@ function siteUrl(market: Market) {
   return market === "HU" ? "https://szenzorvasarlas.hu" : "https://cumparatisenzor.ro";
 }
 
+function supportEmail(market: Market) {
+  return market === "HU" ? "info@szenzorvasarlas.hu" : "info@cumparatisenzor.ro";
+}
+
 function paymentLabel(paymentMethod: Order["paymentMethod"], market: Market) {
   if (market === "HU") {
     if (paymentMethod === "BANK_TRANSFER") return "Banki atutalas";
@@ -46,15 +50,16 @@ function htmlShell(content: string, market: Market) {
 }
 
 function footer(market: Market) {
+  const email = supportEmail(market);
   return market === "HU"
     ? `<p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
          Kerdes eseten barmikor irjon nekunk:<br/>
-         Email: <a href="mailto:info@szenzorvasarlas.hu">info@szenzorvasarlas.hu</a><br/>
+         Email: <a href="mailto:${email}">${email}</a><br/>
          Telefon/WhatsApp: <a href="tel:+420777577352">+420 777 577 352</a>
        </p>`
     : `<p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
          Daca aveti nevoie de ajutor, ne puteti contacta oricand:<br/>
-         Email: <a href="mailto:info@cumparatisenzor.ro">info@cumparatisenzor.ro</a><br/>
+         Email: <a href="mailto:${email}">${email}</a><br/>
          Telefon/WhatsApp: <a href="tel:+420777577352">+420 777 577 352</a>
        </p>`;
 }
@@ -98,8 +103,7 @@ function summaryRow(label: string, value: string, icon: string) {
 }
 
 export function buildOrderCreatedEmail(order: Order, market: Market, variableSymbol?: string | null) {
-  const subject =
-    market === "HU" ? "Koszonjuk a rendeleset" : "Va multumim pentru comanda";
+  const subject = market === "HU" ? "Koszonjuk a rendeleset" : "Va multumim pentru comanda";
   const currency = marketCurrency(market);
   const nr = formatOrderNumber(order.orderNumber);
   const bank = getBankDetails(market);
@@ -175,23 +179,43 @@ export function buildOrderCreatedEmail(order: Order, market: Market, variableSym
 }
 
 export function buildPaymentReceivedEmail(order: Order, market: Market) {
-  const subject =
-    market === "HU" ? "Koszonjuk a befizetest" : "Va multumim pentru plata";
-  const message =
-    market === "HU"
-      ? "Befizeteset megerositettuk. Csomagjat az alabbi cimre kuldjuk:"
-      : "Plata a fost confirmata. Expediem coletul la adresa:";
+  const nr = formatOrderNumber(order.orderNumber);
+  const currency = marketCurrency(market);
+  const address = addressSummary(order, market);
+  const subject = market === "HU" ? "Koszonjuk a befizetest" : "Va multumim pentru plata";
   const content = `
     <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.2;">${market === "HU" ? "Koszonjuk a befizetest!" : "Va multumim pentru plata!"}</h1>
-    <p style="margin:0 0 12px 0;color:#374151;">${message}</p>
-    <div style="padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;white-space:pre-line;">${order.deliveryAddress}</div>
+    <p style="margin:0 0 12px 0;color:#374151;">${market === "HU" ? "Befizeteset megerositettuk. A rendeles osszesitoje es a szallitasi cim alabb talalhato." : "Plata a fost confirmata. Rezumatul comenzii si adresa de livrare sunt mai jos."}</p>
+    <div style="border:1px solid #e8dbe3;border-radius:14px;overflow:hidden;background:#fff;">
+      <div style="padding:11px 14px;background:#fff2f8;border-bottom:1px solid #f0e2ea;font-weight:700;color:#6f2147;font-size:13px;letter-spacing:.05em;text-transform:uppercase;">
+        ${market === "HU" ? "Rendelesi osszesito" : "Rezumat comanda"}
+      </div>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+        ${summaryRow(market === "HU" ? "Rendelesszam" : "Numar comanda", `#${nr}`, "🔖")}
+        ${summaryRow(market === "HU" ? "Termek" : "Produs", PRODUCT_NAME, "📦")}
+        ${summaryRow(market === "HU" ? "Mennyiseg" : "Cantitate", String(order.quantity), "🔢")}
+        ${summaryRow(market === "HU" ? "Szallitas" : "Livrare", shippingLabel(order), "🚚")}
+        ${summaryRow(market === "HU" ? "Fizetes" : "Plata", paymentLabel(order.paymentMethod, market), "💳")}
+        ${summaryRow(market === "HU" ? "Vegosszeg" : "Total", `${order.totalPrice} ${currency}`, "💰")}
+      </table>
+    </div>
+    ${address.html}
     ${footer(market)}
   `;
 
   return {
     subject,
     html: htmlShell(content, market),
-    text: `${message}\n${order.deliveryAddress}`,
+    text: [
+      market === "HU" ? "Koszonjuk, a befizetest rogzitettuk." : "Va multumim, plata a fost inregistrata.",
+      `${market === "HU" ? "Rendelesszam" : "Comanda"}: #${nr}`,
+      `${market === "HU" ? "Termek" : "Produs"}: ${PRODUCT_NAME} x${order.quantity}`,
+      `${market === "HU" ? "Fizetes" : "Plata"}: ${paymentLabel(order.paymentMethod, market)}`,
+      `${market === "HU" ? "Szallitas" : "Livrare"}: ${shippingLabel(order)}`,
+      `${market === "HU" ? "Vegosszeg" : "Total"}: ${order.totalPrice} ${currency}`,
+      address.text,
+      `Kontakt: ${supportEmail(market)} / +420 777 577 352`,
+    ].join("\n"),
   };
 }
 
@@ -215,4 +239,48 @@ export function buildTrackingEmail(order: Order, market: Market, trackingNumber:
     html: htmlShell(content, market),
     text: `${market === "HU" ? "Kovetesi szam" : "Numar urmarire"}: ${trackingNumber}\n${order.deliveryAddress}`,
   };
+}
+
+export function buildInternalOrderAlertEmail(order: Order, market: Market) {
+  const currency = marketCurrency(market);
+  const nr = formatOrderNumber(order.orderNumber);
+  const statusLabel = order.status;
+  const subject = `Nová objednávka #${nr} (${siteName(market)})`;
+  const content = `
+    <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.2;">Nová objednávka #${nr}</h1>
+    <p style="margin:0 0 12px 0;color:#374151;">Přišla nová objednávka z webu <strong>${siteName(market)}</strong>.</p>
+    <div style="border:1px solid #e8dbe3;border-radius:14px;overflow:hidden;background:#fff;">
+      <div style="padding:11px 14px;background:#fff2f8;border-bottom:1px solid #f0e2ea;font-weight:700;color:#6f2147;font-size:13px;letter-spacing:.05em;text-transform:uppercase;">
+        Detail objednávky
+      </div>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;">
+        ${summaryRow("Klient", order.customerName, "👤")}
+        ${summaryRow("E-mail", order.email, "✉️")}
+        ${summaryRow("Telefon", order.phone, "📞")}
+        ${summaryRow("Produkt", PRODUCT_NAME, "📦")}
+        ${summaryRow("Množství", String(order.quantity), "🔢")}
+        ${summaryRow("Doprava", shippingLabel(order), "🚚")}
+        ${summaryRow("Platba", paymentLabel(order.paymentMethod, market), "💳")}
+        ${summaryRow("Celkem", `${order.totalPrice} ${currency}`, "💰")}
+        ${summaryRow("Stav", statusLabel, "🧾")}
+      </table>
+    </div>
+    ${addressSummary(order, market).html}
+    ${footer(market)}
+  `;
+  const text = [
+    `Nová objednávka #${nr}`,
+    `Web: ${siteName(market)}`,
+    `Klient: ${order.customerName}`,
+    `E-mail: ${order.email}`,
+    `Telefon: ${order.phone}`,
+    `Produkt: ${PRODUCT_NAME} x${order.quantity}`,
+    `Doprava: ${shippingLabel(order)}`,
+    `Platba: ${paymentLabel(order.paymentMethod, market)}`,
+    `Celkem: ${order.totalPrice} ${currency}`,
+    `Stav: ${statusLabel}`,
+    `Doručovací adresa: ${order.deliveryAddress}`,
+    `Fakturační adresa: ${order.billingAddress}`,
+  ].join("\n");
+  return { subject, html: htmlShell(content, market), text };
 }

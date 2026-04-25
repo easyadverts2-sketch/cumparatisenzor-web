@@ -88,7 +88,30 @@ function parseAddressLine(deliveryAddress: string) {
   return { street, city, zipCode };
 }
 
-function productTypeForMarket(market: Market) {
+/**
+ * COD is only valid with COD-capable product types (e.g. COND, DOPD, SMED — not CONN).
+ * @see PPL CPL CashOnDeliveryFeatureModel / shipment batch docs.
+ */
+function productTypeForMarket(market: Market, paymentMethod: Order["paymentMethod"]) {
+  if (paymentMethod === "COD") {
+    if (market === "HU") {
+      return (
+        process.env.PPL_PRODUCT_TYPE_COD_HU?.trim() ||
+        process.env.PPL_PRODUCT_TYPE_COD_INTL?.trim() ||
+        process.env.PPL_PRODUCT_TYPE_COD?.trim() ||
+        "COND"
+      );
+    }
+    if (market === "RO") {
+      return (
+        process.env.PPL_PRODUCT_TYPE_COD_RO?.trim() ||
+        process.env.PPL_PRODUCT_TYPE_COD_INTL?.trim() ||
+        process.env.PPL_PRODUCT_TYPE_COD?.trim() ||
+        "COND"
+      );
+    }
+    return process.env.PPL_PRODUCT_TYPE_COD?.trim() || "COND";
+  }
   if (market === "HU") {
     return process.env.PPL_PRODUCT_TYPE_HU?.trim() || process.env.PPL_PRODUCT_TYPE_INTL?.trim() || "CONN";
   }
@@ -96,6 +119,51 @@ function productTypeForMarket(market: Market) {
     return process.env.PPL_PRODUCT_TYPE_RO?.trim() || process.env.PPL_PRODUCT_TYPE_INTL?.trim() || "CONN";
   }
   return process.env.PPL_PRODUCT_TYPE?.trim() || "BUSS";
+}
+
+const SHOP_CURRENCY: Record<Market, string> = { HU: "HUF", RO: "RON" };
+
+/**
+ * COD settlement currency/amount sent to PPL.
+ * Default is shop currency (HU => HUF, RO => RON); override only if your PPL account requires it.
+ */
+function pplCodSettlementAmount(
+  market: Market,
+  totalPriceShopCurrency: number
+): { ok: true; currency: string; amount: number } | { ok: false; reason: string } {
+  const shop = SHOP_CURRENCY[market];
+  const fromMarketEnv =
+    market === "HU"
+      ? process.env.PPL_COD_CURRENCY_HU?.trim()
+      : market === "RO"
+        ? process.env.PPL_COD_CURRENCY_RO?.trim()
+        : undefined;
+  const fromGlobal = process.env.PPL_COD_CURRENCY?.trim();
+  const settlement = (
+    fromMarketEnv ||
+    fromGlobal ||
+    shop
+  ).toUpperCase();
+
+  if (settlement === shop) {
+    return { ok: true, currency: settlement, amount: totalPriceShopCurrency };
+  }
+
+  if (market === "HU" && settlement === "CZK") {
+    const hufPerCzk = Number(process.env.PPL_COD_HUF_PER_CZK?.trim());
+    if (!Number.isFinite(hufPerCzk) || hufPerCzk <= 0) {
+      return { ok: false, reason: "ppl_cod_huf_per_czk_required" };
+    }
+    const amount = Math.round((totalPriceShopCurrency / hufPerCzk) * 100) / 100;
+    return { ok: true, currency: "CZK", amount };
+  }
+
+  const mult = Number(process.env.PPL_COD_FX_MULTIPLIER?.trim());
+  if (!Number.isFinite(mult) || mult <= 0) {
+    return { ok: false, reason: "ppl_cod_fx_multiplier_required" };
+  }
+  const amount = Math.round(totalPriceShopCurrency * mult * 100) / 100;
+  return { ok: true, currency: settlement, amount };
 }
 
 /** CPL `ConstPageSize` enum is only `Default` | `A4` (no A6). Default ≈ 150×100 mm; A4 = 4 positions per sheet. */
@@ -233,9 +301,8 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 
   const addr = parseAddressLine(order.deliveryAddress);
   const country = market === "HU" ? "HU" : "RO";
-  const currency = market === "HU" ? "HUF" : "RON";
   const ref = String(order.orderNumber).padStart(7, "0");
-  const productType = productTypeForMarket(market);
+  const productType = productTypeForMarket(market, order.paymentMethod);
 
   const payload: Record<string, unknown> = {
     returnChannel: {
@@ -321,9 +388,13 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
     if (!codIban || !codSwift) {
       return { ok: false, reason: "ppl_cod_bank_data_missing" };
     }
+    const settlement = pplCodSettlementAmount(market, order.totalPrice);
+    if (!settlement.ok) {
+      return { ok: false, reason: settlement.reason };
+    }
     first.cashOnDelivery = {
-      codCurrency: currency,
-      codPrice: order.totalPrice,
+      codCurrency: settlement.currency,
+      codPrice: settlement.amount,
       codVarSym: ref,
       iban: codIban,
       swift: codSwift,

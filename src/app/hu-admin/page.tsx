@@ -80,17 +80,6 @@ export default async function HuAdminPage() {
         <AdminOrdersList orders={store.orders} locale="hu-HU" currency="HUF" detailsBasePath="/hu-admin/orders" />
       </div>
 
-      <h2 className="mt-12 text-2xl font-semibold">E-mailové notifikace (log)</h2>
-      <div className="mt-4 space-y-3">
-        {store.notifications.map((n) => (
-          <div key={n.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-            <p className="font-medium">{n.subject}</p>
-            <p>Komu: {n.to}</p>
-            <p>{n.body}</p>
-          </div>
-        ))}
-      </div>
-
       <h2 className="mt-12 text-2xl font-semibold">Audit administrace</h2>
       <div className="mt-4 space-y-2">
         {auditLogs.map((row) => (

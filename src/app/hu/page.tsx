@@ -34,9 +34,6 @@ export default function HuHomePage() {
               <Link href="/hu/comanda" className="rounded-xl bg-white px-6 py-3.5 font-semibold text-[#8f2c53] shadow-lg no-underline hover:bg-[#fff1e6]">
                 Rendeles
               </Link>
-              <Link href="/hu/despre-libre" className="rounded-xl border-2 border-white/40 bg-white/10 px-6 py-3.5 font-semibold text-white no-underline backdrop-blur hover:bg-white/20">
-                Hogyan mukodik
-              </Link>
             </div>
           </div>
           <div className="rounded-2xl bg-white/10 p-3 shadow-2xl ring-1 ring-white/20 backdrop-blur">
@@ -142,32 +139,6 @@ export default function HuHomePage() {
         </div>
       </section>
 
-      <section className="mx-auto mt-12 max-w-6xl px-6">
-        <div className="rounded-3xl border-2 border-[#0d4f4a]/10 bg-white p-8 shadow-sm md:p-10">
-          <h2 className="text-2xl font-bold text-[#042f2c]">LibreLink alkalmazas letoltese</h2>
-          <p className="mt-3 text-[#14534d]">
-            Magyarorszagon az app elerheto a hivatalos aruhazakban:
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <a
-              href="https://play.google.com/store/search?q=FreeStyle%20LibreLink%20HU&c=apps"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-xl border border-[#de6a44]/30 bg-[#fff4ec] px-5 py-3 font-semibold text-[#7a3f54] no-underline"
-            >
-              Google Play
-            </a>
-            <a
-              href="https://apps.apple.com/hu/search?term=FreeStyle%20LibreLink"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-xl border border-[#de6a44]/30 bg-[#fff4ec] px-5 py-3 font-semibold text-[#7a3f54] no-underline"
-            >
-              App Store
-            </a>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }
