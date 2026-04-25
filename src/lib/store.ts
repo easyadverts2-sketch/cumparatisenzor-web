@@ -12,7 +12,13 @@ import {
   renderInvoiceText,
   type InvoiceKind,
 } from "./billing";
-import { cancelPplShipment, createPplPickup, createPplShipment, fetchPplShipmentStatus } from "./ppl";
+import {
+  cancelPplShipment,
+  createPplPickup,
+  createPplShipment,
+  fetchPplOrderInfoByCustomerReference,
+  fetchPplShipmentStatus,
+} from "./ppl";
 import {
   buildDpdLabelForShipment,
   buildDpdBulkLabel,
@@ -1283,19 +1289,42 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
   if (!order?.pplShipmentId) return false;
+  const customerRef = String(order.orderNumber);
   const res = await fetchPplShipmentStatus(order.pplShipmentId);
+  let fallbackTracking: string | null = null;
+  if (!res.ok || !numericTrackingOrNull(res.data.trackingNumber)) {
+    const fromOrder = await fetchPplOrderInfoByCustomerReference(customerRef);
+    if (fromOrder.ok) {
+      fallbackTracking =
+        fromOrder.data.shipmentNumbers.find((x) => /^\d{11}$/.test(String(x || "").trim())) || null;
+    }
+  }
   if (!res.ok) {
-    await sql`update orders set ppl_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)} where id = ${orderId}`;
-    return false;
+    await sql`
+      update orders
+      set
+        ppl_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)},
+        tracking_number = ${fallbackTracking || numericTrackingOrNull(order.trackingNumber)}
+      where id = ${orderId}
+    `;
+    return Boolean(fallbackTracking);
   }
   await sql`
     update orders
     set
       ppl_shipment_status = ${res.data.state || "UNKNOWN"},
-      tracking_number = ${numericTrackingOrNull(res.data.trackingNumber) || numericTrackingOrNull(order.trackingNumber)}
+      tracking_number = ${
+        numericTrackingOrNull(res.data.trackingNumber) ||
+        fallbackTracking ||
+        numericTrackingOrNull(order.trackingNumber)
+      }
     where id = ${orderId}
   `;
-  return true;
+  return Boolean(
+    numericTrackingOrNull(res.data.trackingNumber) ||
+      fallbackTracking ||
+      numericTrackingOrNull(order.trackingNumber)
+  );
 }
 
 export async function cancelPplShipmentForOrder(orderId: string, market: Market = "RO") {

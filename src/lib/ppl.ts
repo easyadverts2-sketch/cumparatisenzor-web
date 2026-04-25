@@ -374,6 +374,43 @@ async function pplJsonRequest<T>(
   return { ok: true, data: parsed as T };
 }
 
+async function pplGetJson<T>(
+  path: string,
+  query?: Record<string, string | number | Array<string | number>>
+): Promise<PplGenericResult<T>> {
+  const baseUrl = process.env.PPL_API_BASE_URL?.trim();
+  if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
+  const token = await requestToken(baseUrl);
+  if (!token) return { ok: false, reason: "ppl_api_token_failed" };
+  const url = new URL(`${normalizeBaseUrl(baseUrl)}${path}`);
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (Array.isArray(v)) {
+        for (const item of v) url.searchParams.append(k, String(item));
+      } else {
+        url.searchParams.set(k, String(v));
+      }
+    }
+  }
+  const res = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
+    },
+  });
+  const text = await res.text().catch(() => "");
+  let parsed: unknown = {};
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+  }
+  if (!res.ok) return { ok: false, reason: `ppl_api_http_${res.status}`, raw: parsed };
+  return { ok: true, data: parsed as T };
+}
+
 export async function createPplShipment(order: Order, market: Market): Promise<PplResult> {
   if (!isEnabled()) {
     return { ok: false, reason: "ppl_api_disabled" };
@@ -634,4 +671,27 @@ export async function createPplPickup(
   const pickupId = String(rec.pickupId || rec.id || rec.orderId || "").trim();
   if (!pickupId) return { ok: false, reason: "ppl_pickup_missing_id", raw: rec };
   return { ok: true, data: { pickupId, raw: rec } };
+}
+
+export async function fetchPplOrderInfoByCustomerReference(
+  customerReference: string
+): Promise<PplGenericResult<{ shipmentNumbers: string[]; raw: unknown }>> {
+  const ref = customerReference.trim();
+  if (!ref) return { ok: false, reason: "missing_customer_reference" };
+  const result = await pplGetJson<Array<Record<string, unknown>>>("/order", {
+    CustomerReferences: [ref],
+    Limit: 50,
+    Offset: 0,
+  });
+  if (!result.ok) return result;
+  const list = Array.isArray(result.data) ? result.data : [];
+  const shipmentNumbers: string[] = [];
+  for (const order of list) {
+    const nums = Array.isArray(order.shipmentNumbers) ? order.shipmentNumbers : [];
+    for (const n of nums) {
+      const s = String(n || "").trim();
+      if (s) shipmentNumbers.push(s);
+    }
+  }
+  return { ok: true, data: { shipmentNumbers, raw: list } };
 }

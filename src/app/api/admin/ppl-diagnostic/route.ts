@@ -1,6 +1,6 @@
 import { isAdminRequest } from "@/lib/admin-guard";
 import { getOrderById } from "@/lib/store";
-import { fetchPplShipmentStatus } from "@/lib/ppl";
+import { fetchPplOrderInfoByCustomerReference, fetchPplShipmentStatus } from "@/lib/ppl";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const status = await fetchPplShipmentStatus(order.pplShipmentId);
     diagnostic.pplBatchFetch = status;
   }
+  diagnostic.pplOrderFetch = await fetchPplOrderInfoByCustomerReference(String(order.orderNumber));
   if (order.pplLabelPath && /^https?:\/\//i.test(order.pplLabelPath)) {
     try {
       const res = await fetch(order.pplLabelPath);
