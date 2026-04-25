@@ -55,6 +55,9 @@ export type Order = {
   pplRawShipmentResponse?: string | null;
   pplLabelUrl?: string | null;
   pplBulkLabelUrls?: string | null;
+  trackingNumberSource?: string | null;
+  trackingNumberJsonPath?: string | null;
+  pplTrackingUrl?: string | null;
   pplShipmentStatus?: string | null;
   pplLabelPath?: string | null;
   dpdShipmentId?: string | null;

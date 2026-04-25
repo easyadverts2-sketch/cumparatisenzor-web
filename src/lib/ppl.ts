@@ -16,6 +16,18 @@ type PplResult =
   | { ok: false; reason: string; raw?: unknown };
 
 type PplGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown };
+export type PplDebugRequestResult = {
+  ok: boolean;
+  method: "GET";
+  url: string;
+  query: Record<string, string | number | Array<string | number>>;
+  status: number | null;
+  headers: Record<string, string>;
+  data: unknown;
+  error: string | null;
+  durationMs: number;
+  correlationId: string | null;
+};
 
 function isEnabled() {
   return process.env.PPL_API_ENABLED === "true";
@@ -438,6 +450,93 @@ async function pplGetJson<T>(
   }
   if (!res.ok) return { ok: false, reason: `ppl_api_http_${res.status}`, raw: parsed };
   return { ok: true, data: parsed as T };
+}
+
+export async function pplDebugGet(
+  path: string,
+  query: Record<string, string | number | Array<string | number>> = {}
+): Promise<PplDebugRequestResult> {
+  const started = Date.now();
+  const baseUrl = process.env.PPL_API_BASE_URL?.trim();
+  if (!baseUrl) {
+    return {
+      ok: false,
+      method: "GET",
+      url: path,
+      query,
+      status: null,
+      headers: {},
+      data: null,
+      error: "ppl_api_not_configured",
+      durationMs: Date.now() - started,
+      correlationId: null,
+    };
+  }
+  const token = await requestToken(baseUrl);
+  if (!token) {
+    return {
+      ok: false,
+      method: "GET",
+      url: path,
+      query,
+      status: null,
+      headers: {},
+      data: null,
+      error: "ppl_api_token_failed",
+      durationMs: Date.now() - started,
+      correlationId: null,
+    };
+  }
+  const urlObj = new URL(`${normalizeBaseUrl(baseUrl)}${path}`);
+  for (const [k, v] of Object.entries(query)) {
+    if (Array.isArray(v)) {
+      for (const item of v) urlObj.searchParams.append(k, String(item));
+    } else {
+      urlObj.searchParams.set(k, String(v));
+    }
+  }
+  try {
+    const res = await fetch(urlObj.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
+      },
+    });
+    const text = await res.text().catch(() => "");
+    let parsed: unknown = {};
+    if (text) {
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = text;
+      }
+    }
+    return {
+      ok: res.ok,
+      method: "GET",
+      url: `${urlObj.origin}${urlObj.pathname}`,
+      query,
+      status: res.status,
+      headers: Object.fromEntries(res.headers.entries()),
+      data: parsed,
+      error: res.ok ? null : `ppl_api_http_${res.status}`,
+      durationMs: Date.now() - started,
+      correlationId: res.headers.get("x-correlation-id"),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      method: "GET",
+      url: `${urlObj.origin}${urlObj.pathname}`,
+      query,
+      status: null,
+      headers: {},
+      data: null,
+      error: String(err),
+      durationMs: Date.now() - started,
+      correlationId: null,
+    };
+  }
 }
 
 export async function createPplShipment(order: Order, market: Market): Promise<PplResult> {

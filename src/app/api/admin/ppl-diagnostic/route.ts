@@ -1,5 +1,5 @@
 import { isAdminRequest } from "@/lib/admin-guard";
-import { getOrderById, syncPplBatch } from "@/lib/store";
+import { debugFindPplTrackingNumber, getOrderById, syncPplBatch } from "@/lib/store";
 import { fetchPplBatchStatus, fetchPplOrderInfoByCustomerReference, fetchPplShipmentInfoByNumber } from "@/lib/ppl";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Order not found" }, { status: 404 });
   }
   await syncPplBatch(orderId, "RO").catch(() => undefined);
+  const knownTrackingNumber = String(request.nextUrl.searchParams.get("knownTrackingNumber") || "21491971453").trim();
+  const debugSearch = await debugFindPplTrackingNumber(orderId, knownTrackingNumber, "RO").catch(() => null);
   const refreshed = (await getOrderById(orderId, "RO")) || order;
   const diagnostic: Record<string, unknown> = {
     orderId: refreshed.id,
@@ -61,6 +63,16 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       diagnostic.labelFetch = { ok: false, error: String(err) };
     }
+  }
+  if (debugSearch) {
+    diagnostic.knownTrackingNumberSearch = {
+      knownTrackingNumber: debugSearch.knownTrackingNumber,
+      found: debugSearch.found,
+      saved: debugSearch.saved,
+      matches: debugSearch.matches,
+    };
+    diagnostic.trackingNumberCandidates = debugSearch.trackingNumberCandidates;
+    diagnostic.debugRequests = debugSearch.requests;
   }
   return NextResponse.json({ ok: true, diagnostic }, { status: 200 });
 }

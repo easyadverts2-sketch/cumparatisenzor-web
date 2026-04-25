@@ -5,6 +5,7 @@ import {
   cancelPplShipmentForOrder,
   deleteDpdShipmentForOrder,
   deletePplShipmentForOrder,
+  debugFindPplTrackingNumber,
   getDpdBulkLabelForOrders,
   getDpdPickups,
   getDpdShipmentsAdmin,
@@ -98,6 +99,21 @@ async function deleteShipmentAction(formData: FormData) {
   const ok = await deletePplShipmentForOrder(orderId, "RO");
   revalidatePath("/admin");
   redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+zasilka+smazana" : "Smazani+PPL+zasilky+selhalo"}`);
+}
+
+async function debugFindTrackingAction(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
+  const result = await debugFindPplTrackingNumber(orderId, "21491971453", "RO");
+  revalidatePath("/admin");
+  redirect(
+    `/admin?ok=${result.found ? "1" : "0"}&msg=${encodeURIComponent(
+      result.found
+        ? `Tracking nalezen (${result.matches[0]?.path || "?"})`
+        : `Tracking nenalezen, kandidatu: ${result.trackingNumberCandidates.length}`
+    )}`
+  );
 }
 
 async function orderPickupAction(formData: FormData) {
@@ -328,6 +344,7 @@ export default async function AdminPage({
                     <form action={refreshShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
                     <form action={cancelShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
                     <form action={deleteShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Smazat zasilku</button></form>
+                    <form action={debugFindTrackingAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Debug najit tracking cislo</button></form>
                     <a
                       href={`/api/admin/ppl-diagnostic?orderId=${encodeURIComponent(o.id)}`}
                       target="_blank"

@@ -18,10 +18,12 @@ import {
   createPplShipment,
   fetchPplBatchLabelPdf,
   fetchPplBatchStatus,
+  pplDebugGet,
   fetchPplOrderInfoByCustomerReference,
   fetchPplShipmentByFilters,
   fetchPplShipmentInfoByCustomerReference,
   fetchPplShipmentInfoByNumber,
+  type PplDebugRequestResult,
 } from "./ppl";
 import {
   buildDpdLabelForShipment,
@@ -164,6 +166,105 @@ function collectTrackingCandidates(input: unknown, out: string[] = []): string[]
   return out;
 }
 
+type JsonPathMatch = {
+  path: string;
+  value: string | number;
+};
+
+function findValuePaths(input: unknown, needle: string): JsonPathMatch[] {
+  const results: JsonPathMatch[] = [];
+  const needleText = String(needle);
+  const needleNum = Number(needleText);
+  function walk(node: unknown, path: string) {
+    if (node == null) return;
+    if (Array.isArray(node)) {
+      node.forEach((item, idx) => walk(item, `${path}[${idx}]`));
+      return;
+    }
+    if (typeof node === "object") {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        const next = path ? `${path}.${k}` : k;
+        walk(v, next);
+      }
+      return;
+    }
+    if (typeof node === "string") {
+      if (node === needleText || node.includes(needleText)) {
+        results.push({ path, value: node });
+      }
+      return;
+    }
+    if (typeof node === "number" && Number.isFinite(node)) {
+      if (String(node) === needleText || node === needleNum) {
+        results.push({ path, value: node });
+      }
+    }
+  }
+  walk(input, "");
+  return results;
+}
+
+function valuesWithPaths(input: unknown, path = "", out: JsonPathMatch[] = []): JsonPathMatch[] {
+  if (input == null) return out;
+  if (Array.isArray(input)) {
+    input.forEach((item, idx) => valuesWithPaths(item, `${path}[${idx}]`, out));
+    return out;
+  }
+  if (typeof input === "object") {
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      valuesWithPaths(v, path ? `${path}.${k}` : k, out);
+    }
+    return out;
+  }
+  if (typeof input === "string" || typeof input === "number") {
+    out.push({ path, value: input });
+  }
+  return out;
+}
+
+function parseRecipientZip(deliveryAddress: string): string {
+  const m = deliveryAddress.match(/\b(\d{4,6})\b/);
+  return m ? m[1] : "";
+}
+
+function isLikelyPhone(value: string): boolean {
+  return /^\+?[0-9]{9,15}$/.test(value);
+}
+
+function isLikelyPplTrackingNumber(
+  value: unknown,
+  context: { phone?: string; zip?: string; codVarSym?: string }
+): boolean {
+  const raw = String(value ?? "").replace(/\s+/g, "");
+  if (!/^[0-9]{10,14}$/.test(raw)) return false;
+  if (isUuidLike(raw)) return false;
+  if (context.phone && raw === String(context.phone).replace(/\s+/g, "")) return false;
+  if (context.zip && raw === String(context.zip).replace(/\s+/g, "")) return false;
+  if (context.codVarSym && String(context.codVarSym).length < 10 && raw === context.codVarSym) return false;
+  return true;
+}
+
+function getByJsonPath(input: unknown, jsonPath: string): unknown {
+  if (!jsonPath) return undefined;
+  const tokenized = jsonPath.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
+  let cur: unknown = input;
+  for (const part of tokenized) {
+    if (cur == null) return undefined;
+    if (Array.isArray(cur)) {
+      const idx = Number(part);
+      if (!Number.isFinite(idx)) return undefined;
+      cur = cur[idx];
+      continue;
+    }
+    if (typeof cur === "object") {
+      cur = (cur as Record<string, unknown>)[part];
+      continue;
+    }
+    return undefined;
+  }
+  return cur;
+}
+
 function toOrder(row: Row): Order {
   const orderNumber =
     row.order_number !== undefined && row.order_number !== null
@@ -220,6 +321,9 @@ function toOrder(row: Row): Order {
     pplRawShipmentResponse: row.ppl_raw_shipment_response != null ? String(row.ppl_raw_shipment_response) : null,
     pplLabelUrl: row.ppl_label_url != null ? String(row.ppl_label_url) : null,
     pplBulkLabelUrls: row.ppl_bulk_label_urls != null ? String(row.ppl_bulk_label_urls) : null,
+    trackingNumberSource: row.tracking_number_source != null ? String(row.tracking_number_source) : null,
+    trackingNumberJsonPath: row.tracking_number_json_path != null ? String(row.tracking_number_json_path) : null,
+    pplTrackingUrl: row.ppl_tracking_url != null ? String(row.ppl_tracking_url) : null,
     pplShipmentStatus: row.ppl_shipment_status != null ? String(row.ppl_shipment_status) : null,
     pplLabelPath: row.ppl_label_path != null ? String(row.ppl_label_path) : null,
     dpdShipmentId: row.dpd_shipment_id != null ? String(row.dpd_shipment_id) : null,
@@ -512,6 +616,21 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
     where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_bulk_label_urls'
   `;
   if (pplBulkLabelUrlsCol.length === 0) await sql`alter table orders add column ppl_bulk_label_urls text`;
+  const trackingSourceCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'tracking_number_source'
+  `;
+  if (trackingSourceCol.length === 0) await sql`alter table orders add column tracking_number_source text`;
+  const trackingPathCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'tracking_number_json_path'
+  `;
+  if (trackingPathCol.length === 0) await sql`alter table orders add column tracking_number_json_path text`;
+  const trackingUrlCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'ppl_tracking_url'
+  `;
+  if (trackingUrlCol.length === 0) await sql`alter table orders add column ppl_tracking_url text`;
   await sql`
     update orders
     set ppl_batch_id = tracking_number, tracking_number = null
@@ -1555,6 +1674,10 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
       if (!importState) {
         importState = String(batchRaw.importState || statusFromBatch.data.state || "").trim();
       }
+      const preferredPath = String(order.trackingNumberJsonPath || "").trim();
+      const preferredValue =
+        (preferredPath ? getByJsonPath(batchRaw, preferredPath) : undefined) ??
+        (preferredPath ? getByJsonPath(itemRec, preferredPath) : undefined);
       labelUrl = String(itemRec.labelUrl || "").trim() || labelUrl;
       const completeLabel = batchRaw.completeLabel && typeof batchRaw.completeLabel === "object"
         ? (batchRaw.completeLabel as Record<string, unknown>)
@@ -1562,6 +1685,7 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
       const labelUrlsArr = Array.isArray(completeLabel.labelUrls) ? completeLabel.labelUrls : [];
       bulkLabelUrls = labelUrlsArr.map((x) => String(x || "").trim()).filter(Boolean);
       trackingCandidate =
+        numericTrackingOrNull(String(preferredValue || "").trim()) ||
         numericTrackingOrNull(String(itemRec.shipmentNumber || "").trim()) ||
         numericTrackingOrNull(collectTrackingCandidates(itemRec)[0]) ||
         numericTrackingOrNull(collectTrackingCandidates(batchRaw)[0]) ||
@@ -1682,6 +1806,125 @@ export async function syncPplBatch(orderId: string, market: Market = "RO"): Prom
 export async function refreshPplShipment(orderId: string, market: Market = "RO") {
   const result = await syncPplBatch(orderId, market);
   return result.ok;
+}
+
+export async function debugFindPplTrackingNumber(
+  orderId: string,
+  knownTrackingNumber = "21491971453",
+  market: Market = "RO"
+): Promise<{
+  ok: boolean;
+  knownTrackingNumber: string;
+  found: boolean;
+  saved: boolean;
+  matches: Array<{ source: string; path: string; value: string | number }>;
+  requests: Array<PplDebugRequestResult & { step: string }>;
+  trackingNumberCandidates: Array<{ source: string; path: string; value: string | number }>;
+}> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) {
+    return { ok: false, knownTrackingNumber, found: false, saved: false, matches: [], requests: [], trackingNumberCandidates: [] };
+  }
+
+  const created = new Date(order.createdAt);
+  const dateFrom = new Date(created.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const dateTo = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const referenceId = String(order.pplOrderReference || order.orderNumber);
+  const customerReference = String(order.orderNumber);
+  const codVarSym = String(order.orderNumber).replace(/\D+/g, "").slice(-10);
+  const recipientZip = parseRecipientZip(order.deliveryAddress);
+  const requests: Array<PplDebugRequestResult & { step: string }> = [];
+
+  async function run(step: string, path: string, query: Record<string, string | number | Array<string | number>>) {
+    const res = await pplDebugGet(path, query);
+    requests.push({ ...res, step });
+  }
+
+  if (order.pplBatchId) {
+    await run("A_batch_status", `/shipment/batch/${encodeURIComponent(order.pplBatchId)}`, {});
+    await run("B_batch_label", `/shipment/batch/${encodeURIComponent(order.pplBatchId)}/label`, {});
+  }
+  if (referenceId) await run("C_order_by_reference", "/order", { OrderReferences: [referenceId], Limit: 100, Offset: 0 });
+  if (customerReference) await run("D_order_by_customer_reference", "/order", { CustomerReferences: [customerReference], Limit: 100, Offset: 0 });
+  if (order.pplOrderNumber) await run("E_order_by_order_number", "/order", { OrderNumbers: [order.pplOrderNumber], Limit: 100, Offset: 0 });
+  await run("F_order_by_date_range", "/order", { DateFrom: dateFrom, DateTo: dateTo, Limit: 100, Offset: 0 });
+  await run("G_shipment_by_known_number", "/shipment", { ShipmentNumbers: [knownTrackingNumber], Limit: 100, Offset: 0 });
+  if (customerReference) {
+    await run("H_shipment_by_customer_reference", "/shipment", {
+      CustomerReferences: [customerReference],
+      DateFrom: dateFrom,
+      DateTo: dateTo,
+      Limit: 100,
+      Offset: 0,
+    });
+  }
+  if (codVarSym) {
+    await run("I_shipment_by_variable_symbol", "/shipment", {
+      VariableSymbols: [codVarSym],
+      DateFrom: dateFrom,
+      DateTo: dateTo,
+      Limit: 100,
+      Offset: 0,
+    });
+  }
+
+  const matches: Array<{ source: string; path: string; value: string | number }> = [];
+  const candidates: Array<{ source: string; path: string; value: string | number }> = [];
+  for (const req of requests) {
+    const found = findValuePaths(req.data, knownTrackingNumber);
+    for (const m of found) matches.push({ source: req.step, path: m.path, value: m.value });
+    const vals = valuesWithPaths(req.data);
+    for (const v of vals) {
+      if (
+        isLikelyPplTrackingNumber(v.value, {
+          phone: order.phone,
+          zip: recipientZip,
+          codVarSym,
+        })
+      ) {
+        candidates.push({ source: req.step, path: v.path, value: v.value });
+      }
+    }
+  }
+
+  let saved = false;
+  if (matches.length > 0) {
+    const chosen = matches[0];
+    const sourceReq = requests.find((r) => r.step === chosen.source);
+    const sourceData = sourceReq?.data && typeof sourceReq.data === "object" ? (sourceReq.data as Record<string, unknown>) : {};
+    const shipmentState = String((sourceData.shipmentState as string | undefined) || (sourceData.state as string | undefined) || "").trim();
+    const trackingUrl =
+      String((sourceData?.trackAndTrace as Record<string, unknown> | undefined)?.partnerUrl || "").trim() || null;
+    const labelUrl = String((sourceData.labelUrl as string | undefined) || "").trim() || null;
+    await sql`
+      update orders
+      set
+        tracking_number = ${knownTrackingNumber},
+        ppl_shipment_id = ${knownTrackingNumber},
+        tracking_number_source = ${chosen.source},
+        tracking_number_json_path = ${chosen.path},
+        ppl_shipment_status = 'PPL_TRACKING_READY',
+        ppl_shipment_state = ${shipmentState || null},
+        ppl_tracking_url = ${trackingUrl},
+        ppl_label_url = ${labelUrl},
+        ppl_raw_order_response = ${jsonForDb(requests.find((r) => r.step.startsWith("C_") || r.step.startsWith("D_") || r.step.startsWith("E_") || r.step.startsWith("F_"))?.data || null)},
+        ppl_raw_shipment_response = ${jsonForDb(requests.find((r) => r.step.startsWith("G_") || r.step.startsWith("H_") || r.step.startsWith("I_"))?.data || null)}
+      where id = ${orderId}
+    `;
+    saved = true;
+  }
+
+  return {
+    ok: true,
+    knownTrackingNumber,
+    found: matches.length > 0,
+    saved,
+    matches,
+    requests,
+    trackingNumberCandidates: candidates,
+  };
 }
 
 export async function ensurePplLabelForOrder(orderId: string, market: Market = "RO"): Promise<string | null> {
