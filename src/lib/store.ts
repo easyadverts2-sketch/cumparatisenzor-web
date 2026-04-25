@@ -254,6 +254,11 @@ function shipmentErrorStatus(reason: string, raw?: unknown) {
   return `ERROR:${reason}${suffix}`.slice(0, 2000);
 }
 
+function numericTrackingOrNull(value: string | null | undefined): string | null {
+  const raw = String(value || "").trim();
+  return /^\d{11}$/.test(raw) ? raw : null;
+}
+
 export function formatPaymentMethodLabel(pm: Order["paymentMethod"]): string {
   if (pm === "COD") return "Dobírka";
   if (pm === "BANK_TRANSFER") return "Bankovní převod";
@@ -555,7 +560,7 @@ async function createShipmentForOrder(
         set
           ppl_shipment_id = ${ppl.shipmentId},
           ppl_shipment_status = 'CREATED',
-          tracking_number = ${ppl.shipmentId},
+          tracking_number = ${numericTrackingOrNull(ppl.shipmentId)},
           ppl_label_path = ${ppl.labelPublicPath || null}
         where id = ${order.id}
       `;
@@ -603,7 +608,7 @@ async function createShipmentForOrder(
         set
           dpd_shipment_id = ${dpd.shipmentId},
           dpd_shipment_status = 'CREATED',
-          tracking_number = ${dpd.shipmentId},
+          tracking_number = ${numericTrackingOrNull(dpd.shipmentId)},
           dpd_label_path = ${dpd.labelPublicPath || null}
         where id = ${order.id}
       `;
@@ -1287,7 +1292,7 @@ export async function refreshPplShipment(orderId: string, market: Market = "RO")
     update orders
     set
       ppl_shipment_status = ${res.data.state || "UNKNOWN"},
-      tracking_number = ${res.data.trackingNumber || order.trackingNumber || null}
+      tracking_number = ${numericTrackingOrNull(res.data.trackingNumber) || numericTrackingOrNull(order.trackingNumber)}
     where id = ${orderId}
   `;
   return true;
@@ -1383,7 +1388,7 @@ export async function refreshDpdShipment(orderId: string, market: Market = "RO")
     update orders
     set
       dpd_shipment_status = ${res.data.state || "UNKNOWN"},
-      tracking_number = ${res.data.trackingNumber || order.trackingNumber || null}
+      tracking_number = ${numericTrackingOrNull(res.data.trackingNumber) || numericTrackingOrNull(order.trackingNumber)}
     where id = ${orderId}
   `;
   return true;
@@ -1493,12 +1498,20 @@ export async function getPplBulkLabelForOrders(orderIds: string[], market: Marke
   `;
   const labelPaths = rows
     .map((r) => String((r as Row).ppl_label_path || "").trim())
-    .filter((p) => p.startsWith("/"));
+    .filter(Boolean);
   if (labelPaths.length === 0) return null;
   const merged = await PDFDocument.create();
-  for (const publicPath of labelPaths) {
-    const absPath = path.resolve(process.cwd(), `.${publicPath}`);
-    const bytes = await readFile(absPath).catch(() => null);
+  for (const labelPath of labelPaths) {
+    let bytes: Buffer | null = null;
+    if (/^https?:\/\//i.test(labelPath)) {
+      bytes = await fetch(labelPath)
+        .then((res) => (res.ok ? res.arrayBuffer() : null))
+        .then((arr) => (arr ? Buffer.from(arr) : null))
+        .catch(() => null);
+    } else if (labelPath.startsWith("/")) {
+      const absPath = path.resolve(process.cwd(), `.${labelPath}`);
+      bytes = await readFile(absPath).catch(() => null);
+    }
     if (!bytes) continue;
     const src = await PDFDocument.load(bytes).catch(() => null);
     if (!src) continue;

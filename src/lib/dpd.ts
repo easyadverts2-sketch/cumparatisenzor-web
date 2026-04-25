@@ -86,6 +86,10 @@ function pickShipmentId(raw: unknown): string | null {
     const current = stack.pop();
     if (!current || typeof current !== "object") continue;
     const rec = current as Record<string, unknown>;
+    const preferred = [rec.parcelLabelNumber, rec.parcelNumber].map((v) => String(v || "").trim());
+    for (const p of preferred) {
+      if (/^\d{11}$/.test(p)) return p;
+    }
     const idCandidate =
       rec.shipmentId ??
       rec.shipment_id ??
@@ -294,7 +298,8 @@ export async function fetchDpdShipmentStatus(
   if (!res.ok) return res;
   const raw = res.data as Record<string, unknown>;
   const state = String(raw.status || raw.state || "").toUpperCase();
-  const trackingNumber = String(raw.parcelLabelNumber || raw.parcelNumber || raw.shipmentId || "").trim() || null;
+  const candidate = String(raw.parcelLabelNumber || raw.parcelNumber || raw.shipmentId || "").trim();
+  const trackingNumber = /^\d{11}$/.test(candidate) ? candidate : null;
   return { ok: true, data: { state, trackingNumber, raw } };
 }
 

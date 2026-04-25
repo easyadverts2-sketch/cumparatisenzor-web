@@ -563,7 +563,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
               batchId
           );
           const labelUrl = firstLabelUrl(pollRaw);
-          const labelPublicPath = labelUrl
+          const savedLabelPath = labelUrl
             ? await downloadAndSaveLabelPdf({
                 labelUrl,
                 token,
@@ -572,6 +572,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
                 shipmentId,
               }).catch(() => null)
             : null;
+          const labelPublicPath = savedLabelPath || labelUrl || null;
           return { ok: true, shipmentId, labelPublicPath, raw: pollRaw };
         }
         if (state === "ERROR" || state === "FAILED") {
@@ -603,13 +604,14 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 export async function fetchPplShipmentStatus(
   shipmentId: string
 ): Promise<PplGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
-  const path = process.env.PPL_API_TRACK_PATH?.trim() || "/shipment/{id}";
+  const path = process.env.PPL_API_TRACK_PATH?.trim() || "/shipment/batch/{id}";
   const res = await pplJsonRequest<Record<string, unknown>>("GET", path, undefined, shipmentId);
   if (!res.ok) return res;
   const rec = toRecord(res.data);
   const state = String(rec.state || rec.status || rec.importState || "").toUpperCase();
-  const trackingNumber =
-    extractShipmentNumberFromAny(rec) || String(rec.shipmentNumber || rec.parcelNumber || "").trim() || null;
+  const candidate =
+    extractShipmentNumberFromAny(rec) || String(rec.shipmentNumber || rec.parcelNumber || "").trim() || "";
+  const trackingNumber = /^\d{11}$/.test(candidate) ? candidate : null;
   return { ok: true, data: { state, trackingNumber, raw: rec } };
 }
 

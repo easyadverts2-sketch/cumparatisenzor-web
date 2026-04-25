@@ -302,6 +302,14 @@ export default async function HuAdminPage({
                     <form action={refreshShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
                     <form action={cancelShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
                     <form action={deleteShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Smazat zasilku</button></form>
+                    <a
+                      href={`/api/hu-admin/ppl-diagnostic?orderId=${encodeURIComponent(o.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded border px-2 py-1"
+                    >
+                      Diagnostika JSON
+                    </a>
                   </div>
                 </td>
               </tr>
