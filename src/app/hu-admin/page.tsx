@@ -3,6 +3,8 @@ import {
   autoCancelExpiredOrders,
   cancelDpdShipmentForOrder,
   cancelPplShipmentForOrder,
+  deleteDpdShipmentForOrder,
+  deletePplShipmentForOrder,
   getDpdBulkLabelForOrders,
   getDpdPickups,
   getDpdShipmentsAdmin,
@@ -10,6 +12,7 @@ import {
   getPplShipmentsAdmin,
   orderDpdPickup,
   orderPplPickup,
+  regenerateDpdLabelForOrder,
   readStore,
   refreshDpdShipment,
   refreshPplShipment,
@@ -60,6 +63,13 @@ async function cancelShipmentAction(formData: FormData) {
   revalidatePath("/hu-admin");
 }
 
+async function deleteShipmentAction(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  if (orderId) await deletePplShipmentForOrder(orderId, "HU");
+  revalidatePath("/hu-admin");
+}
+
 async function orderPickupAction(formData: FormData) {
   "use server";
   const note = String(formData.get("note") || "");
@@ -78,6 +88,20 @@ async function cancelDpdShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
   if (orderId) await cancelDpdShipmentForOrder(orderId, "HU");
+  revalidatePath("/hu-admin");
+}
+
+async function deleteDpdShipmentAction(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  if (orderId) await deleteDpdShipmentForOrder(orderId, "HU");
+  revalidatePath("/hu-admin");
+}
+
+async function regenerateDpdLabelAction(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  if (orderId) await regenerateDpdLabelForOrder(orderId, "HU");
   revalidatePath("/hu-admin");
 }
 
@@ -202,13 +226,20 @@ export default async function HuAdminPage() {
                 <td className="px-3 py-2">{o.trackingNumber || "-"}</td>
                 <td className="px-3 py-2">{o.pplShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
-                  {o.pplLabelPath ? <a href={o.pplLabelPath} target="_blank" rel="noreferrer" className="text-[#0f766e] hover:underline">PDF</a> : "-"}
+                  {o.pplLabelPath ? (
+                    <a href={o.pplLabelPath} target="_blank" rel="noreferrer" className="text-[#0f766e] hover:underline">
+                      Tisk stitku
+                    </a>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     <form action={createShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Vytvořit</button></form>
                     <form action={refreshShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
                     <form action={cancelShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
+                    <form action={deleteShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Smazat zasilku</button></form>
                   </div>
                 </td>
               </tr>
@@ -276,13 +307,21 @@ export default async function HuAdminPage() {
                 <td className="px-3 py-2">{o.trackingNumber || "-"}</td>
                 <td className="px-3 py-2">{o.dpdShipmentStatus || "-"}</td>
                 <td className="px-3 py-2">
-                  {o.dpdLabelPath ? <a href={o.dpdLabelPath} target="_blank" rel="noreferrer" className="text-[#6f2147] hover:underline">PDF</a> : "-"}
+                  {o.dpdLabelPath ? (
+                    <a href={o.dpdLabelPath} target="_blank" rel="noreferrer" className="text-[#6f2147] hover:underline">
+                      Tisk stitku
+                    </a>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     <form action={createShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Vytvořit</button></form>
+                    <form action={regenerateDpdLabelAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Generovat stitek</button></form>
                     <form action={refreshDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
                     <form action={cancelDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Storno</button></form>
+                    <form action={deleteDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Smazat zasilku</button></form>
                   </div>
                 </td>
               </tr>

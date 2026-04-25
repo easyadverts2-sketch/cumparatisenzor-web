@@ -11,6 +11,7 @@ import {
 } from "./billing";
 import { cancelPplShipment, createPplPickup, createPplShipment, fetchPplShipmentStatus } from "./ppl";
 import {
+  buildDpdLabelForShipment,
   buildDpdBulkLabel,
   cancelDpdShipment,
   createDpdPickup,
@@ -1303,6 +1304,25 @@ export async function cancelPplShipmentForOrder(orderId: string, market: Market 
   return true;
 }
 
+export async function deletePplShipmentForOrder(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) return false;
+  if (order.pplShipmentId) {
+    await cancelPplShipment(order.pplShipmentId).catch(() => ({ ok: false as const }));
+  }
+  await sql`
+    update orders
+    set
+      ppl_shipment_id = null,
+      ppl_shipment_status = null,
+      ppl_label_path = null
+    where id = ${orderId}
+  `;
+  return true;
+}
+
 export async function orderPplPickup(market: Market = "RO", note = "") {
   const sql = getSql();
   await ensureSchema(sql);
@@ -1380,6 +1400,25 @@ export async function cancelDpdShipmentForOrder(orderId: string, market: Market 
   return true;
 }
 
+export async function deleteDpdShipmentForOrder(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) return false;
+  if (order.dpdShipmentId) {
+    await cancelDpdShipment(order.dpdShipmentId).catch(() => ({ ok: false as const }));
+  }
+  await sql`
+    update orders
+    set
+      dpd_shipment_id = null,
+      dpd_shipment_status = null,
+      dpd_label_path = null
+    where id = ${orderId}
+  `;
+  return true;
+}
+
 export async function orderDpdPickup(market: Market = "RO", note = "") {
   const sql = getSql();
   await ensureSchema(sql);
@@ -1435,6 +1474,17 @@ export async function getDpdBulkLabelForOrders(orderIds: string[], market: Marke
   if (shipmentIds.length === 0) return null;
   const built = await buildDpdBulkLabel(shipmentIds, market);
   if (!built.ok) return null;
+  return built.data;
+}
+
+export async function regenerateDpdLabelForOrder(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order?.dpdShipmentId) return null;
+  const built = await buildDpdLabelForShipment(order.dpdShipmentId, order.orderNumber, market);
+  if (!built.ok) return null;
+  await sql`update orders set dpd_label_path = ${built.data} where id = ${orderId}`;
   return built.data;
 }
 

@@ -342,3 +342,22 @@ export async function buildDpdBulkLabel(shipmentIds: string[], market: Market): 
   if (!saved) return { ok: false, reason: "dpd_bulk_label_save_failed" };
   return { ok: true, data: saved };
 }
+
+export async function buildDpdLabelForShipment(
+  shipmentId: string,
+  orderNumber: number,
+  market: Market
+): Promise<DpdGenericResult<string>> {
+  const { baseUrl, token } = configured();
+  if (!token) return { ok: false, reason: "dpd_api_not_configured" };
+  const bytes = await fetchLabelPdf(baseUrl, token, shipmentId);
+  if (!bytes) return { ok: false, reason: "dpd_label_download_failed" };
+  const saved = await downloadAndSaveLabelPdf({
+    labelBytes: bytes,
+    orderNumber,
+    market,
+    shipmentId,
+  });
+  if (!saved) return { ok: false, reason: "dpd_label_save_failed" };
+  return { ok: true, data: saved };
+}
