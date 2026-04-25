@@ -4,15 +4,19 @@ import { getSql } from "./db";
 import { formatOrderNumber } from "./order-format";
 import { getStripe } from "./stripe-checkout";
 import {
-  formatInvoiceNo,
-  formatVariableSymbol,
   marketCurrency,
   renderInvoiceHtml,
   renderInvoiceText,
   type InvoiceKind,
 } from "./billing";
-import { createPplShipment } from "./ppl";
-import { createDpdShipment } from "./dpd";
+import { cancelPplShipment, createPplPickup, createPplShipment, fetchPplShipmentStatus } from "./ppl";
+import {
+  buildDpdBulkLabel,
+  cancelDpdShipment,
+  createDpdPickup,
+  createDpdShipment,
+  fetchDpdShipmentStatus,
+} from "./dpd";
 import {
   buildInternalOrderAlertEmail,
   buildOrderCreatedEmail,
@@ -88,6 +92,25 @@ type AdminAuditRow = {
   details: string | null;
 };
 
+type PplPickupRow = {
+  id: string;
+  created_at: string;
+  market: string;
+  pickup_id: string;
+  note: string | null;
+  status: string;
+};
+
+type DpdPickupRow = {
+  id: string;
+  created_at: string;
+  market: string;
+  pickup_id: string;
+  pickup_date: string | null;
+  note: string | null;
+  status: string;
+};
+
 function toOrder(row: Row): Order {
   const orderNumber =
     row.order_number !== undefined && row.order_number !== null
@@ -132,6 +155,10 @@ function toOrder(row: Row): Order {
     dpdShipmentStatus: row.dpd_shipment_status != null ? String(row.dpd_shipment_status) : null,
     dpdLabelPath: row.dpd_label_path != null ? String(row.dpd_label_path) : null,
     trackingNumber: row.tracking_number != null ? String(row.tracking_number) : null,
+    additionalNotes:
+      row.additional_notes != null && String(row.additional_notes).trim() !== ""
+        ? String(row.additional_notes)
+        : null,
   };
 }
 
@@ -242,9 +269,10 @@ async function migrateOrderNumber(sql: SqlClient) {
     where table_schema = 'public' and table_name = 'orders' and column_name = 'order_number'
   `;
   if (col.length > 0) {
+    await sql`alter table orders alter column order_number type bigint using order_number::bigint`;
     return;
   }
-  await sql`alter table orders add column order_number integer`;
+  await sql`alter table orders add column order_number bigint`;
   await sql`
     update orders o set order_number = r.rn from (
       select id, row_number() over (order by created_at asc)::int as rn from orders
@@ -255,6 +283,35 @@ async function migrateOrderNumber(sql: SqlClient) {
   await sql`alter table orders alter column order_number set default nextval('orders_number_seq')`;
   await sql`alter table orders alter column order_number set not null`;
   await sql`create unique index if not exists orders_order_number_unique on orders(order_number)`;
+}
+
+function pragueDatePrefix(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const day = parts.find((p) => p.type === "day")?.value || "01";
+  const month = parts.find((p) => p.type === "month")?.value || "01";
+  const year = parts.find((p) => p.type === "year")?.value || "1970";
+  return `${day}${month}${year}`;
+}
+
+async function nextDailyOrderNumber(sql: SqlClient): Promise<number | null> {
+  const prefix = pragueDatePrefix();
+  const start = Number(`${prefix}001`);
+  const end = Number(`${prefix}999`);
+  const rows = await sql`
+    select max(order_number) as max_order
+    from orders
+    where order_number >= ${start} and order_number <= ${end}
+  `;
+  const maxRaw = rows[0]?.max_order;
+  const maxVal = maxRaw != null ? Number(maxRaw) : 0;
+  const nextSuffix = maxVal > 0 ? Number(String(maxVal).slice(-3)) + 1 : 1;
+  if (nextSuffix > 999) return null;
+  return Number(`${prefix}${String(nextSuffix).padStart(3, "0")}`);
 }
 
 async function migrateShippingCarrier(sql: SqlClient) {
@@ -339,6 +396,16 @@ async function migrateOrderShippingIntegration(sql: SqlClient) {
   }
 }
 
+async function migrateOrderAdditionalNotes(sql: SqlClient) {
+  const col = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'additional_notes'
+  `;
+  if (col.length === 0) {
+    await sql`alter table orders add column additional_notes text`;
+  }
+}
+
 async function ensureSchema(sql: SqlClient) {
   await sql`
     create table if not exists app_settings (
@@ -408,6 +475,29 @@ async function ensureSchema(sql: SqlClient) {
   }
   await sql`create unique index if not exists invoices_market_kind_seq_idx on invoices(market, kind, sequence_no)`;
   await sql`create index if not exists invoices_order_kind_idx on invoices(order_id, kind)`;
+  await sql`
+    create table if not exists ppl_pickups (
+      id uuid primary key,
+      created_at timestamptz not null default now(),
+      market text not null,
+      pickup_id text not null,
+      note text,
+      status text not null default 'ORDERED'
+    )
+  `;
+  await sql`create index if not exists ppl_pickups_market_created_idx on ppl_pickups(market, created_at desc)`;
+  await sql`
+    create table if not exists dpd_pickups (
+      id uuid primary key,
+      created_at timestamptz not null default now(),
+      market text not null,
+      pickup_id text not null,
+      pickup_date text,
+      note text,
+      status text not null default 'ORDERED'
+    )
+  `;
+  await sql`create index if not exists dpd_pickups_market_created_idx on dpd_pickups(market, created_at desc)`;
 
   await sql`
     insert into app_settings (key, value) values
@@ -426,6 +516,7 @@ async function ensureSchema(sql: SqlClient) {
   await migrateShippingCarrier(sql);
   await migrateOrderMarket(sql);
   await migrateOrderShippingIntegration(sql);
+  await migrateOrderAdditionalNotes(sql);
 }
 
 async function insertAuditLog(
@@ -574,8 +665,8 @@ async function createInvoiceRecord(sql: SqlClient, order: Order, market: Market,
   const dueDate = new Date(issueDate);
   dueDate.setDate(dueDate.getDate() + 5);
   const sequenceNo = await nextInvoiceSequence(sql, market, kind);
-  const invoiceNo = formatInvoiceNo(kind, issueDate, sequenceNo);
-  const variableSymbol = formatVariableSymbol(issueDate, sequenceNo);
+  const invoiceNo = String(order.orderNumber);
+  const variableSymbol = String(order.orderNumber);
   const currency = marketCurrency(market);
   const amount = order.totalPrice;
 
@@ -652,6 +743,7 @@ export async function createOrder(input: {
   paymentMethod: Order["paymentMethod"];
   shippingCarrier: ShippingCarrier;
   shippingCarrierOther?: string | null;
+  additionalNotes?: string | null;
 }, market: Market = "RO"): Promise<{ ok: boolean; order?: Order; message: string }> {
   try {
     const senderFrom = senderEmailForMarket(market);
@@ -738,27 +830,54 @@ export async function createOrder(input: {
       return { ok: false, message: "Stoc insuficient. V-am trimis o informare." };
     }
 
-    const orderId = crypto.randomUUID();
     const status: OrderStatus =
       input.paymentMethod === "BANK_TRANSFER" || input.paymentMethod === "CARD_STRIPE"
         ? "ORDERED_NOT_PAID"
         : "WAITING_FOR_SHIPPING";
-
-    const inserted = await sql`
-      insert into orders (
-        id, customer_name, email, phone, billing_address, delivery_address,
-        quantity, payment_method, shipping_price, item_price, total_price, status,
-        shipping_carrier, shipping_carrier_other, market
-      ) values (
-        ${orderId}, ${input.customerName}, ${input.email}, ${input.phone},
-        ${input.billingAddress}, ${input.deliveryAddress},
-        ${input.quantity}, ${input.paymentMethod}, ${shippingPrice},
-        ${price}, ${totalPrice}, ${status},
-        ${input.shippingCarrier}, ${carrierOther}, ${market}
-      )
-      returning *
-    `;
-    const order = toOrder(inserted[0] as unknown as Row);
+    let insertedRow: Row | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const orderNumber = await nextDailyOrderNumber(sql);
+      if (!orderNumber) {
+        return {
+          ok: false,
+          message:
+            "Limit 999 objednavek za den byl dosazen. Kontaktujte prosim podporu.",
+        };
+      }
+      const orderId = crypto.randomUUID();
+      const additionalNotes = (input.additionalNotes || "").trim().slice(0, 1000);
+      try {
+        const inserted = await sql`
+          insert into orders (
+            id, order_number, customer_name, email, phone, billing_address, delivery_address,
+            quantity, payment_method, shipping_price, item_price, total_price, status,
+            shipping_carrier, shipping_carrier_other, market, additional_notes
+          ) values (
+            ${orderId}, ${orderNumber}, ${input.customerName}, ${input.email}, ${input.phone},
+            ${input.billingAddress}, ${input.deliveryAddress},
+            ${input.quantity}, ${input.paymentMethod}, ${shippingPrice},
+            ${price}, ${totalPrice}, ${status},
+            ${input.shippingCarrier}, ${carrierOther}, ${market}, ${additionalNotes || null}
+          )
+          returning *
+        `;
+        insertedRow = inserted[0] as unknown as Row;
+        break;
+      } catch (err) {
+        const code = (err as { code?: string } | null)?.code || "";
+        if (code === "23505") {
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!insertedRow) {
+      return {
+        ok: false,
+        message: "Objednavku se nepodarilo vytvorit. Zkuste to prosim znovu.",
+      };
+    }
+    const order = toOrder(insertedRow);
     const shouldCreateShipmentImmediately =
       order.paymentMethod === "COD" &&
       (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD");
@@ -1135,6 +1254,188 @@ export async function triggerShipmentCreation(orderId: string, market: Market = 
   const senderFrom = senderEmailForMarket(market);
   await createShipmentForOrder(sql, order, market, senderFrom, "manual_debug_trigger");
   return true;
+}
+
+export async function getPplShipmentsAdmin(market: Market = "RO", limit = 200) {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql`
+    select *
+    from orders
+    where market = ${market} and shipping_carrier = 'PPL'
+    order by created_at desc
+    limit ${Math.max(1, Math.min(limit, 1000))}
+  `;
+  return rows.map((r) => toOrder(r as unknown as Row));
+}
+
+export async function refreshPplShipment(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order?.pplShipmentId) return false;
+  const res = await fetchPplShipmentStatus(order.pplShipmentId);
+  if (!res.ok) {
+    await sql`update orders set ppl_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)} where id = ${orderId}`;
+    return false;
+  }
+  await sql`
+    update orders
+    set
+      ppl_shipment_status = ${res.data.state || "UNKNOWN"},
+      tracking_number = ${res.data.trackingNumber || order.trackingNumber || null}
+    where id = ${orderId}
+  `;
+  return true;
+}
+
+export async function cancelPplShipmentForOrder(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order?.pplShipmentId) return false;
+  const cancelled = await cancelPplShipment(order.pplShipmentId);
+  if (!cancelled.ok) {
+    await sql`update orders set ppl_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)} where id = ${orderId}`;
+    return false;
+  }
+  await sql`update orders set ppl_shipment_status = 'CANCELLED' where id = ${orderId}`;
+  return true;
+}
+
+export async function orderPplPickup(market: Market = "RO", note = "") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const result = await createPplPickup(market, note);
+  if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
+  await sql`
+    insert into ppl_pickups (id, market, pickup_id, note, status)
+    values (${crypto.randomUUID()}, ${market}, ${result.data.pickupId}, ${note.slice(0, 300) || null}, 'ORDERED')
+  `;
+  return { ok: true, message: `Svoz objednan: ${result.data.pickupId}` };
+}
+
+export async function getPplPickups(market: Market = "RO", limit = 50) {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql<PplPickupRow[]>`
+    select * from ppl_pickups
+    where market = ${market}
+    order by created_at desc
+    limit ${Math.max(1, Math.min(limit, 200))}
+  `;
+  return rows.map((r) => ({
+    id: String(r.id),
+    createdAt: new Date(String(r.created_at)).toISOString(),
+    pickupId: String(r.pickup_id),
+    note: r.note ? String(r.note) : null,
+    status: String(r.status),
+  }));
+}
+
+export async function getDpdShipmentsAdmin(market: Market = "RO", limit = 200) {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql`
+    select *
+    from orders
+    where market = ${market} and shipping_carrier = 'DPD'
+    order by created_at desc
+    limit ${Math.max(1, Math.min(limit, 1000))}
+  `;
+  return rows.map((r) => toOrder(r as unknown as Row));
+}
+
+export async function refreshDpdShipment(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order?.dpdShipmentId) return false;
+  const res = await fetchDpdShipmentStatus(order.dpdShipmentId);
+  if (!res.ok) {
+    await sql`update orders set dpd_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)} where id = ${orderId}`;
+    return false;
+  }
+  await sql`
+    update orders
+    set
+      dpd_shipment_status = ${res.data.state || "UNKNOWN"},
+      tracking_number = ${res.data.trackingNumber || order.trackingNumber || null}
+    where id = ${orderId}
+  `;
+  return true;
+}
+
+export async function cancelDpdShipmentForOrder(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order?.dpdShipmentId) return false;
+  const cancelled = await cancelDpdShipment(order.dpdShipmentId);
+  if (!cancelled.ok) {
+    await sql`update orders set dpd_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)} where id = ${orderId}`;
+    return false;
+  }
+  await sql`update orders set dpd_shipment_status = 'CANCELLED' where id = ${orderId}`;
+  return true;
+}
+
+export async function orderDpdPickup(market: Market = "RO", note = "") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const result = await createDpdPickup(market, note);
+  if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
+  await sql`
+    insert into dpd_pickups (id, market, pickup_id, pickup_date, note, status)
+    values (
+      ${crypto.randomUUID()},
+      ${market},
+      ${result.data.pickupId},
+      ${result.data.pickupDate},
+      ${note.slice(0, 300) || null},
+      'ORDERED'
+    )
+  `;
+  return { ok: true, message: `DPD svoz objednan: ${result.data.pickupId}` };
+}
+
+export async function getDpdPickups(market: Market = "RO", limit = 50) {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql<DpdPickupRow[]>`
+    select * from dpd_pickups
+    where market = ${market}
+    order by created_at desc
+    limit ${Math.max(1, Math.min(limit, 200))}
+  `;
+  return rows.map((r) => ({
+    id: String(r.id),
+    createdAt: new Date(String(r.created_at)).toISOString(),
+    pickupId: String(r.pickup_id),
+    pickupDate: r.pickup_date ? String(r.pickup_date) : null,
+    note: r.note ? String(r.note) : null,
+    status: String(r.status),
+  }));
+}
+
+export async function getDpdBulkLabelForOrders(orderIds: string[], market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  if (orderIds.length === 0) return null;
+  const rows = await sql`
+    select * from orders
+    where market = ${market}
+      and id = any(${orderIds})
+      and shipping_carrier = 'DPD'
+      and dpd_shipment_id is not null
+  `;
+  const shipmentIds = rows
+    .map((r) => String((r as Row).dpd_shipment_id || "").trim())
+    .filter(Boolean);
+  if (shipmentIds.length === 0) return null;
+  const built = await buildDpdBulkLabel(shipmentIds, market);
+  if (!built.ok) return null;
+  return built.data;
 }
 
 export async function getRecentAdminAuditLogs(market: Market = "RO", limit = 25) {

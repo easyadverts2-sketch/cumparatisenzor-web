@@ -94,6 +94,10 @@ export default async function AdminOrderDetailPage({
             <span className="whitespace-pre-line">{order.deliveryAddress}</span>
           </p>
         </div>
+        <div>
+          <h2 className="font-semibold text-[#0f766e]">Další poznámky</h2>
+          <p className="whitespace-pre-line text-[#1a4d47]">{order.additionalNotes || "-"}</p>
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <p className="text-[#1a4d47]">
             <strong className="text-[#0a2624]">Množství:</strong> {order.quantity}

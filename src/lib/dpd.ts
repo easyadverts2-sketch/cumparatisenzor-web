@@ -6,12 +6,23 @@ type DpdResult =
   | { ok: true; shipmentId: string; labelPublicPath?: string | null; raw?: unknown }
   | { ok: false; reason: string; raw?: unknown };
 
+type DpdGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown };
+
 function isEnabled() {
   return process.env.DPD_API_ENABLED === "true";
 }
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
+}
+
+function configured() {
+  const baseUrl = process.env.DPD_API_BASE_URL?.trim() || "https://shipping.dpdgroup.com/api";
+  const token = process.env.DPD_API_TOKEN?.trim();
+  const customerId = process.env.DPD_API_CUSTOMER_ID?.trim();
+  const senderAddressId = process.env.DPD_API_SENDER_ADDRESS_ID?.trim();
+  const buCode = process.env.DPD_API_BU_CODE?.trim() || "015";
+  return { baseUrl, token, customerId, senderAddressId, buCode };
 }
 
 function parseDeliveryAddress(deliveryAddress: string) {
@@ -40,10 +51,28 @@ async function downloadAndSaveLabelPdf(params: {
   const relDir = process.env.DPD_LABEL_SAVE_DIR?.trim() || "public/dpd-labels";
   const absDir = path.resolve(process.cwd(), relDir);
   await mkdir(absDir, { recursive: true });
-  const fileName = `${params.market.toLowerCase()}-${String(params.orderNumber).padStart(7, "0")}-${params.shipmentId}.pdf`;
+  const fileName = `${params.market.toLowerCase()}-${String(params.orderNumber)}-${params.shipmentId}.pdf`;
   const absPath = path.join(absDir, fileName);
   await writeFile(absPath, params.labelBytes);
 
+  if (relDir.startsWith("public/")) {
+    const publicPrefix = relDir.replace(/^public\//, "");
+    return `/${publicPrefix}/${fileName}`;
+  }
+  return null;
+}
+
+async function downloadAndSaveBulkLabelPdf(params: {
+  labelBytes: Buffer;
+  market: Market;
+  suffix: string;
+}): Promise<string | null> {
+  const relDir = process.env.DPD_LABEL_SAVE_DIR?.trim() || "public/dpd-labels";
+  const absDir = path.resolve(process.cwd(), relDir);
+  await mkdir(absDir, { recursive: true });
+  const fileName = `${params.market.toLowerCase()}-bulk-${params.suffix}.pdf`;
+  const absPath = path.join(absDir, fileName);
+  await writeFile(absPath, params.labelBytes);
   if (relDir.startsWith("public/")) {
     const publicPrefix = relDir.replace(/^public\//, "");
     return `/${publicPrefix}/${fileName}`;
@@ -103,13 +132,55 @@ async function fetchLabelPdf(baseUrl: string, token: string, shipmentId: string)
   return bytes;
 }
 
+async function fetchBulkLabelPdf(baseUrl: string, token: string, shipmentIds: string[]) {
+  const labelUrl = process.env.DPD_API_LABEL_PATH?.trim() || "/v1.0/label/shipment-ids";
+  const payload = {
+    buCode: process.env.DPD_API_BU_CODE?.trim() || "015",
+    customerId: process.env.DPD_API_CUSTOMER_ID?.trim() || "",
+    labelSize: process.env.DPD_API_LABEL_SIZE?.trim() || "A6",
+    printFormat: "pdf",
+    shipmentIdList: shipmentIds.map((s) => Number(s)).filter((n) => Number.isFinite(n)),
+  };
+  if (payload.shipmentIdList.length === 0) return null;
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}${labelUrl}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return null;
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.byteLength === 0) return null;
+  return bytes;
+}
+
+async function dpdJsonRequest<T>(
+  method: "GET" | "POST",
+  path: string,
+  body?: Record<string, unknown>
+): Promise<DpdGenericResult<T>> {
+  const cfg = configured();
+  if (!cfg.token || !cfg.customerId || !cfg.senderAddressId) {
+    return { ok: false, reason: "dpd_api_not_configured" };
+  }
+  const res = await fetch(`${normalizeBaseUrl(cfg.baseUrl)}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.token}`,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const raw = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw };
+  return { ok: true, data: raw as T };
+}
+
 export async function createDpdShipment(order: Order, market: Market): Promise<DpdResult> {
   if (!isEnabled()) return { ok: false, reason: "dpd_api_disabled" };
-  const baseUrl = process.env.DPD_API_BASE_URL?.trim() || "https://shipping.dpdgroup.com/api";
-  const token = process.env.DPD_API_TOKEN?.trim();
-  const customerId = process.env.DPD_API_CUSTOMER_ID?.trim();
-  const senderAddressId = process.env.DPD_API_SENDER_ADDRESS_ID?.trim();
-  const buCode = process.env.DPD_API_BU_CODE?.trim() || "015";
+  const { baseUrl, token, customerId, senderAddressId, buCode } = configured();
 
   if (!token || !customerId || !senderAddressId) {
     return { ok: false, reason: "dpd_api_not_configured" };
@@ -142,7 +213,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
     parcels: [
       {
         weight: Number(process.env.DPD_API_DEFAULT_WEIGHT_KG || 1),
-        reference1: `ORDER-${String(order.orderNumber).padStart(7, "0")}`,
+        reference1: `ORDER-${String(order.orderNumber)}`,
       },
     ],
     service: {
@@ -154,7 +225,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
       },
       mainServiceElementCodes: ["001", "013"],
     },
-    reference1: String(order.orderNumber).padStart(7, "0"),
+    reference1: String(order.orderNumber),
     saveMode: process.env.DPD_API_SAVE_MODE?.trim() || "final",
   };
 
@@ -165,7 +236,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
         amount: String(order.totalPrice),
         currency,
         paymentType: codPaymentType,
-        reference: String(order.orderNumber).padStart(7, "0"),
+        reference: String(order.orderNumber),
         split: "Even",
       },
     };
@@ -210,4 +281,64 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
   } catch (error) {
     return { ok: false, reason: "dpd_api_request_failed", raw: String(error) };
   }
+}
+
+export async function fetchDpdShipmentStatus(
+  shipmentId: string
+): Promise<DpdGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
+  const path = (process.env.DPD_API_TRACK_PATH?.trim() || "/v1.1/shipments/{id}").replace(
+    "{id}",
+    encodeURIComponent(shipmentId)
+  );
+  const res = await dpdJsonRequest<Record<string, unknown>>("GET", path);
+  if (!res.ok) return res;
+  const raw = res.data as Record<string, unknown>;
+  const state = String(raw.status || raw.state || "").toUpperCase();
+  const trackingNumber = String(raw.parcelLabelNumber || raw.parcelNumber || raw.shipmentId || "").trim() || null;
+  return { ok: true, data: { state, trackingNumber, raw } };
+}
+
+export async function cancelDpdShipment(shipmentId: string): Promise<DpdGenericResult<Record<string, unknown>>> {
+  const path = (process.env.DPD_API_CANCEL_PATH?.trim() || "/v1.1/shipments/{id}/cancel").replace(
+    "{id}",
+    encodeURIComponent(shipmentId)
+  );
+  return dpdJsonRequest<Record<string, unknown>>("POST", path, {});
+}
+
+export async function createDpdPickup(
+  market: Market,
+  note: string
+): Promise<DpdGenericResult<{ pickupId: string; pickupDate: string | null; raw: unknown }>> {
+  const cfg = configured();
+  if (!cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
+  const path = process.env.DPD_API_PICKUP_PATH?.trim() || "/v1.0/pickup-orders";
+  const pickupDate = process.env.DPD_API_PICKUP_DATE?.trim() || null;
+  const res = await dpdJsonRequest<Record<string, unknown>>("POST", path, {
+    buCode: cfg.buCode,
+    customerId: cfg.customerId,
+    senderAddressId: cfg.senderAddressId,
+    market,
+    note: note.slice(0, 300),
+    pickupDate,
+  });
+  if (!res.ok) return res;
+  const raw = res.data as Record<string, unknown>;
+  const pickupId = String(raw.pickupId || raw.id || raw.orderId || "").trim();
+  if (!pickupId) return { ok: false, reason: "dpd_pickup_missing_id", raw };
+  return { ok: true, data: { pickupId, pickupDate: String(raw.pickupDate || pickupDate || "") || null, raw } };
+}
+
+export async function buildDpdBulkLabel(shipmentIds: string[], market: Market): Promise<DpdGenericResult<string>> {
+  const { baseUrl, token } = configured();
+  if (!token) return { ok: false, reason: "dpd_api_not_configured" };
+  const bytes = await fetchBulkLabelPdf(baseUrl, token, shipmentIds);
+  if (!bytes) return { ok: false, reason: "dpd_bulk_label_failed" };
+  const saved = await downloadAndSaveBulkLabelPdf({
+    labelBytes: bytes,
+    market,
+    suffix: `${Date.now()}`,
+  });
+  if (!saved) return { ok: false, reason: "dpd_bulk_label_save_failed" };
+  return { ok: true, data: saved };
 }

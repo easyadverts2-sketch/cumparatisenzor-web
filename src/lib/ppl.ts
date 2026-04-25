@@ -6,12 +6,19 @@ type PplResult =
   | { ok: true; shipmentId: string; labelPublicPath?: string | null; raw?: unknown }
   | { ok: false; reason: string; raw?: unknown };
 
+type PplGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown };
+
 function isEnabled() {
   return process.env.PPL_API_ENABLED === "true";
 }
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, "");
+}
+
+function buildApiPath(template: string, shipmentId?: string) {
+  if (!shipmentId) return template;
+  return template.replaceAll("{id}", encodeURIComponent(shipmentId));
 }
 
 function extractBatchId(rawRec: Record<string, unknown>, location: string): string {
@@ -27,6 +34,25 @@ function extractBatchId(rawRec: Record<string, unknown>, location: string): stri
     const parts = clean.split("/").filter(Boolean);
     return parts.at(-1) || "";
   }
+}
+
+function extractShipmentNumberFromAny(source: Record<string, unknown>): string {
+  const direct = String(
+    source.shipmentNumber || source.parcelNumber || source.parcelId || source.shipmentId || ""
+  ).trim();
+  if (/^[0-9]{8,20}$/.test(direct)) return direct;
+
+  const items = Array.isArray(source.items) ? (source.items as Array<unknown>) : [];
+  for (const item of items) {
+    if (item && typeof item === "object") {
+      const rec = item as Record<string, unknown>;
+      const num = String(
+        rec.shipmentNumber || rec.parcelNumber || rec.parcelId || rec.shipmentId || ""
+      ).trim();
+      if (/^[0-9]{8,20}$/.test(num)) return num;
+    }
+  }
+  return "";
 }
 
 function pplLabelReturnEmail(market: Market): string {
@@ -243,7 +269,7 @@ async function downloadAndSaveLabelPdf(params: {
   const relDir = process.env.PPL_LABEL_SAVE_DIR?.trim() || "public/ppl-labels";
   const absDir = path.resolve(process.cwd(), relDir);
   await mkdir(absDir, { recursive: true });
-  const fileName = `${params.market.toLowerCase()}-${String(params.orderNumber).padStart(7, "0")}-${params.shipmentId}.pdf`;
+  const fileName = `${params.market.toLowerCase()}-${String(params.orderNumber)}-${params.shipmentId}.pdf`;
   const absPath = path.join(absDir, fileName);
   await writeFile(absPath, bytes);
 
@@ -313,6 +339,41 @@ async function requestToken(baseUrl: string): Promise<string | null> {
   return null;
 }
 
+async function pplJsonRequest<T>(
+  method: "GET" | "POST",
+  pathTemplate: string,
+  body?: Record<string, unknown>,
+  shipmentId?: string
+): Promise<PplGenericResult<T>> {
+  const baseUrl = process.env.PPL_API_BASE_URL?.trim();
+  if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
+  const token = await requestToken(baseUrl);
+  if (!token) return { ok: false, reason: "ppl_api_token_failed" };
+  const path = buildApiPath(pathTemplate, shipmentId);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const rawText = await res.text().catch(() => "");
+  let parsed: unknown = {};
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = rawText;
+    }
+  }
+  if (!res.ok) {
+    return { ok: false, reason: `ppl_api_http_${res.status}`, raw: parsed };
+  }
+  return { ok: true, data: parsed as T };
+}
+
 export async function createPplShipment(order: Order, market: Market): Promise<PplResult> {
   if (!isEnabled()) {
     return { ok: false, reason: "ppl_api_disabled" };
@@ -335,7 +396,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 
   const addr = parseAddressLine(order.deliveryAddress);
   const country = market === "HU" ? "HU" : "RO";
-  const ref = String(order.orderNumber).padStart(7, "0");
+  const ref = String(order.orderNumber);
   const productType = productTypeForMarket(market, order.paymentMethod);
 
   const payload: Record<string, unknown> = {
@@ -357,7 +418,7 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
       {
         productType,
         referenceId: ref,
-        note: `Order ${ref}`,
+        note: [order.additionalNotes?.trim(), `Order ${ref}`].filter(Boolean).join(" | ").slice(0, 250),
         depot: process.env.PPL_DEPOT || undefined,
         recipient: {
           name: order.customerName,
@@ -468,12 +529,16 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
 
     const location = res.headers.get("location") || "";
     const rawRec = toRecord(raw);
+    const immediateShipmentNumber = extractShipmentNumberFromAny(rawRec);
+    if (immediateShipmentNumber) {
+      return { ok: true, shipmentId: immediateShipmentNumber, labelPublicPath: null, raw };
+    }
     const batchId = extractBatchId(rawRec, location);
 
     // CPL async mode: poll status endpoint by batch ID.
     if (batchId) {
-      const maxPolls = Number(process.env.PPL_API_MAX_POLLS || 12);
-      const delayMs = Number(process.env.PPL_API_POLL_DELAY_MS || 1500);
+      const maxPolls = Number(process.env.PPL_API_MAX_POLLS || 10);
+      const delayMs = Number(process.env.PPL_API_POLL_DELAY_MS || 900);
       for (let i = 0; i < maxPolls; i += 1) {
         const pollUrl = location.startsWith("http")
           ? location
@@ -514,11 +579,17 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
         }
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      return { ok: true, shipmentId: batchId, labelPublicPath: null, raw };
+      const fallbackNum = extractShipmentNumberFromAny(rawRec);
+      return { ok: true, shipmentId: fallbackNum || batchId, labelPublicPath: null, raw };
     }
 
     const shipmentId = String(
-      rawRec.shipmentId || rawRec.id || rawRec.parcelId || rawRec.reference || ""
+      extractShipmentNumberFromAny(rawRec) ||
+      rawRec.shipmentId ||
+      rawRec.id ||
+      rawRec.parcelId ||
+      rawRec.reference ||
+      ""
     );
     if (!shipmentId) {
       return { ok: false, reason: "ppl_api_missing_shipment_id", raw };
@@ -527,4 +598,38 @@ export async function createPplShipment(order: Order, market: Market): Promise<P
   } catch (error) {
     return { ok: false, reason: "ppl_api_request_failed", raw: String(error) };
   }
+}
+
+export async function fetchPplShipmentStatus(
+  shipmentId: string
+): Promise<PplGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
+  const path = process.env.PPL_API_TRACK_PATH?.trim() || "/shipment/{id}";
+  const res = await pplJsonRequest<Record<string, unknown>>("GET", path, undefined, shipmentId);
+  if (!res.ok) return res;
+  const rec = toRecord(res.data);
+  const state = String(rec.state || rec.status || rec.importState || "").toUpperCase();
+  const trackingNumber =
+    extractShipmentNumberFromAny(rec) || String(rec.shipmentNumber || rec.parcelNumber || "").trim() || null;
+  return { ok: true, data: { state, trackingNumber, raw: rec } };
+}
+
+export async function cancelPplShipment(shipmentId: string): Promise<PplGenericResult<Record<string, unknown>>> {
+  const path = process.env.PPL_API_CANCEL_PATH?.trim() || "/shipment/{id}/cancel";
+  return pplJsonRequest<Record<string, unknown>>("POST", path, {}, shipmentId);
+}
+
+export async function createPplPickup(
+  market: Market,
+  note: string
+): Promise<PplGenericResult<{ pickupId: string; raw: unknown }>> {
+  const path = process.env.PPL_API_PICKUP_PATH?.trim() || "/pickup-order";
+  const res = await pplJsonRequest<Record<string, unknown>>("POST", path, {
+    market,
+    note: note.slice(0, 300),
+  });
+  if (!res.ok) return res;
+  const rec = toRecord(res.data);
+  const pickupId = String(rec.pickupId || rec.id || rec.orderId || "").trim();
+  if (!pickupId) return { ok: false, reason: "ppl_pickup_missing_id", raw: rec };
+  return { ok: true, data: { pickupId, raw: rec } };
 }

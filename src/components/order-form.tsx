@@ -56,6 +56,7 @@ export function OrderForm() {
   const [billingCounty, setBillingCounty] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeGdpr, setAgreeGdpr] = useState(false);
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const submitLockRef = useRef(false);
 
   const fineshipAllowed = quantity >= 6;
@@ -192,6 +193,7 @@ export function OrderForm() {
         quantity: quantityInput,
         paymentMethod: paymentMethodInput,
         shippingCarrier,
+        additionalNotes: String(formData.get("additionalNotes") || "").trim(),
       };
 
       const res = await fetch("/api/orders", {
@@ -541,6 +543,16 @@ export function OrderForm() {
           Dupa trimiterea comenzii primiti confirmare pe e-mail cu detaliile de livrare si plata.
         </p>
       </div>
+
+      <textarea
+        name="additionalNotes"
+        placeholder="Další poznámky k objednávce (volitelné)"
+        value={additionalNotes}
+        onChange={(e) => setAdditionalNotes(e.target.value)}
+        maxLength={1000}
+        rows={4}
+        className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
+      />
 
       <div className="md:col-span-2 space-y-3 rounded-2xl border border-[#de6a44]/25 bg-white p-4">
         <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">

@@ -87,6 +87,7 @@ export async function POST(request: Request) {
     const email = toSafe(body.email);
     const phone = toSafe(body.phone).replace(/\s+/g, "");
     const quantity = Number(body.quantity || 1);
+    const additionalNotes = toSafe(body.additionalNotes).slice(0, 1000);
     const delivery: AddressPayload = {
       street: toSafe(body.delivery?.street),
       city: toSafe(body.delivery?.city),
@@ -167,6 +168,7 @@ export async function POST(request: Request) {
       paymentMethod,
       shippingCarrier,
       shippingCarrierOther: null,
+      additionalNotes,
     });
 
     if (result.ok && result.order) {

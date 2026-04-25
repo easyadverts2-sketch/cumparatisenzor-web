@@ -23,9 +23,10 @@ export async function GET(request: NextRequest) {
     "status",
     "total_ron",
     "delivery_address",
+    "additional_notes",
   ];
   const rows = store.orders.map((o) => [
-    String(o.orderNumber).padStart(7, "0"),
+    String(o.orderNumber),
     o.id,
     o.createdAt,
     o.customerName,
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
     o.status,
     String(o.totalPrice),
     o.deliveryAddress.replaceAll("\n", " "),
+    o.additionalNotes?.replaceAll("\n", " ") || "",
   ]);
   const csv = [header, ...rows]
     .map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(","))

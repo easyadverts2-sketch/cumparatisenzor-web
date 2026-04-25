@@ -78,7 +78,7 @@ export function renderInvoiceText(order: Order, data: InvoiceData): string {
       : "Factura finala";
   return [
     `${title}: ${data.invoiceNo}`,
-    `${isHu ? "Rendelesszam" : "Numar comanda"}: ${String(order.orderNumber).padStart(7, "0")}`,
+    `${isHu ? "Rendelesszam" : "Numar comanda"}: ${String(order.orderNumber)}`,
     `${isHu ? "Kiallitas datuma" : "Data emiterii"}: ${issueDate}`,
     `${isHu ? "Fizetesi hatarido" : "Data scadentei"}: ${dueDate}`,
     `${isHu ? "Valtozo szam" : "Numar variabil"}: ${data.variableSymbol}`,
@@ -123,7 +123,7 @@ export function renderInvoiceHtml(order: Order, data: InvoiceData): string {
       </div>
       <div style="padding:18px;">
         <table style="width:100%;border-collapse:collapse;font-size:14px;">
-          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Rendelesszam" : "Numar comanda"}</td><td>${String(order.orderNumber).padStart(7, "0")}</td></tr>
+          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Rendelesszam" : "Numar comanda"}</td><td>${String(order.orderNumber)}</td></tr>
           <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Kiallitas" : "Emitere"}</td><td>${issueDate}</td></tr>
           <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Hatarido" : "Scadenta"}</td><td>${dueDate}</td></tr>
           <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Valtozo szam" : "Numar variabil"}</td><td>${data.variableSymbol}</td></tr>

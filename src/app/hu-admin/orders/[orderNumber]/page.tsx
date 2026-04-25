@@ -85,6 +85,7 @@ export default async function HuAdminOrderDetailPage({
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Celkem:</strong> {order.totalPrice} HUF</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Fakturační adresa:</strong> <span className="whitespace-pre-line">{order.billingAddress}</span></p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Doručovací adresa:</strong> <span className="whitespace-pre-line">{order.deliveryAddress}</span></p>
+        <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Další poznámky:</strong> <span className="whitespace-pre-line">{order.additionalNotes || "-"}</span></p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">Tracking:</strong> {order.trackingNumber || "-"}</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">PPL API stav:</strong> {order.pplShipmentStatus || "-"}</p>
         <p className="text-[#1a4d47]"><strong className="text-[#0a2624]">DPD API stav:</strong> {order.dpdShipmentStatus || "-"}</p>

@@ -44,6 +44,7 @@ export type Order = {
   dpdShipmentStatus?: string | null;
   dpdLabelPath?: string | null;
   trackingNumber?: string | null;
+  additionalNotes?: string | null;
 };
 
 export type Notification = {

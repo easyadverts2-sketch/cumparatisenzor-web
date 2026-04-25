@@ -56,6 +56,7 @@ export function OrderFormHu() {
   const [billingCounty, setBillingCounty] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeGdpr, setAgreeGdpr] = useState(false);
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const submitLockRef = useRef(false);
 
   const fineshipAllowed = quantity >= 6;
@@ -169,6 +170,7 @@ export function OrderFormHu() {
         quantity: quantityInput,
         paymentMethod: paymentMethodInput,
         shippingCarrier,
+        additionalNotes: String(formData.get("additionalNotes") || "").trim(),
       };
 
       const res = await fetch("/api/hu/orders", {
@@ -464,6 +466,16 @@ export function OrderFormHu() {
           </div>
         </dl>
       </div>
+
+      <textarea
+        name="additionalNotes"
+        placeholder="Tovabbi megjegyzesek a rendeleshez (nem kotelezo)"
+        value={additionalNotes}
+        onChange={(e) => setAdditionalNotes(e.target.value)}
+        maxLength={1000}
+        rows={4}
+        className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
+      />
 
       <div className="md:col-span-2 space-y-3 rounded-2xl border border-[#de6a44]/25 bg-white p-4">
         <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">
