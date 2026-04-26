@@ -11,11 +11,13 @@ export function AdminOrdersList({
   locale = "ro-RO",
   currency = "RON",
   detailsBasePath = "/admin/orders",
+  deleteApiPath = "/api/admin/order-hard-delete",
 }: {
   orders: Order[];
   locale?: string;
   currency?: string;
   detailsBasePath?: string;
+  deleteApiPath?: string;
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [q, setQ] = useState("");
@@ -96,12 +98,36 @@ export function AdminOrdersList({
                 </td>
                 <td className="max-w-[140px] truncate px-4 py-3 text-xs text-[#1a4d47]">{o.status}</td>
                 <td className="px-4 py-3">
-                  <Link
-                    href={`${detailsBasePath}/${o.orderNumber}`}
-                    className="font-medium text-[#0f766e] hover:underline"
-                  >
-                    Detail
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`${detailsBasePath}/${o.orderNumber}`}
+                      className="font-medium text-[#0f766e] hover:underline"
+                    >
+                      Detail
+                    </Link>
+                    <button
+                      className="text-xs text-red-700 underline"
+                      onClick={async () => {
+                        const ok = window.confirm(
+                          "Opravdu chcete trvale smazat objednavku? Pokud ma zasilku u PPL/DPD, system ji nejdriv zkusi stornovat u dopravce. Pokud storno selze, objednavka se nesmaze."
+                        );
+                        if (!ok) return;
+                        const res = await fetch(deleteApiPath, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ orderId: o.id }),
+                        });
+                        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+                        if (!data.ok) {
+                          window.alert(data.message || "Hard delete selhal.");
+                          return;
+                        }
+                        window.location.reload();
+                      }}
+                    >
+                      Smazat objednavku
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

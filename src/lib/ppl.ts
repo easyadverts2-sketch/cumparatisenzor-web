@@ -927,7 +927,16 @@ export async function cancelPplShipment(shipmentNumber: string): Promise<PplGene
 
 export async function createPplPickup(
   market: Market,
-  note: string
+  input: {
+    pickupDate: string;
+    fromTime: string;
+    toTime: string;
+    contactName: string;
+    phone: string;
+    email: string;
+    shipmentCount: number;
+    note?: string;
+  }
 ): Promise<PplGenericResult<{ pickupId: string; raw: unknown }>> {
   const baseUrl = process.env.PPL_API_BASE_URL?.trim();
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
@@ -950,19 +959,21 @@ export async function createPplPickup(
       {
         orderType: "CollectionOrder",
         referenceId: `pickup-${market}-${Date.now()}`.slice(0, 50),
-        shipmentCount: 1,
-        email: senderEmail,
-        note: note.slice(0, 300) || null,
-        sendDate: new Date().toISOString(),
+        shipmentCount: Math.max(1, Math.floor(input.shipmentCount || 1)),
+        email: input.email || senderEmail,
+        note: String(input.note || "").slice(0, 300) || null,
+        sendDate: `${input.pickupDate}T${input.fromTime}:00`,
+        pickupTimeFrom: input.fromTime,
+        pickupTimeTo: input.toTime,
         sender: {
           name: senderName,
-          contact: senderName,
+          contact: input.contactName || senderName,
           street: senderStreet,
           city: senderCity,
           zipCode: senderZipCode,
           country: senderCountry,
-          phone: senderPhone,
-          email: senderEmail,
+          phone: input.phone || senderPhone,
+          email: input.email || senderEmail,
         },
       },
     ],
@@ -993,6 +1004,13 @@ export async function createPplPickup(
   if (!batchId) return { ok: false, reason: "ppl_pickup_missing_id", raw: createRaw };
   const statusRes = await pplJsonRequest<Record<string, unknown>>("GET", "/order/batch/{id}", undefined, batchId);
   return { ok: true, data: { pickupId: batchId, raw: { create: createRaw, status: statusRes } } };
+}
+
+export async function cancelPplPickupByReference(reference: string): Promise<PplGenericResult<Record<string, unknown>>> {
+  return pplJsonRequest<Record<string, unknown>>("POST", "/order/cancel", {
+    orderReference: reference,
+    customerReference: reference,
+  });
 }
 
 export async function fetchPplOrderInfoByCustomerReference(

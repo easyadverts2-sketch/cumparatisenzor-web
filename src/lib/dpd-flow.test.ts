@@ -48,4 +48,15 @@ describe("DPD admin wiring", () => {
     expect(ro).toContain("endpointAttemptResults");
     expect(hu).toContain("endpointAttemptResults");
   });
+
+  it("DPD helper uses shipmentIdList for labels and cancellation", () => {
+    const dpd = read("src/lib/dpd.ts");
+    expect(dpd).toContain("shipmentIdList");
+    expect(dpd).toContain("/v1.1/shipments/cancellation");
+  });
+
+  it("HU COD is explicitly blocked in DPD create flow", () => {
+    const dpd = read("src/lib/dpd.ts");
+    expect(dpd).toContain('dpd_cod_not_allowed_hu');
+  });
 });

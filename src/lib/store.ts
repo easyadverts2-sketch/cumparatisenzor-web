@@ -13,6 +13,7 @@ import {
   type InvoiceKind,
 } from "./billing";
 import {
+  cancelPplPickupByReference,
   cancelPplShipment,
   createPplPickup,
   createPplShipment,
@@ -1051,9 +1052,10 @@ async function createShipmentForOrder(
       return;
     }
     const dpdErr = shipmentErrorStatus(dpd.reason, dpd.raw);
+    const dpdStatus = dpd.reason === "dpd_cod_not_allowed_hu" ? "DPD_HU_COD_NOT_ENABLED" : dpdErr;
     await sql`
       update orders
-      set dpd_shipment_status = ${dpdErr}
+      set dpd_shipment_status = ${dpdStatus}
       where id = ${order.id}
     `;
     await insertAuditLog(sql, {
@@ -2332,16 +2334,53 @@ export async function deletePplShipmentForOrder(orderId: string, market: Market 
   return resetPplShipmentForOrder(orderId, market);
 }
 
-export async function orderPplPickup(market: Market = "RO", note = "") {
+export async function orderPplPickup(
+  market: Market = "RO",
+  input?: {
+    pickupDate: string;
+    fromTime: string;
+    toTime: string;
+    contactName: string;
+    phone: string;
+    email: string;
+    shipmentCount: number;
+    note?: string;
+  }
+) {
   const sql = getSql();
   await ensureSchema(sql);
-  const result = await createPplPickup(market, note);
+  const payload = input || {
+    pickupDate: new Date().toISOString().slice(0, 10),
+    fromTime: "09:00",
+    toTime: "16:00",
+    contactName: process.env.PPL_SENDER_NAME?.trim() || "Pickup Contact",
+    phone: process.env.PPL_SENDER_PHONE?.trim() || "",
+    email: process.env.PPL_SENDER_EMAIL?.trim() || senderEmailForMarket(market),
+    shipmentCount: 1,
+    note: "",
+  };
+  const result = await createPplPickup(market, payload);
   if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
   await sql`
     insert into ppl_pickups (id, market, pickup_id, note, status)
-    values (${crypto.randomUUID()}, ${market}, ${result.data.pickupId}, ${note.slice(0, 300) || null}, 'ORDERED')
+    values (${crypto.randomUUID()}, ${market}, ${result.data.pickupId}, ${String(payload.note || "").slice(0, 300) || null}, 'ORDERED')
   `;
   return { ok: true, message: `Svoz objednan: ${result.data.pickupId}` };
+}
+
+export async function cancelPplPickupOrder(pickupId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const cleanId = String(pickupId || "").trim();
+  if (!cleanId) return { ok: false, message: "Chybi pickupId" };
+  const res = await cancelPplPickupByReference(cleanId);
+  if (!res.ok) return { ok: false, message: shipmentErrorStatus(res.reason, res.raw) };
+  await sql`
+    update ppl_pickups
+    set status = 'CANCELLED'
+    where market = ${market} and pickup_id = ${cleanId}
+  `;
+  return { ok: true, message: `PPL svoz stornovan: ${cleanId}` };
 }
 
 export async function getPplPickups(market: Market = "RO", limit = 50) {
@@ -2746,4 +2785,32 @@ export async function getLatestInvoiceByOrderNumber(orderNumber: number, market:
     limit 1
   `;
   return rows[0] || null;
+}
+
+export async function hardDeleteOrderWithCarrierCancel(orderId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const order = await getOrderById(orderId, market);
+  if (!order) return { ok: false, message: "Objednavka nenalezena." };
+
+  const hasPpl = Boolean(order.pplBatchId || order.pplShipmentId || (order.shippingCarrier === "PPL" && order.trackingNumber));
+  if (hasPpl) {
+    const ok = await cancelPplShipmentForOrder(orderId, market);
+    if (!ok) return { ok: false, message: "Hard delete zastaven: nepodarilo se stornovat PPL zasilku." };
+  }
+
+  const hasDpd = Boolean(order.dpdShipmentId || (order.shippingCarrier === "DPD" && order.trackingNumber));
+  if (hasDpd) {
+    const ok = await cancelDpdShipmentForOrder(orderId, market);
+    if (!ok) return { ok: false, message: "Hard delete zastaven: nepodarilo se stornovat DPD zasilku." };
+  }
+
+  try {
+    await sql`delete from admin_audit_logs where order_id = ${orderId}`;
+  } catch {
+    // optional table
+  }
+  const deleted = await sql`delete from orders where id = ${orderId} and market = ${market}`;
+  if (deleted.count === 0) return { ok: false, message: "Objednavku se nepodarilo smazat." };
+  return { ok: true, message: "Objednavka byla trvale smazana." };
 }

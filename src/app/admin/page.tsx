@@ -4,8 +4,7 @@ import {
   autoCancelExpiredOrders,
   cancelDpdPickupOrder,
   cancelDpdShipmentForOrder,
-  cancelPplShipmentForOrder,
-  debugFindPplTrackingNumber,
+  cancelPplPickupOrder,
   getDpdPickups,
   getDpdShipmentsAdmin,
   getPplPickups,
@@ -14,7 +13,6 @@ import {
   orderDpdPickup,
   orderPplPickup,
   refreshDpdShipment,
-  refreshPplShipment,
   resetDpdShipmentForOrder,
   resetPplShipmentForOrder,
   readStore,
@@ -64,24 +62,6 @@ async function logoutAction() {
   redirect("/admin/login");
 }
 
-async function refreshShipmentAction(formData: FormData) {
-  "use server";
-  const orderId = String(formData.get("orderId") || "");
-  if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
-  const ok = await refreshPplShipment(orderId, "RO");
-  revalidatePath("/admin");
-  redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+stav+obnoven" : "PPL+refresh+selhal"}`);
-}
-
-async function cancelShipmentAction(formData: FormData) {
-  "use server";
-  const orderId = String(formData.get("orderId") || "");
-  if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
-  const ok = await cancelPplShipmentForOrder(orderId, "RO");
-  revalidatePath("/admin");
-  redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+zasilka+stornovana" : "PPL+storno+selhalo"}`);
-}
-
 async function deleteShipmentAction(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
@@ -91,25 +71,26 @@ async function deleteShipmentAction(formData: FormData) {
   redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+udaje+lokalne+vycisteny" : "Lokalni+reset+PPL+selhal"}`);
 }
 
-async function debugFindTrackingAction(formData: FormData) {
-  "use server";
-  const orderId = String(formData.get("orderId") || "");
-  if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
-  const result = await debugFindPplTrackingNumber(orderId, "21491971453", "RO");
-  revalidatePath("/admin");
-  redirect(
-    `/admin?ok=${result.found ? "1" : "0"}&msg=${encodeURIComponent(
-      result.found
-        ? `Tracking nalezen (${result.matches[0]?.path || "?"})`
-        : `Tracking nenalezen, kandidatu: ${result.trackingNumberCandidates.length}`
-    )}`
-  );
-}
-
 async function orderPickupAction(formData: FormData) {
   "use server";
-  const note = String(formData.get("note") || "");
-  const result = await orderPplPickup("RO", note);
+  const result = await orderPplPickup("RO", {
+    pickupDate: String(formData.get("pickupDate") || "").trim(),
+    fromTime: String(formData.get("fromTime") || "").trim(),
+    toTime: String(formData.get("toTime") || "").trim(),
+    contactName: String(formData.get("contactName") || "").trim(),
+    phone: String(formData.get("phone") || "").trim(),
+    email: String(formData.get("email") || "").trim(),
+    shipmentCount: Number(formData.get("shipmentCount") || 1),
+    note: String(formData.get("note") || "").trim(),
+  });
+  revalidatePath("/admin");
+  redirect(`/admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
+}
+
+async function cancelPickupAction(formData: FormData) {
+  "use server";
+  const pickupId = String(formData.get("pickupId") || "").trim();
+  const result = await cancelPplPickupOrder(pickupId, "RO");
   revalidatePath("/admin");
   redirect(`/admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
 }
@@ -255,23 +236,29 @@ export default async function AdminPage({
       </a>
 
       <div className="mt-10">
-        <AdminOrdersList orders={store.orders} />
+        <AdminOrdersList orders={store.orders} deleteApiPath="/api/admin/order-hard-delete" />
       </div>
 
       <h2 className="mt-12 text-2xl font-semibold">PPL zásilky a svozy</h2>
       <form action={orderPickupAction} className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
-        <label className="min-w-[260px] flex-1 text-sm">
-          <span className="mb-1 block text-[#1a4d47]">Poznámka pro svoz (volitelné)</span>
-          <input name="note" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Např. svoz mezi 9:00-12:00" />
-        </label>
+        <label className="min-w-[150px] text-sm"><span className="mb-1 block text-[#1a4d47]">Datum svozu</span><input name="pickupDate" type="date" className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[120px] text-sm"><span className="mb-1 block text-[#1a4d47]">Čas od</span><input name="fromTime" type="time" className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[120px] text-sm"><span className="mb-1 block text-[#1a4d47]">Čas do</span><input name="toTime" type="time" className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[180px] text-sm"><span className="mb-1 block text-[#1a4d47]">Kontakt</span><input name="contactName" className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[160px] text-sm"><span className="mb-1 block text-[#1a4d47]">Telefon</span><input name="phone" className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[200px] text-sm"><span className="mb-1 block text-[#1a4d47]">E-mail</span><input name="email" type="email" className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[120px] text-sm"><span className="mb-1 block text-[#1a4d47]">Počet balíků</span><input name="shipmentCount" type="number" min={1} defaultValue={1} className="w-full rounded-lg border border-slate-300 px-3 py-2" required /></label>
+        <label className="min-w-[260px] flex-1 text-sm"><span className="mb-1 block text-[#1a4d47]">Poznámka</span><input name="note" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Volitelně" /></label>
         <button className="rounded-lg bg-[#0f766e] px-4 py-2 text-white">Objednat svoz</button>
       </form>
       <div className="mt-3 space-y-1 text-sm text-[#1a4d47]">
         {pickups.slice(0, 5).map((p) => (
-          <p key={p.id}>
+          <form key={p.id} action={cancelPickupAction} className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="pickupId" value={p.pickupId} />
             {new Date(p.createdAt).toLocaleString("cs-CZ")} · {p.pickupId} · {p.status}
             {p.note ? ` · ${p.note}` : ""}
-          </p>
+            <ConfirmSubmitButton className="rounded border px-2 py-1" label="Zrusit svoz" confirmMessage="Tato akce se pokusi zrusit svoz v PPL." />
+          </form>
         ))}
       </div>
       <form id="ppl-bulk-form-ro" action={bulkPplLabelsAction} className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
@@ -290,9 +277,6 @@ export default async function AdminPage({
               <th className="px-3 py-2">Služba</th>
               <th className="px-3 py-2">Adresa</th>
               <th className="px-3 py-2">Číslo zásilky</th>
-              <th className="px-3 py-2">Batch / Import</th>
-              <th className="px-3 py-2">Stav PPL</th>
-              <th className="px-3 py-2">Štítek</th>
               <th className="px-3 py-2">Akce</th>
             </tr>
           </thead>
@@ -305,33 +289,11 @@ export default async function AdminPage({
                 <td className="px-3 py-2">{String(o.orderNumber)}</td>
                 <td className="px-3 py-2">{new Date(o.createdAt).toLocaleString("cs-CZ")}</td>
                 <td className="px-3 py-2">PPL</td>
-                <td className="px-3 py-2 max-w-[220px] truncate">{o.deliveryAddress.replaceAll("\n", ", ")}</td>
+                <td className="px-3 py-2 max-w-[420px] whitespace-normal break-words">{o.deliveryAddress.replaceAll("\n", ", ")}</td>
                 <td className="px-3 py-2">{validTracking(o.trackingNumber || o.pplShipmentId)}</td>
-                <td className="px-3 py-2 text-xs">
-                  <div>{o.pplBatchId || "-"}</div>
-                  <div>{o.pplImportState || "-"}</div>
-                  <div>HTTP {o.pplLastHttpStatus || "-"}</div>
-                </td>
-                <td className="px-3 py-2">{o.pplShipmentStatus || "-"}</td>
-                <td className="px-3 py-2">
-                  <a
-                    href={`/api/admin/ppl-label?orderId=${encodeURIComponent(o.id)}`}
-                    className="text-[#0f766e] hover:underline"
-                  >
-                    Stahnout stitek
-                  </a>
-                </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    <form action={refreshShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh</button></form>
-                    <form action={cancelShipmentAction}>
-                      <input type="hidden" name="orderId" value={o.id} />
-                      <ConfirmSubmitButton
-                        className="rounded border px-2 py-1"
-                        label="Stornovat v PPL"
-                        confirmMessage="Tato akce se pokusi stornovat zasilku primo v PPL. Pokud PPL storno potvrdi, lokalni PPL data objednavky se vycisti. Pokud PPL vrati chybu, lokalni data zustanou zachovana. Pokracovat?"
-                      />
-                    </form>
+                    <a href={`/api/admin/ppl-label?orderId=${encodeURIComponent(o.id)}`} className="rounded border px-2 py-1">Tisk štítku</a>
                     <form action={deleteShipmentAction}>
                       <input type="hidden" name="orderId" value={o.id} />
                       <ConfirmSubmitButton
@@ -340,15 +302,6 @@ export default async function AdminPage({
                         confirmMessage="Tato akce pouze vycisti PPL data v e-shopu. Nestornuje zasilku v PPL. Pouzijte jen pokud opravdu chcete odpojit objednavku lokalne. Pokracovat?"
                       />
                     </form>
-                    <form action={debugFindTrackingAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Debug najit tracking cislo</button></form>
-                    <a
-                      href={`/api/admin/ppl-diagnostic?orderId=${encodeURIComponent(o.id)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded border px-2 py-1"
-                    >
-                      Diagnostika JSON
-                    </a>
                   </div>
                 </td>
               </tr>
