@@ -1158,7 +1158,7 @@ async function createShipmentForOrder(
           dpd_raw_create_request = ${jsonForDb(dpd.createRequest || null)},
           dpd_raw_create_response = ${jsonForDb(dpd.raw || null)},
           dpd_tracking_source = ${tracking ? "create_response" : null},
-          dpd_tracking_json_path = ${tracking ? "auto:parcelLabelNumber|parcelNumber|trackingNumber" : null}
+          dpd_tracking_json_path = ${tracking ? dpd.trackingSourcePath : dpd.shipmentIdSourcePath}
         where id = ${order.id}
       `;
       await insertAuditLog(sql, {
@@ -1183,9 +1183,18 @@ async function createShipmentForOrder(
     }
     const dpdErr = shipmentErrorStatus(dpd.reason, dpd.raw);
     const dpdStatus = dpd.reason === "dpd_cod_not_allowed_hu" ? "DPD_HU_COD_NOT_ENABLED" : dpdErr;
+    const dpdHumanError =
+      dpd.reason === "dpd_cod_not_allowed_hu"
+        ? "DPD dobírka pro Maďarsko není v naší DPD smlouvě povolená."
+        : dpdErr;
     await sql`
       update orders
-      set dpd_shipment_status = ${dpdStatus}
+      set
+        dpd_shipment_status = ${dpdStatus},
+        dpd_last_error = ${dpdHumanError},
+        dpd_last_http_status = ${dpd.httpStatus || null},
+        dpd_raw_create_request = ${jsonForDb(dpd.createRequest || null)},
+        dpd_raw_create_response = ${jsonForDb(dpd.raw || null)}
       where id = ${order.id}
     `;
     await insertAuditLog(sql, {
@@ -2711,7 +2720,7 @@ export async function refreshDpdShipment(orderId: string, market: Market = "RO")
       dpd_last_error = null,
       dpd_raw_status_response = ${jsonForDb(res.data.raw || null)},
       dpd_tracking_source = ${resolvedTracking ? "shipment_status" : order.dpdTrackingSource || null},
-      dpd_tracking_json_path = ${resolvedTracking ? "auto:parcelLabelNumber|parcelNumber|trackingNumber" : order.dpdTrackingJsonPath || null}
+      dpd_tracking_json_path = ${resolvedTracking ? res.data.trackingSourcePath || order.dpdTrackingJsonPath || null : order.dpdTrackingJsonPath || null}
     where id = ${orderId}
   `;
   return true;
@@ -2889,33 +2898,51 @@ export async function getDpdBulkLabelForOrders(orderIds: string[], market: Marke
     where market = ${market}
       and id = any(${orderIds})
       and shipping_carrier = 'DPD'
-      and dpd_shipment_id is not null
   `;
-  const shipmentIds = rows
-    .map((r) => String((r as Row).dpd_shipment_id || "").trim())
-    .filter(Boolean);
   const missing = orderIds.filter((id) => !rows.some((r) => String((r as Row).id) === id));
+  const failedOrders: Array<{ orderId: string; reason: string }> = [];
+  const parcelNumbers: string[] = [];
+  const shipmentIds: string[] = [];
+  for (const row of rows) {
+    const orderId = String((row as Row).id);
+    const tracking = numericTrackingOrNull(String((row as Row).tracking_number || "").trim());
+    const shipmentId = String((row as Row).dpd_shipment_id || "").trim();
+    if (tracking) parcelNumbers.push(tracking);
+    else if (shipmentId) shipmentIds.push(shipmentId);
+    else failedOrders.push({ orderId, reason: "missing_dpd_identifiers" });
+  }
+  for (const orderId of missing) failedOrders.push({ orderId, reason: "missing_dpd_identifiers" });
   if (missing.length > 0) {
     return {
       ok: false as const,
-      reason: "bulk_requires_all_orders_with_dpd_shipment_id",
-      failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+      reason: "missing_dpd_identifiers",
+      failedOrders,
       endpointAttemptResults: null,
     };
   }
-  if (shipmentIds.length === 0) {
+  if (failedOrders.length > 0) {
     return {
       ok: false as const,
-      reason: "missing_dpd_shipment_ids",
-      failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+      reason: "missing_dpd_identifiers",
+      failedOrders,
+      endpointAttemptResults: null,
     };
   }
-  const labelRes = await fetchDpdLabelPdfForShipments(shipmentIds);
+  if (shipmentIds.length === 0 && parcelNumbers.length === 0) {
+    return {
+      ok: false as const,
+      reason: "missing_dpd_identifiers",
+      failedOrders,
+    };
+  }
+  const labelRes = await fetchDpdLabelPdfForShipments(
+    parcelNumbers.length > 0 ? { parcelNumbers } : { shipmentIds }
+  );
   if (!labelRes.ok) {
     return {
       ok: false as const,
       reason: labelRes.reason,
-      failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+      failedOrders,
       endpointAttemptResults: labelRes.raw,
     };
   }
@@ -2923,7 +2950,7 @@ export async function getDpdBulkLabelForOrders(orderIds: string[], market: Marke
     ok: true as const,
     bytes: labelRes.data.bytes,
     contentType: labelRes.data.contentType,
-    failedOrders: missing.map((orderId) => ({ orderId, reason: "missing_dpd_shipment_id" })),
+    failedOrders,
     endpointAttemptResults: labelRes.data.attempt,
     fileName: `dpd-bulk-labels-${new Date().toISOString().replace(/[:.]/g, "-")}.pdf`,
   };
@@ -2993,8 +3020,11 @@ export async function regenerateDpdLabelForOrder(orderId: string, market: Market
   const sql = getSql();
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
-  if (!order?.dpdShipmentId) return null;
-  const built = await fetchDpdLabelPdfForShipments([order.dpdShipmentId]);
+  if (!order) return null;
+  const tracking = numericTrackingOrNull(order.trackingNumber);
+  const shipmentId = String(order.dpdShipmentId || "").trim() || null;
+  if (!tracking && !shipmentId) return null;
+  const built = await fetchDpdLabelPdfForShipments(tracking ? { parcelNumbers: [tracking] } : { shipmentIds: [shipmentId as string] });
   if (!built.ok) {
     await sql`
       update orders

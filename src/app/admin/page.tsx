@@ -422,6 +422,12 @@ export default async function AdminPage({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
+                    <a
+                      href={`/api/admin/dpd-diagnostic?orderId=${encodeURIComponent(o.id)}&debug=1`}
+                      className="rounded border px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      DPD servisní diagnostika
+                    </a>
                     <form action={cancelDpdShipmentAction}>
                       <input type="hidden" name="orderId" value={o.id} />
                       <ConfirmSubmitButton

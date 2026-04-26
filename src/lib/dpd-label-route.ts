@@ -17,23 +17,31 @@ export async function resolveDpdLabelDownload(
     await refreshDpdShipment(orderId, market).catch(() => undefined);
     order = (await getOrderById(orderId, market)) || order;
     const shipmentId = String(order.dpdShipmentId || "").trim();
-    if (!shipmentId) {
+    const tracking = String(order.trackingNumber || "").trim();
+    const hasTracking = /^\d{10,14}$/.test(tracking);
+    if (!shipmentId && !hasTracking) {
       return Response.json(
         {
           ok: false,
           step,
-          reason: "missing_dpd_shipment_id",
+          reason: "missing_dpd_identifiers",
           orderId,
           market,
           hasTrackingNumber: Boolean(order.trackingNumber),
           dpdStatusInDb: order.dpdShipmentStatus || null,
+          missing: {
+            dpdShipmentId: !shipmentId,
+            trackingNumber: !hasTracking,
+          },
         },
         { status: 409 }
       );
     }
 
     step = "download_label";
-    const label = await fetchDpdLabelPdfForShipments([shipmentId]);
+    const label = await fetchDpdLabelPdfForShipments(
+      hasTracking ? { parcelNumbers: [tracking] } : { shipmentIds: [shipmentId] }
+    );
     lastAttempt = (label.ok ? label.data.attempt : (label.raw as DpdEndpointAttempt)) || null;
 
     if (debug) {
@@ -44,7 +52,7 @@ export async function resolveDpdLabelDownload(
           orderId,
           market,
           orderNumber: order.orderNumber,
-          dpdShipmentId: shipmentId,
+          dpdShipmentId: shipmentId || null,
           trackingNumber: order.trackingNumber || null,
           dpdStatusInDb: order.dpdShipmentStatus || null,
           endpointAttemptResults: lastAttempt,

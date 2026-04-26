@@ -4,7 +4,9 @@ type DpdResult =
   | {
       ok: true;
       shipmentId: string;
+      shipmentIdSourcePath: string;
       trackingNumber: string | null;
+      trackingSourcePath: string | null;
       raw?: unknown;
       createRequest?: unknown;
       httpStatus?: number | null;
@@ -12,18 +14,32 @@ type DpdResult =
   | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null; createRequest?: unknown };
 
 type DpdGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null };
+
 export type DpdAuthDiagnostics = {
   tokenPresent: boolean;
   tokenLength: number;
   tokenLooksLikeJwt: boolean;
+  tokenHasWhitespaceAtEdges: boolean;
+  customerIdPresent: boolean;
+  customerIdLength: number;
+  senderAddressIdPresent: boolean;
+  senderAddressIdLength: number;
+  buCode: string;
   authorizationHeaderScheme: "Bearer";
+  requestHeadersShape: {
+    Authorization: "Bearer ***";
+    "Content-Type": "application/json";
+    Accept: "application/json";
+  };
   baseUrl: string;
   endpointPath: string;
+  finalUrl: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
   responseStatus: number | null;
   responseBodySafe?: unknown;
   correlationId?: string | null;
   transactionId?: string | null;
+  timestamp: string;
 };
 
 export type DpdEndpointAttempt = {
@@ -49,26 +65,60 @@ export type DpdPickupInput = {
   totalWeight: number;
 };
 
+type DpdLabelFetchInput = {
+  shipmentIds?: string[];
+  parcelNumbers?: string[];
+};
+
 function isEnabled() {
   return process.env.DPD_API_ENABLED === "true";
 }
 
 function normalizeBaseUrl(url: string) {
-  return url.replace(/\/$/, "");
+  return url.replace(/\/+$/, "");
 }
 
 function configured() {
-  const baseUrl = process.env.DPD_API_BASE_URL?.trim() || "https://shipping.dpdgroup.com/api";
-  const token = process.env.DPD_API_TOKEN?.trim();
+  const baseUrlRaw = process.env.DPD_API_BASE_URL?.trim() || "https://shipping.dpdgroup.com/api/v1.1";
+  const tokenRaw = process.env.DPD_API_TOKEN;
+  const token = tokenRaw?.trim();
   const customerId = process.env.DPD_API_CUSTOMER_ID?.trim();
   const senderAddressId = process.env.DPD_API_SENDER_ADDRESS_ID?.trim();
   const buCode = process.env.DPD_API_BU_CODE?.trim() || "015";
-  return { baseUrl, token, customerId, senderAddressId, buCode };
+  return { baseUrlRaw, tokenRaw, token, customerId, senderAddressId, buCode };
 }
 
 function tokenLooksLikeJwt(token: string | undefined) {
   const t = String(token || "").trim();
   return t.split(".").length === 3;
+}
+
+function sanitizeBodySafe(input: unknown): unknown {
+  if (input == null) return null;
+  if (Array.isArray(input)) return input.map((x) => sanitizeBodySafe(x));
+  if (typeof input !== "object") return input;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    const lower = k.toLowerCase();
+    if (lower.includes("token") || lower.includes("authorization") || lower.includes("cookie")) continue;
+    if (typeof v === "string" && v.length > 4000) out[k] = `${v.slice(0, 4000)}...<truncated>`;
+    else out[k] = sanitizeBodySafe(v);
+  }
+  return out;
+}
+
+function resolveEndpoint(baseUrlRaw: string, apiVersion: "v1.1" | "v1.0", endpointPath: string) {
+  const base = normalizeBaseUrl(baseUrlRaw);
+  const cleanEndpoint = `/${endpointPath.replace(/^\/+/, "")}`;
+  const hasVersion = /\/api\/v1\.[01]$/i.test(base) || /\/v1\.[01]$/i.test(base);
+  const root = hasVersion ? base.replace(/\/v1\.[01]$/i, "") : base;
+  const normalizedRoot = /\/api$/i.test(root) ? root : `${root}/api`;
+  const finalUrl = `${normalizedRoot}/${apiVersion}${cleanEndpoint}`;
+  return {
+    normalizedBaseUrl: `${normalizedRoot}/${apiVersion}`,
+    endpointPath: cleanEndpoint,
+    finalUrl: finalUrl.replace(/([^:]\/)\/+/g, "$1"),
+  };
 }
 
 export function buildDpdAuthDiagnostics(params: {
@@ -78,21 +128,37 @@ export function buildDpdAuthDiagnostics(params: {
   responseBodySafe?: unknown;
   correlationId?: string | null;
   transactionId?: string | null;
+  apiVersion?: "v1.1" | "v1.0";
 }): DpdAuthDiagnostics {
   const cfg = configured();
+  const tokenRaw = String(cfg.tokenRaw || "");
   const token = String(cfg.token || "");
+  const endpoint = resolveEndpoint(cfg.baseUrlRaw, params.apiVersion || "v1.1", params.endpointPath);
   return {
     tokenPresent: token.length > 0,
     tokenLength: token.length,
     tokenLooksLikeJwt: tokenLooksLikeJwt(cfg.token),
+    tokenHasWhitespaceAtEdges: tokenRaw.length > 0 && tokenRaw !== tokenRaw.trim(),
+    customerIdPresent: String(cfg.customerId || "").length > 0,
+    customerIdLength: String(cfg.customerId || "").length,
+    senderAddressIdPresent: String(cfg.senderAddressId || "").length > 0,
+    senderAddressIdLength: String(cfg.senderAddressId || "").length,
+    buCode: cfg.buCode,
     authorizationHeaderScheme: "Bearer",
-    baseUrl: normalizeBaseUrl(cfg.baseUrl),
-    endpointPath: params.endpointPath,
+    requestHeadersShape: {
+      Authorization: "Bearer ***",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    baseUrl: endpoint.normalizedBaseUrl,
+    endpointPath: endpoint.endpointPath,
+    finalUrl: endpoint.finalUrl,
     method: params.method,
     responseStatus: params.responseStatus ?? null,
-    responseBodySafe: params.responseBodySafe,
+    responseBodySafe: sanitizeBodySafe(params.responseBodySafe),
     correlationId: params.correlationId || null,
     transactionId: params.transactionId || null,
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -103,11 +169,22 @@ function parseDeliveryAddress(deliveryAddress: string) {
     .filter(Boolean);
   const mainLine = lines.find((line) => line.includes(",")) || "";
   const chunks = mainLine.split(",").map((chunk) => chunk.trim());
-  const street = chunks[0] || "";
+  const street = chunks[0] || lines[0] || "";
   const city = chunks[1] || "";
   const zipRaw = chunks[2] || "";
   const zipCode = zipRaw.replace(/[^\d]/g, "");
-  return { street, city, zipCode };
+  return { street, city, zipCode, additionalAddressInfo: chunks.slice(3).join(", ") || undefined };
+}
+
+function splitPhone(raw: string) {
+  const v = String(raw || "").trim().replace(/\s+/g, "");
+  if (!v) return { number: "", prefix: null as string | null };
+  if (v.startsWith("+") && v.length > 4) {
+    const prefix = v.slice(0, 3);
+    const number = v.slice(3).replace(/\D/g, "");
+    return { number, prefix };
+  }
+  return { number: v.replace(/\D/g, ""), prefix: null };
 }
 
 function isUuid(value: string): boolean {
@@ -121,65 +198,66 @@ export function isLikelyDpdTrackingNumber(value: unknown): boolean {
   return true;
 }
 
-function pickShipmentId(raw: unknown): string | null {
-  const stack: unknown[] = [raw];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!current || typeof current !== "object") continue;
-    const rec = current as Record<string, unknown>;
-    const idCandidate =
-      rec.shipmentId ??
-      rec.shipment_id ??
-      rec.id ??
-      rec.parcelLabelNumber ??
-      rec.parcelNumber ??
-      rec.reference1 ??
-      null;
-    if (idCandidate != null) {
-      const id = String(idCandidate).trim();
-      if (id) return id;
-    }
-    for (const value of Object.values(rec)) {
-      if (Array.isArray(value)) value.forEach((v) => stack.push(v));
-      else if (value && typeof value === "object") stack.push(value);
+function collectPathCandidates(
+  input: unknown,
+  accept: (value: string, path: string) => boolean,
+  path = "$",
+  out: Array<{ value: string; path: string }> = []
+) {
+  if (input == null) return out;
+  if (Array.isArray(input)) {
+    input.forEach((v, i) => collectPathCandidates(v, accept, `${path}[${i}]`, out));
+    return out;
+  }
+  if (typeof input !== "object") return out;
+  const rec = input as Record<string, unknown>;
+  for (const [k, v] of Object.entries(rec)) {
+    const p = `${path}.${k}`;
+    if (typeof v === "string" || typeof v === "number") {
+      const text = String(v).trim();
+      if (text && accept(text, p)) out.push({ value: text, path: p });
+    } else {
+      collectPathCandidates(v, accept, p, out);
     }
   }
-  return null;
+  return out;
 }
 
-function pickTrackingNumber(raw: unknown): string | null {
-  const stack: unknown[] = [raw];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!current || typeof current !== "object") continue;
-    const rec = current as Record<string, unknown>;
-    const candidates = [
-      rec.parcelLabelNumber,
-      rec.parcelNumber,
-      rec.trackingNumber,
-      rec.waybill,
-      rec.awb,
-    ];
-    for (const candidate of candidates) {
-      const text = String(candidate ?? "").trim();
-      if (isLikelyDpdTrackingNumber(text)) return text;
-    }
-    for (const value of Object.values(rec)) {
-      if (Array.isArray(value)) value.forEach((v) => stack.push(v));
-      else if (value && typeof value === "object") stack.push(value);
-    }
-  }
-  return null;
+function pickShipmentId(raw: unknown): { value: string; path: string } | null {
+  const keys = [".shipmentId", ".id", ".shipments[", ".shipment_id"];
+  const candidates = collectPathCandidates(
+    raw,
+    (v, p) => /^(?:\d+|[a-zA-Z0-9-]+)$/.test(v) && !isLikelyDpdTrackingNumber(v) && keys.some((k) => p.includes(k))
+  );
+  return candidates[0] || null;
+}
+
+function pickTracking(raw: unknown): { value: string; path: string } | null {
+  const candidates = collectPathCandidates(
+    raw,
+    (v, p) =>
+      isLikelyDpdTrackingNumber(v) &&
+      (p.toLowerCase().includes("parcelnumber") || p.toLowerCase().includes("tracking") || p.toLowerCase().includes("waybill"))
+  );
+  return candidates[0] || null;
+}
+
+function toCodReference(orderNumber: number): string {
+  const digits = String(orderNumber).replace(/\D/g, "");
+  if (!digits) return String(Date.now()).slice(-10);
+  return digits.slice(-10);
 }
 
 async function dpdJsonRequest<T>(
   method: "GET" | "POST" | "PUT" | "DELETE",
-  path: string,
-  body?: Record<string, unknown>
+  endpointPath: string,
+  body?: Record<string, unknown>,
+  apiVersion: "v1.1" | "v1.0" = "v1.1"
 ): Promise<DpdGenericResult<T>> {
   const cfg = configured();
   if (!cfg.token || !cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
-  const res = await fetch(`${normalizeBaseUrl(cfg.baseUrl)}${path}`, {
+  const endpoint = resolveEndpoint(cfg.baseUrlRaw, apiVersion, endpointPath);
+  const res = await fetch(endpoint.finalUrl, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -190,81 +268,106 @@ async function dpdJsonRequest<T>(
   });
   const raw = await res.json().catch(() => ({}));
   const diagnostics = buildDpdAuthDiagnostics({
-    endpointPath: path,
+    endpointPath,
+    apiVersion,
     method,
     responseStatus: res.status,
     responseBodySafe: raw,
     correlationId: res.headers.get("x-correlation-id"),
     transactionId: res.headers.get("transactionid"),
   });
-  if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw: { diagnostics, body: raw }, httpStatus: res.status };
+  if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw: { diagnostics, body: sanitizeBodySafe(raw) }, httpStatus: res.status };
   return { ok: true, data: raw as T };
 }
 
 export async function createDpdShipment(order: Order, market: Market): Promise<DpdResult> {
   if (!isEnabled()) return { ok: false, reason: "dpd_api_disabled" };
-  const { baseUrl, token, customerId, senderAddressId, buCode } = configured();
-  if (!token || !customerId || !senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
-  if (order.paymentMethod === "COD" && market === "HU") return { ok: false, reason: "dpd_cod_not_allowed_hu" };
+  const cfg = configured();
+  if (!cfg.token || !cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
+  if (order.paymentMethod === "COD" && market === "HU") {
+    return { ok: false, reason: "dpd_cod_not_allowed_hu" };
+  }
 
   const parsed = parseDeliveryAddress(order.deliveryAddress);
+  const phone = splitPhone(order.phone);
   const receiverCountry = market === "HU" ? "HU" : "RO";
   const currency = market === "HU" ? "HUF" : "RON";
-  const createPath = process.env.DPD_API_CREATE_SHIPMENT_PATH?.trim() || "/v1.1/shipments";
+  const endpointPath = "/shipments";
   const codPaymentType = process.env.DPD_API_COD_PAYMENT_TYPE?.trim() || "Cash";
+  const parcelRef = `${order.orderNumber}-1`;
+
+  const receiver: Record<string, unknown> = {
+    city: parsed.city || "N/A",
+    companyName: order.customerName,
+    contactEmail: order.email || undefined,
+    contactMobile: phone.number || undefined,
+    contactName: order.customerName,
+    contactPhone: phone.number || undefined,
+    contactPhonePrefix: phone.prefix || undefined,
+    countryCode: receiverCountry,
+    name: order.customerName,
+    name2: undefined,
+    street: parsed.street || "N/A",
+    zipCode: parsed.zipCode || "000000",
+    additionalAddressInfo: parsed.additionalAddressInfo,
+  };
 
   const shipment: Record<string, unknown> = {
     numOrder: 1,
-    senderAddressId,
-    receiver: {
-      city: parsed.city,
-      companyName: order.customerName,
-      contactEmail: order.email,
-      contactMobile: order.phone,
-      contactName: order.customerName,
-      contactPhone: order.phone,
-      countryCode: receiverCountry,
-      name: order.customerName,
-      street: parsed.street,
-      zipCode: parsed.zipCode,
-    },
+    senderAddressId: cfg.senderAddressId,
+    receiver,
     parcels: [
       {
+        reference1: String(order.orderNumber),
+        reference2: parcelRef,
         weight: Number(process.env.DPD_API_DEFAULT_WEIGHT_KG || 1),
-        reference1: `ORDER-${String(order.orderNumber)}`,
       },
     ],
     service: {
-      additionalService: {
-        predicts: [
-          { destination: order.phone, type: "SMS" },
-          { destination: order.email, type: "email" },
-        ],
-      },
-      mainServiceElementCodes: ["001", "013"],
+      mainServiceElementCodes: ["001"],
     },
     reference1: String(order.orderNumber),
-    saveMode: process.env.DPD_API_SAVE_MODE?.trim() || "final",
+    saveMode: "printed",
+    printFormat: "PDF",
+    labelSize: "A4",
+    extendShipmentData: true,
+    printRef1AsBarcode: false,
   };
 
-  if (order.paymentMethod === "COD") {
+  if (order.paymentMethod === "COD" && market === "RO") {
     (shipment.service as Record<string, unknown>).additionalService = {
-      ...((shipment.service as Record<string, unknown>).additionalService as Record<string, unknown>),
       cod: {
         amount: String(order.totalPrice),
         currency,
         paymentType: codPaymentType,
-        reference: String(order.orderNumber),
-        split: "Even",
+        reference: toCodReference(order.orderNumber),
+        split: "First parcel",
       },
     };
   }
 
-  const payload = { buCode, customerId, shipments: [shipment] };
+  const compact = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(compact);
+    if (!input || typeof input !== "object") return input;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      if (v === undefined || v === null || v === "") continue;
+      out[k] = compact(v);
+    }
+    return out;
+  };
+
+  const payload = compact({
+    buCode: cfg.buCode,
+    customerId: cfg.customerId,
+    shipments: [shipment],
+  }) as Record<string, unknown>;
+
   try {
-    const res = await fetch(`${normalizeBaseUrl(baseUrl)}${createPath}`, {
+    const endpoint = resolveEndpoint(cfg.baseUrlRaw, "v1.1", endpointPath);
+    const res = await fetch(endpoint.finalUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${cfg.token}` },
       body: JSON.stringify(payload),
     });
     const raw = await res.json().catch(() => ({}));
@@ -274,75 +377,102 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
         reason: `dpd_api_http_${res.status}`,
         raw: {
           diagnostics: buildDpdAuthDiagnostics({
-            endpointPath: createPath,
+            endpointPath,
+            apiVersion: "v1.1",
             method: "POST",
             responseStatus: res.status,
             responseBodySafe: raw,
             correlationId: res.headers.get("x-correlation-id"),
             transactionId: res.headers.get("transactionid"),
           }),
-          body: raw,
+          body: sanitizeBodySafe(raw),
         },
         httpStatus: res.status,
-        createRequest: payload,
+        createRequest: sanitizeBodySafe(payload),
       };
     }
     const shipmentId = pickShipmentId(raw);
-    if (!shipmentId) return { ok: false, reason: "dpd_api_missing_shipment_id", raw, httpStatus: res.status, createRequest: payload };
+    if (!shipmentId) {
+      return {
+        ok: false,
+        reason: "dpd_api_missing_shipment_id",
+        raw: sanitizeBodySafe(raw),
+        httpStatus: res.status,
+        createRequest: sanitizeBodySafe(payload),
+      };
+    }
+    const tracking = pickTracking(raw);
     return {
       ok: true,
-      shipmentId,
-      trackingNumber: pickTrackingNumber(raw),
-      raw,
-      createRequest: payload,
+      shipmentId: shipmentId.value,
+      shipmentIdSourcePath: shipmentId.path,
+      trackingNumber: tracking?.value || null,
+      trackingSourcePath: tracking?.path || null,
+      raw: sanitizeBodySafe(raw),
+      createRequest: sanitizeBodySafe(payload),
       httpStatus: res.status,
     };
   } catch (error) {
-    return { ok: false, reason: "dpd_api_request_failed", raw: String(error), createRequest: payload };
+    return { ok: false, reason: "dpd_api_request_failed", raw: String(error), createRequest: sanitizeBodySafe(payload) };
   }
 }
 
 export async function fetchDpdShipmentStatus(
   shipmentId: string
-): Promise<DpdGenericResult<{ state: string; trackingNumber: string | null; raw: unknown }>> {
-  const path = (process.env.DPD_API_TRACK_PATH?.trim() || "/v1.1/shipments/{id}").replace("{id}", encodeURIComponent(shipmentId));
-  const res = await dpdJsonRequest<Record<string, unknown>>("GET", path);
+): Promise<DpdGenericResult<{ state: string; trackingNumber: string | null; trackingSourcePath: string | null; raw: unknown }>> {
+  const endpointPath = `/shipments/${encodeURIComponent(shipmentId)}`;
+  const res = await dpdJsonRequest<Record<string, unknown>>("GET", endpointPath, undefined, "v1.1");
   if (!res.ok) return res;
   const raw = res.data as Record<string, unknown>;
   const state = String(raw.status || raw.state || "").toUpperCase();
-  const trackingNumber = pickTrackingNumber(raw);
-  return { ok: true, data: { state, trackingNumber, raw } };
+  const tracking = pickTracking(raw);
+  return { ok: true, data: { state, trackingNumber: tracking?.value || null, trackingSourcePath: tracking?.path || null, raw: sanitizeBodySafe(raw) } };
 }
 
 export async function cancelDpdShipment(shipmentId: string): Promise<DpdGenericResult<Record<string, unknown>>> {
   const cfg = configured();
   if (!cfg.customerId) return { ok: false, reason: "dpd_api_not_configured" };
-  const path = process.env.DPD_API_CANCEL_PATH?.trim() || "/v1.1/shipments/cancellation";
-  return dpdJsonRequest<Record<string, unknown>>("PUT", path, {
-    buCode: cfg.buCode,
-    customerId: cfg.customerId,
-    shipmentIdList: [Number(shipmentId)],
-  });
+  // DPD docs endpoint: /v1.1/shipments/cancellation
+  return dpdJsonRequest<Record<string, unknown>>(
+    "PUT",
+    "/shipments/cancellation",
+    {
+      buCode: cfg.buCode,
+      customerId: cfg.customerId,
+      shipmentIdList: [shipmentId],
+    },
+    "v1.1"
+  );
 }
 
 export async function fetchDpdLabelPdfForShipments(
-  shipmentIds: string[]
+  input: string[] | DpdLabelFetchInput
 ): Promise<DpdGenericResult<{ bytes: Buffer; contentType: string; attempt: DpdEndpointAttempt }>> {
   const cfg = configured();
   if (!cfg.token || !cfg.customerId) return { ok: false, reason: "dpd_api_not_configured" };
-  const endpoint = process.env.DPD_API_LABEL_PATH?.trim() || "/v1.0/label/shipment-ids";
-  const payload = {
+  const shipmentIds = Array.isArray(input) ? input : input.shipmentIds || [];
+  const parcelNumbers = Array.isArray(input) ? [] : input.parcelNumbers || [];
+
+  const cleanedParcels = parcelNumbers.map((x) => String(x || "").trim()).filter(isLikelyDpdTrackingNumber);
+  const cleanedShipments = shipmentIds.map((x) => String(x || "").trim()).filter(Boolean);
+  const byParcel = cleanedParcels.length > 0;
+  const endpointPath = byParcel ? "/label/parcel-numbers" : "/label/shipment-ids";
+  const payload: Record<string, unknown> = {
     buCode: cfg.buCode,
     customerId: cfg.customerId,
     labelSize: "A4",
     startPosition: 1,
     printFormat: "PDF",
-    shipmentIdList: shipmentIds.map((s) => Number(s)).filter((n) => Number.isFinite(n)),
   };
-  if (payload.shipmentIdList.length === 0) return { ok: false, reason: "dpd_label_missing_shipment_ids" };
-  const url = `${normalizeBaseUrl(cfg.baseUrl)}${endpoint}`;
+  if (byParcel) payload.parcelNumberList = cleanedParcels;
+  else payload.shipmentIdList = cleanedShipments;
+
+  if (!byParcel && cleanedShipments.length === 0) return { ok: false, reason: "dpd_label_missing_shipment_ids" };
+  if (byParcel && cleanedParcels.length === 0) return { ok: false, reason: "dpd_label_missing_parcel_numbers" };
+
+  const endpoint = resolveEndpoint(cfg.baseUrlRaw, "v1.0", endpointPath);
   const started = Date.now();
-  const res = await fetch(url, {
+  const res = await fetch(endpoint.finalUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify(payload),
@@ -350,11 +480,13 @@ export async function fetchDpdLabelPdfForShipments(
   const contentType = res.headers.get("content-type");
   const contentLength = res.headers.get("content-length");
   const bytes = Buffer.from(await res.arrayBuffer().catch(() => new ArrayBuffer(0)));
-  const looksLikePdf = String(contentType || "").toLowerCase().includes("application/pdf") || (bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF");
+  const looksLikePdf =
+    String(contentType || "").toLowerCase().includes("application/pdf") ||
+    (bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF");
   const attempt: DpdEndpointAttempt = {
-    step: shipmentIds.length > 1 ? "label_bulk_shipment_ids" : "label_single_shipment_id",
+    step: byParcel ? "label_parcel_numbers" : cleanedShipments.length > 1 ? "label_bulk_shipment_ids" : "label_single_shipment_id",
     method: "POST",
-    url,
+    url: endpoint.finalUrl,
     status: res.status,
     contentType,
     contentLength,
@@ -373,14 +505,14 @@ export async function createDpdPickup(
 ): Promise<DpdGenericResult<{ pickupId: string; pickupDate: string | null; raw: unknown; request: unknown }>> {
   const cfg = configured();
   if (!cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
-  const path = process.env.DPD_API_PICKUP_PATH?.trim() || "/v1.1/pickup";
   const senderAddressIdNum = Number(cfg.senderAddressId);
   const body = {
     buCode: cfg.buCode,
     customerId: cfg.customerId,
     pickupOrder: {
       contactName: input.contactName,
-      contactPhone: input.phone,
+      contactPhone: splitPhone(input.phone).number,
+      contactPhonePrefix: splitPhone(input.phone).prefix || undefined,
       contactEmail: process.env.DPD_API_CONTACT_EMAIL?.trim() || undefined,
       internalPickupAddressId: Number.isFinite(senderAddressIdNum) ? senderAddressIdNum : cfg.senderAddressId,
       pickupDate: input.pickupDate,
@@ -392,23 +524,28 @@ export async function createDpdPickup(
       market,
     },
   };
-  const res = await dpdJsonRequest<Record<string, unknown>>("POST", path, body);
+  const res = await dpdJsonRequest<Record<string, unknown>>("POST", "/pickup", body, "v1.1");
   if (!res.ok) return res;
   const raw = res.data as Record<string, unknown>;
   const pickupId = String(raw.pickupId || raw.id || raw.orderId || "").trim();
-  if (!pickupId) return { ok: false, reason: "dpd_pickup_missing_id", raw };
+  if (!pickupId) return { ok: false, reason: "dpd_pickup_missing_id", raw: sanitizeBodySafe(raw) };
   return {
     ok: true,
-    data: { pickupId, pickupDate: String(raw.pickupDate || body.pickupOrder.pickupDate || "") || null, raw, request: body },
+    data: { pickupId, pickupDate: String(raw.pickupDate || body.pickupOrder.pickupDate || "") || null, raw: sanitizeBodySafe(raw), request: sanitizeBodySafe(body) },
   };
 }
 
 export async function cancelDpdPickup(pickupId: string): Promise<DpdGenericResult<Record<string, unknown>>> {
   const cfg = configured();
   if (!cfg.customerId) return { ok: false, reason: "dpd_api_not_configured" };
-  const path = "/v1.1/pickup/cancel/{id}".replace("{id}", encodeURIComponent(pickupId));
-  return dpdJsonRequest<Record<string, unknown>>("PUT", path, {
-    buCode: cfg.buCode,
-    customerId: cfg.customerId,
-  });
+  const path = `/pickup/cancel/${encodeURIComponent(pickupId)}`;
+  return dpdJsonRequest<Record<string, unknown>>(
+    "PUT",
+    path,
+    {
+      buCode: cfg.buCode,
+      customerId: cfg.customerId,
+    },
+    "v1.1"
+  );
 }

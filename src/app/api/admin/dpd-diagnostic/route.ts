@@ -7,8 +7,10 @@ export async function GET(request: NextRequest) {
   if (!isAdminRequest(request)) return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
   const orderId = String(request.nextUrl.searchParams.get("orderId") || "").trim();
   const debug = String(request.nextUrl.searchParams.get("debug") || "") === "1";
+  const sync = String(request.nextUrl.searchParams.get("sync") || "") === "1";
+  const debugCreate = String(request.nextUrl.searchParams.get("debugCreate") || "") === "1";
   if (!orderId) return NextResponse.json({ ok: false, message: "Missing orderId" }, { status: 400 });
-  await refreshDpdShipment(orderId, "RO").catch(() => undefined);
+  if (sync) await refreshDpdShipment(orderId, "RO").catch(() => undefined);
   const order = await getOrderById(orderId, "RO");
   if (!order) return NextResponse.json({ ok: false, message: "Order not found" }, { status: 404 });
   let endpointAttemptResults: unknown = null;
@@ -48,6 +50,10 @@ export async function GET(request: NextRequest) {
               labelByShipmentIds: buildDpdAuthDiagnostics({ endpointPath: "/v1.0/label/shipment-ids", method: "POST", responseStatus: null }),
             }
           : undefined,
+        debugCreate: {
+          enabled: debugCreate,
+          note: debugCreate ? "debugCreate endpoint call is intentionally disabled from this route." : "Enable debugCreate=1 only for explicit live create debugging.",
+        },
         lastSyncAt: new Date().toISOString(),
       },
     },
