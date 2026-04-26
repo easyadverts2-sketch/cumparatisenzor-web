@@ -1787,6 +1787,19 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       shouldIssueFinalInvoice = true;
       shouldCreateShipment = true;
     }
+    if (
+      status === "ORDERED_PAID_NOT_SHIPPED" &&
+      prepaid &&
+      order.status === "ORDERED_PAID_NOT_SHIPPED" &&
+      (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD") &&
+      !order.pplShipmentId &&
+      !order.pplBatchId &&
+      !order.dpdShipmentId &&
+      !order.trackingNumber
+    ) {
+      // Retry-safe shipment trigger when status is already paid but shipment was not created.
+      shouldCreateShipment = true;
+    }
 
     if (
       status === "ORDERED_PAID_NOT_SHIPPED" &&
@@ -1862,67 +1875,87 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     const refreshed = await getOrderById(orderId, market);
     if (refreshed) {
       if (shouldIssueFinalInvoice) {
-        const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
-        const invoiceText = renderInvoiceText(refreshed, {
-          invoiceNo: finalInvoice.invoice_no,
-          sequenceNo: Number(finalInvoice.sequence_no),
-          variableSymbol: finalInvoice.variable_symbol,
-          issueDateIso: String(finalInvoice.issue_date),
-          dueDateIso: String(finalInvoice.due_date),
-          currency: marketCurrency(market),
-          market,
-          kind: "FINAL",
-          total: Number(finalInvoice.amount),
-        });
-        const invoiceHtml = renderInvoiceHtml(refreshed, {
-          invoiceNo: finalInvoice.invoice_no,
-          sequenceNo: Number(finalInvoice.sequence_no),
-          variableSymbol: finalInvoice.variable_symbol,
-          issueDateIso: String(finalInvoice.issue_date),
-          dueDateIso: String(finalInvoice.due_date),
-          currency: marketCurrency(market),
-          market,
-          kind: "FINAL",
-          total: Number(finalInvoice.amount),
-        });
-        await sendEmail({
-          to: refreshed.email,
-          subject:
-            market === "HU"
-              ? `Vegszamla #${finalInvoice.invoice_no}`
-              : `Factura finala #${finalInvoice.invoice_no}`,
-          text:
-            market === "HU"
-              ? "A befizetes beazonositasa utan a vegszamlat mellekelten kuldjuk."
-              : "Dupa confirmarea platii, factura finala este atasata acestui e-mail.",
-          html: invoiceHtml,
-          from: senderFrom,
-          attachments: [
-            {
-              filename: `${finalInvoice.invoice_no}.html`,
-              content: invoiceHtml,
-              contentType: "text/html; charset=utf-8",
-            },
-            {
-              filename: `${finalInvoice.invoice_no}.txt`,
-              content: invoiceText,
-              contentType: "text/plain; charset=utf-8",
-            },
-          ],
-        }).catch(() => undefined);
+        try {
+          const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
+          const invoiceText = renderInvoiceText(refreshed, {
+            invoiceNo: finalInvoice.invoice_no,
+            sequenceNo: Number(finalInvoice.sequence_no),
+            variableSymbol: finalInvoice.variable_symbol,
+            issueDateIso: String(finalInvoice.issue_date),
+            dueDateIso: String(finalInvoice.due_date),
+            currency: marketCurrency(market),
+            market,
+            kind: "FINAL",
+            total: Number(finalInvoice.amount),
+          });
+          const invoiceHtml = renderInvoiceHtml(refreshed, {
+            invoiceNo: finalInvoice.invoice_no,
+            sequenceNo: Number(finalInvoice.sequence_no),
+            variableSymbol: finalInvoice.variable_symbol,
+            issueDateIso: String(finalInvoice.issue_date),
+            dueDateIso: String(finalInvoice.due_date),
+            currency: marketCurrency(market),
+            market,
+            kind: "FINAL",
+            total: Number(finalInvoice.amount),
+          });
+          await sendEmail({
+            to: refreshed.email,
+            subject:
+              market === "HU"
+                ? `Vegszamla #${finalInvoice.invoice_no}`
+                : `Factura finala #${finalInvoice.invoice_no}`,
+            text:
+              market === "HU"
+                ? "A befizetes beazonositasa utan a vegszamlat mellekelten kuldjuk."
+                : "Dupa confirmarea platii, factura finala este atasata acestui e-mail.",
+            html: invoiceHtml,
+            from: senderFrom,
+            attachments: [
+              {
+                filename: `${finalInvoice.invoice_no}.html`,
+                content: invoiceHtml,
+                contentType: "text/html; charset=utf-8",
+              },
+              {
+                filename: `${finalInvoice.invoice_no}.txt`,
+                content: invoiceText,
+                contentType: "text/plain; charset=utf-8",
+              },
+            ],
+          }).catch(() => undefined);
 
-        const paidEmail = buildPaymentReceivedEmail(refreshed, market);
-        await sendEmail({
-          to: refreshed.email,
-          subject: paidEmail.subject,
-          text: paidEmail.text,
-          html: paidEmail.html,
-          from: senderFrom,
-        }).catch(() => undefined);
+          const paidEmail = buildPaymentReceivedEmail(refreshed, market);
+          await sendEmail({
+            to: refreshed.email,
+            subject: paidEmail.subject,
+            text: paidEmail.text,
+            html: paidEmail.html,
+            from: senderFrom,
+          }).catch(() => undefined);
+        } catch (error) {
+          await insertAuditLog(sql, {
+            market,
+            action: "FINAL_INVOICE_ERROR",
+            orderId,
+            orderNumber: refreshed.orderNumber,
+            details: String(error instanceof Error ? error.message : error).slice(0, 4000),
+          });
+        }
       }
 
       if (shouldCreateShipment) {
-        await createShipmentForOrder(sql, refreshed, market, senderFrom, "status_transition_shipment");
+        try {
+          await createShipmentForOrder(sql, refreshed, market, senderFrom, "status_transition_shipment");
+        } catch (error) {
+          await insertAuditLog(sql, {
+            market,
+            action: "SHIPMENT_CREATE_EXCEPTION",
+            orderId,
+            orderNumber: refreshed.orderNumber,
+            details: String(error instanceof Error ? error.message : error).slice(0, 4000),
+          });
+        }
       }
     }
   }
