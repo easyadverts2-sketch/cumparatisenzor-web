@@ -657,13 +657,17 @@ export async function fetchDpdLabelPdfForShipments(
   } | null => {
     try {
       const json = JSON.parse(responseText) as Record<string, unknown>;
-      const pdfFile = json?.pdfFile;
+      const container =
+        json && typeof json.data === "object" && json.data != null
+          ? (json.data as Record<string, unknown>)
+          : json;
+      const pdfFile = container?.pdfFile;
       if (typeof pdfFile !== "string" || !pdfFile.trim()) {
         return {
           pdfBuffer: Buffer.alloc(0),
-          transactionId: json?.transactionId,
+          transactionId: container?.transactionId ?? json?.transactionId,
           responseJsonSafe: {
-            transactionId: json?.transactionId,
+            transactionId: container?.transactionId ?? json?.transactionId,
             pdfFilePresent: false,
             pdfFilePrefix: null,
             pdfFileLength: 0,
@@ -687,14 +691,14 @@ export async function fetchDpdLabelPdfForShipments(
       if (!isPdf) {
         return {
           pdfBuffer,
-          transactionId: json?.transactionId,
+          transactionId: container?.transactionId ?? json?.transactionId,
           responseJsonSafe,
           decodeError: "invalid_pdf_base64",
         };
       }
       return {
         pdfBuffer,
-        transactionId: json?.transactionId,
+        transactionId: container?.transactionId ?? json?.transactionId,
         responseJsonSafe,
       };
     } catch {
@@ -714,9 +718,10 @@ export async function fetchDpdLabelPdfForShipments(
     body: JSON.stringify(payload),
   });
   const bytes = Buffer.from(await res.arrayBuffer());
-  const responseTextSafe = bytes.length ? bytes.toString("utf8").slice(0, 10000) : null;
+  const responseTextFull = bytes.length ? bytes.toString("utf8") : "";
+  const responseTextSafe = responseTextFull ? responseTextFull.slice(0, 10000) : null;
   const looksLikePdf = bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF";
-  const parsedJson = responseTextSafe ? extractPdfBufferFromDpdLabelJson(responseTextSafe) : null;
+  const parsedJson = responseTextFull ? extractPdfBufferFromDpdLabelJson(responseTextFull) : null;
   const attempt: DpdEndpointAttempt = {
     step,
     method: "POST",
