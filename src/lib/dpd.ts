@@ -65,6 +65,9 @@ export type DpdEndpointAttempt = {
   error?: string | null;
   requestBodySafe?: unknown;
   responseTextSafe?: string | null;
+  responseJsonSafe?: unknown;
+  responseWasJsonWrapper?: boolean;
+  transactionId?: unknown;
 };
 
 export type DpdPickupInput = {
@@ -639,6 +642,66 @@ export async function fetchDpdLabelPdfForShipments(
   if (!byParcel && cleanedShipments.length === 0) return { ok: false, reason: "dpd_label_missing_shipment_ids" };
   if (byParcel && cleanedParcels.length === 0) return { ok: false, reason: "dpd_label_missing_parcel_numbers" };
 
+  const extractPdfBufferFromDpdLabelJson = (
+    responseText: string
+  ): {
+    pdfBuffer: Buffer;
+    transactionId?: unknown;
+    responseJsonSafe: {
+      transactionId?: unknown;
+      pdfFilePresent: boolean;
+      pdfFilePrefix: string | null;
+      pdfFileLength: number;
+    };
+    decodeError?: "missing_pdf_file" | "invalid_pdf_base64";
+  } | null => {
+    try {
+      const json = JSON.parse(responseText) as Record<string, unknown>;
+      const pdfFile = json?.pdfFile;
+      if (typeof pdfFile !== "string" || !pdfFile.trim()) {
+        return {
+          pdfBuffer: Buffer.alloc(0),
+          transactionId: json?.transactionId,
+          responseJsonSafe: {
+            transactionId: json?.transactionId,
+            pdfFilePresent: false,
+            pdfFilePrefix: null,
+            pdfFileLength: 0,
+          },
+          decodeError: "missing_pdf_file",
+        };
+      }
+
+      const trimmed = pdfFile.trim();
+      const expectedPrefix = "data:application/pdf;base64,";
+      const hasPrefix = trimmed.startsWith(expectedPrefix);
+      const base64 = hasPrefix ? trimmed.slice(expectedPrefix.length) : trimmed;
+      const pdfBuffer = Buffer.from(base64, "base64");
+      const isPdf = pdfBuffer.length >= 4 && pdfBuffer.subarray(0, 4).toString("utf8") === "%PDF";
+      const responseJsonSafe = {
+        transactionId: json?.transactionId,
+        pdfFilePresent: true,
+        pdfFilePrefix: hasPrefix ? expectedPrefix : null,
+        pdfFileLength: trimmed.length,
+      };
+      if (!isPdf) {
+        return {
+          pdfBuffer,
+          transactionId: json?.transactionId,
+          responseJsonSafe,
+          decodeError: "invalid_pdf_base64",
+        };
+      }
+      return {
+        pdfBuffer,
+        transactionId: json?.transactionId,
+        responseJsonSafe,
+      };
+    } catch {
+      return null;
+    }
+  };
+
   const endpoint = resolveEndpoint(cfg.baseUrlRaw, "v1.0", endpointPath);
   const started = Date.now();
   const step = byParcel ? "label_parcel_numbers" : cleanedShipments.length > 1 ? "label_bulk_shipment_ids" : "label_single_shipment_id";
@@ -653,6 +716,7 @@ export async function fetchDpdLabelPdfForShipments(
   const bytes = Buffer.from(await res.arrayBuffer());
   const responseTextSafe = bytes.length ? bytes.toString("utf8").slice(0, 10000) : null;
   const looksLikePdf = bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF";
+  const parsedJson = responseTextSafe ? extractPdfBufferFromDpdLabelJson(responseTextSafe) : null;
   const attempt: DpdEndpointAttempt = {
     step,
     method: "POST",
@@ -663,7 +727,10 @@ export async function fetchDpdLabelPdfForShipments(
     durationMs: Date.now() - started,
     looksLikePdf,
     requestBodySafe: sanitizeBodySafe(payload),
-    responseTextSafe,
+    responseTextSafe: parsedJson ? null : responseTextSafe,
+    responseJsonSafe: parsedJson?.responseJsonSafe,
+    responseWasJsonWrapper: Boolean(parsedJson && !parsedJson.decodeError),
+    transactionId: parsedJson?.transactionId,
   };
   if (!res.ok) {
     return {
@@ -676,17 +743,57 @@ export async function fetchDpdLabelPdfForShipments(
       httpStatus: res.status,
     };
   }
-  if (!looksLikePdf) {
+  if (looksLikePdf) {
+    return { ok: true, data: { bytes, contentType: "application/pdf", attempt } };
+  }
+
+  if (parsedJson && !parsedJson.decodeError) {
+    const wrappedAttempt: DpdEndpointAttempt = {
+      ...attempt,
+      looksLikePdf: true,
+      responseWasJsonWrapper: true,
+      transactionId: parsedJson.transactionId,
+      responseJsonSafe: parsedJson.responseJsonSafe,
+    };
+    return { ok: true, data: { bytes: parsedJson.pdfBuffer, contentType: "application/pdf", attempt: wrappedAttempt } };
+  }
+
+  if (parsedJson?.decodeError === "missing_pdf_file") {
     return {
       ok: false,
       reason: "dpd_label_not_pdf",
       raw: {
-        attempt,
+        attempt: {
+          ...attempt,
+          error: "DPD label response did not contain pdfFile.",
+        },
       },
       httpStatus: res.status,
     };
   }
-  return { ok: true, data: { bytes, contentType: "application/pdf", attempt } };
+
+  if (parsedJson?.decodeError === "invalid_pdf_base64") {
+    return {
+      ok: false,
+      reason: "dpd_label_not_pdf",
+      raw: {
+        attempt: {
+          ...attempt,
+          error: "DPD label pdfFile could not be decoded into a valid PDF.",
+        },
+      },
+      httpStatus: res.status,
+    };
+  }
+
+  return {
+    ok: false,
+    reason: "dpd_label_not_pdf",
+    raw: {
+      attempt,
+    },
+    httpStatus: res.status,
+  };
 }
 
 export async function createDpdPickup(

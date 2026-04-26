@@ -50,9 +50,10 @@ export async function resolveDpdLabelDownload(
         | null;
       lastAttempt = (rawObj && "attempt" in rawObj ? rawObj.attempt || null : (rawObj as DpdEndpointAttempt | null)) || null;
       const responseTextSafe = lastAttempt?.responseTextSafe || null;
+      const attemptError = lastAttempt?.error || null;
       const dpdError =
         rawObj && typeof rawObj === "object" && "dpdError" in rawObj ? String(rawObj.dpdError || "") : "";
-      const detailed = responseTextSafe || dpdError || label.reason;
+      const detailed = attemptError || responseTextSafe || dpdError || label.reason;
       labelErrorMessage = detailed ? `DPD label API error: ${detailed}` : label.reason;
     }
 
@@ -94,8 +95,8 @@ export async function resolveDpdLabelDownload(
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="dpd-${order.orderNumber}.pdf"`,
-        "Cache-Control": "private, no-store",
+        "Content-Disposition": `attachment; filename="dpd-label-${order.orderNumber || orderId}.pdf"`,
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {
