@@ -63,6 +63,8 @@ export type DpdEndpointAttempt = {
   durationMs: number;
   looksLikePdf?: boolean;
   error?: string | null;
+  requestBodySafe?: unknown;
+  responseTextSafe?: string | null;
 };
 
 export type DpdPickupInput = {
@@ -442,7 +444,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
       mainServiceElementCodes: ["001"],
     },
     reference1: String(order.orderNumber),
-    saveMode: "draft",
+    saveMode: "parcel number",
     extendShipmentData: true,
   };
   if (!Array.isArray(shipment.parcels) || shipment.parcels.length === 0) missingReceiver.push("parcels[0]");
@@ -611,16 +613,25 @@ export async function fetchDpdLabelPdfForShipments(
   const shipmentIds = Array.isArray(input) ? input : input.shipmentIds || [];
   const parcelNumbers = Array.isArray(input) ? [] : input.parcelNumbers || [];
 
-  const cleanedParcels = parcelNumbers.map((x) => String(x || "").trim()).filter(isLikelyDpdTrackingNumber);
-  const cleanedShipments = shipmentIds.map((x) => String(x || "").trim()).filter(Boolean);
+  const cleanedParcels = parcelNumbers
+    .map((x) => String(x || "").trim())
+    .filter(isLikelyDpdTrackingNumber)
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x));
+
+  const cleanedShipments = shipmentIds
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x));
   const byParcel = cleanedParcels.length > 0;
   const endpointPath = byParcel ? "/label/parcel-numbers" : "/label/shipment-ids";
   const payload: Record<string, unknown> = {
     buCode: cfg.buCode,
     customerId: cfg.customerId,
     labelSize: "A4",
-    startPosition: 1,
     printFormat: "pdf",
+    startPosition: 2,
   };
   if (byParcel) payload.parcelNumberList = cleanedParcels;
   else payload.shipmentIdList = cleanedShipments;
@@ -638,6 +649,7 @@ export async function fetchDpdLabelPdfForShipments(
   const contentType = res.headers.get("content-type");
   const contentLength = res.headers.get("content-length");
   const bytes = Buffer.from(await res.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  const responseTextSafe = bytes.length ? bytes.toString("utf8").slice(0, 10000) : null;
   const looksLikePdf =
     String(contentType || "").toLowerCase().includes("application/pdf") ||
     (bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF");
@@ -650,6 +662,8 @@ export async function fetchDpdLabelPdfForShipments(
     contentLength,
     durationMs: Date.now() - started,
     looksLikePdf,
+    requestBodySafe: sanitizeBodySafe(payload),
+    responseTextSafe,
   };
   if (!res.ok || !looksLikePdf || bytes.length === 0) {
     return { ok: false, reason: !res.ok ? `dpd_api_http_${res.status}` : "dpd_label_not_pdf", raw: attempt, httpStatus: res.status };

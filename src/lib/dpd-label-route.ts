@@ -1,5 +1,5 @@
 import { fetchDpdLabelPdfForShipments, type DpdEndpointAttempt } from "./dpd";
-import { getOrderById, refreshDpdShipment } from "./store";
+import { getOrderById } from "./store";
 import type { Market } from "./types";
 
 export async function resolveDpdLabelDownload(
@@ -13,9 +13,6 @@ export async function resolveDpdLabelDownload(
     let order = await getOrderById(orderId, market);
     if (!order) return Response.json({ ok: false, step, reason: "order_not_found", orderId, market }, { status: 404 });
 
-    step = "sync_shipment";
-    await refreshDpdShipment(orderId, market).catch(() => undefined);
-    order = (await getOrderById(orderId, market)) || order;
     const shipmentId = String(order.dpdShipmentId || "").trim();
     const tracking = String(order.trackingNumber || "").trim();
     const hasTracking = /^\d{10,14}$/.test(tracking);
