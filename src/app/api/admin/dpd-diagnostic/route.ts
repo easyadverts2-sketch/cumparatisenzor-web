@@ -1,11 +1,12 @@
 import { isAdminRequest } from "@/lib/admin-guard";
-import { fetchDpdLabelPdfForShipments } from "@/lib/dpd";
+import { buildDpdAuthDiagnostics, fetchDpdLabelPdfForShipments } from "@/lib/dpd";
 import { getOrderById, refreshDpdShipment } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   if (!isAdminRequest(request)) return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
   const orderId = String(request.nextUrl.searchParams.get("orderId") || "").trim();
+  const debug = String(request.nextUrl.searchParams.get("debug") || "") === "1";
   if (!orderId) return NextResponse.json({ ok: false, message: "Missing orderId" }, { status: 400 });
   await refreshDpdShipment(orderId, "RO").catch(() => undefined);
   const order = await getOrderById(orderId, "RO");
@@ -40,6 +41,13 @@ export async function GET(request: NextRequest) {
           dbStatus: order.dpdShipmentStatus,
           dbTracking: order.trackingNumber,
         },
+        authDiagnostics: debug
+          ? {
+              createShipment: buildDpdAuthDiagnostics({ endpointPath: "/v1.1/shipments", method: "POST", responseStatus: order.dpdLastHttpStatus ?? null, responseBodySafe: order.dpdRawCreateResponse }),
+              statusSync: buildDpdAuthDiagnostics({ endpointPath: "/v1.1/shipments/{id}", method: "GET", responseStatus: order.dpdLastHttpStatus ?? null, responseBodySafe: order.dpdRawStatusResponse }),
+              labelByShipmentIds: buildDpdAuthDiagnostics({ endpointPath: "/v1.0/label/shipment-ids", method: "POST", responseStatus: null }),
+            }
+          : undefined,
         lastSyncAt: new Date().toISOString(),
       },
     },

@@ -21,7 +21,7 @@ export function AdminOrdersList({
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [q, setQ] = useState("");
-  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [uiMessage, setUiMessage] = useState<string | null>(null);
 
@@ -39,6 +39,8 @@ export function AdminOrdersList({
       );
     });
   }, [orders, statusFilter, q]);
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((o) => selectedOrderIds.includes(o.id));
 
   return (
     <div className="space-y-4">
@@ -73,11 +75,60 @@ export function AdminOrdersList({
         Zobrazeno {filtered.length} z {orders.length} objednávek.
       </p>
       {uiMessage ? <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{uiMessage}</p> : null}
+      <div className="flex items-center gap-2">
+        <button
+          className="rounded border px-3 py-2 text-sm"
+          disabled={deleteBusy || selectedOrderIds.length === 0}
+          onClick={async () => {
+            setDeleteBusy(true);
+            setUiMessage(null);
+            try {
+              const endpoint = deleteApiPath.includes("/order-hard-delete")
+                ? deleteApiPath.replace("/order-hard-delete", "/orders-bulk-hard-delete")
+                : `${deleteApiPath}-bulk`;
+              const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ orderIds: selectedOrderIds }),
+              });
+              const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; failedOrders?: Array<{ orderId: string; reason: string }> };
+              if (!data.ok) {
+                const extra = Array.isArray(data.failedOrders) && data.failedOrders.length > 0
+                  ? ` Selhalo: ${data.failedOrders.map((x) => `${x.orderId}:${x.reason}`).join(", ")}`
+                  : "";
+                setUiMessage((data.message || "Bulk hard delete selhal.") + extra);
+                setDeleteBusy(false);
+                return;
+              }
+              window.location.reload();
+            } catch (err) {
+              setUiMessage(err instanceof Error ? err.message : "Bulk hard delete selhal.");
+              setDeleteBusy(false);
+            }
+          }}
+        >
+          Smazat vybrané objednávky
+        </button>
+      </div>
 
       <div className="max-h-[65vh] overflow-auto rounded-xl border-2 border-[#0d4f4a]/10 bg-white">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="sticky top-0 bg-[#e6f7f4] text-[#0a2624]">
             <tr>
+              <th className="px-4 py-3 font-semibold">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      const ids = Array.from(new Set([...selectedOrderIds, ...filtered.map((o) => o.id)]));
+                      setSelectedOrderIds(ids);
+                    } else {
+                      setSelectedOrderIds(selectedOrderIds.filter((id) => !filtered.some((o) => o.id === id)));
+                    }
+                  }}
+                />
+              </th>
               <th className="px-4 py-3 font-semibold">Nr.</th>
               <th className="px-4 py-3 font-semibold">Datum</th>
               <th className="px-4 py-3 font-semibold">Zákazník</th>
@@ -89,6 +140,16 @@ export function AdminOrdersList({
           <tbody>
             {filtered.map((o) => (
               <tr key={o.id} className="border-t border-[#0d4f4a]/10 hover:bg-[#f0faf8]">
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedOrderIds.includes(o.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedOrderIds(Array.from(new Set([...selectedOrderIds, o.id])));
+                      else setSelectedOrderIds(selectedOrderIds.filter((id) => id !== o.id));
+                    }}
+                  />
+                </td>
                 <td className="px-4 py-3 font-mono font-medium text-[#0f766e]">
                   {formatOrderNumber(o.orderNumber)}
                 </td>
@@ -110,10 +171,28 @@ export function AdminOrdersList({
                       Detail
                     </Link>
                     <button
+                      disabled={deleteBusy}
                       className="text-xs text-red-700 underline"
-                      onClick={() => {
+                      onClick={async () => {
+                        setDeleteBusy(true);
                         setUiMessage(null);
-                        setConfirmOrderId(o.id);
+                        try {
+                          const res = await fetch(deleteApiPath, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ orderId: o.id }),
+                          });
+                          const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+                          if (!data.ok) {
+                            setUiMessage(data.message || "Hard delete selhal.");
+                            setDeleteBusy(false);
+                            return;
+                          }
+                          window.location.reload();
+                        } catch (err) {
+                          setUiMessage(err instanceof Error ? err.message : "Hard delete selhal.");
+                          setDeleteBusy(false);
+                        }
                       }}
                     >
                       Smazat objednavku
@@ -128,53 +207,6 @@ export function AdminOrdersList({
           <p className="p-8 text-center text-[#1a4d47]">Žádná objednávka neodpovídá filtru.</p>
         ) : null}
       </div>
-      {confirmOrderId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-[#0a2624]">Potvrzení smazání objednávky</h3>
-            <p className="mt-2 text-sm text-[#1a4d47]">
-              Objednávka bude trvale smazána ze systému. Pokud má PPL zásilku, systém nejdřív zavolá storno přes
-              POST /shipment/&#123;shipmentNumber&#125;/cancel. Pokud má DPD zásilku, systém nejdřív zavolá storno přes
-              PUT /shipments/cancellation. Pokud storno u dopravce selže, objednávka se lokálně nesmaže.
-            </p>
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                className="rounded border px-3 py-2"
-                disabled={deleteBusy}
-                onClick={() => setConfirmOrderId(null)}
-              >
-                Zrušit
-              </button>
-              <button
-                className="rounded bg-red-700 px-3 py-2 text-white disabled:opacity-60"
-                disabled={deleteBusy}
-                onClick={async () => {
-                  setDeleteBusy(true);
-                  try {
-                    const res = await fetch(deleteApiPath, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ orderId: confirmOrderId }),
-                    });
-                    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
-                    if (!data.ok) {
-                      setUiMessage(data.message || "Hard delete selhal.");
-                      setDeleteBusy(false);
-                      return;
-                    }
-                    window.location.reload();
-                  } catch (err) {
-                    setUiMessage(err instanceof Error ? err.message : "Hard delete selhal.");
-                    setDeleteBusy(false);
-                  }
-                }}
-              >
-                Ano, smazat objednávku
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

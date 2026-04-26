@@ -33,9 +33,20 @@ describe("Hard delete wiring", () => {
     expect(hu).toContain("hardDeleteOrderWithCarrierCancel");
   });
 
-  it("admin orders list shows destructive confirm text", () => {
+  it("has dedicated RO/HU bulk hard delete API routes", () => {
+    const ro = read("src/app/api/admin/orders-bulk-hard-delete/route.ts");
+    const hu = read("src/app/api/hu-admin/orders-bulk-hard-delete/route.ts");
+    expect(ro).toContain("hardDeleteOrdersBulk");
+    expect(hu).toContain("hardDeleteOrdersBulk");
+  });
+
+  it("admin orders list deletes directly and supports bulk delete without modal", () => {
     const ui = read("src/components/admin-orders-list.tsx");
-    expect(ui).toContain("Objednávka bude trvale smazána ze systému");
-    expect(ui).toContain("storno u dopravce");
+    expect(ui).toContain("Smazat vybrané objednávky");
+    expect(ui).toContain("orders-bulk-hard-delete");
+    expect(ui).not.toContain("Potvrzení smazání objednávky");
+    expect(ui).not.toContain("window.confirm");
+    expect(ui).not.toContain("window.alert");
+    expect(ui).not.toContain("window.prompt");
   });
 });

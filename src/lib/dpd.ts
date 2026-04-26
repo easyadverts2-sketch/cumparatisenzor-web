@@ -12,6 +12,19 @@ type DpdResult =
   | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null; createRequest?: unknown };
 
 type DpdGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null };
+export type DpdAuthDiagnostics = {
+  tokenPresent: boolean;
+  tokenLength: number;
+  tokenLooksLikeJwt: boolean;
+  authorizationHeaderScheme: "Bearer";
+  baseUrl: string;
+  endpointPath: string;
+  method: "GET" | "POST" | "PUT" | "DELETE";
+  responseStatus: number | null;
+  responseBodySafe?: unknown;
+  correlationId?: string | null;
+  transactionId?: string | null;
+};
 
 export type DpdEndpointAttempt = {
   step: string;
@@ -51,6 +64,36 @@ function configured() {
   const senderAddressId = process.env.DPD_API_SENDER_ADDRESS_ID?.trim();
   const buCode = process.env.DPD_API_BU_CODE?.trim() || "015";
   return { baseUrl, token, customerId, senderAddressId, buCode };
+}
+
+function tokenLooksLikeJwt(token: string | undefined) {
+  const t = String(token || "").trim();
+  return t.split(".").length === 3;
+}
+
+export function buildDpdAuthDiagnostics(params: {
+  endpointPath: string;
+  method: "GET" | "POST" | "PUT" | "DELETE";
+  responseStatus?: number | null;
+  responseBodySafe?: unknown;
+  correlationId?: string | null;
+  transactionId?: string | null;
+}): DpdAuthDiagnostics {
+  const cfg = configured();
+  const token = String(cfg.token || "");
+  return {
+    tokenPresent: token.length > 0,
+    tokenLength: token.length,
+    tokenLooksLikeJwt: tokenLooksLikeJwt(cfg.token),
+    authorizationHeaderScheme: "Bearer",
+    baseUrl: normalizeBaseUrl(cfg.baseUrl),
+    endpointPath: params.endpointPath,
+    method: params.method,
+    responseStatus: params.responseStatus ?? null,
+    responseBodySafe: params.responseBodySafe,
+    correlationId: params.correlationId || null,
+    transactionId: params.transactionId || null,
+  };
 }
 
 function parseDeliveryAddress(deliveryAddress: string) {
@@ -140,12 +183,21 @@ async function dpdJsonRequest<T>(
     method,
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json",
       Authorization: `Bearer ${cfg.token}`,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
   const raw = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw, httpStatus: res.status };
+  const diagnostics = buildDpdAuthDiagnostics({
+    endpointPath: path,
+    method,
+    responseStatus: res.status,
+    responseBodySafe: raw,
+    correlationId: res.headers.get("x-correlation-id"),
+    transactionId: res.headers.get("transactionid"),
+  });
+  if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw: { diagnostics, body: raw }, httpStatus: res.status };
   return { ok: true, data: raw as T };
 }
 
@@ -212,11 +264,29 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
   try {
     const res = await fetch(`${normalizeBaseUrl(baseUrl)}${createPath}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     });
     const raw = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw, httpStatus: res.status, createRequest: payload };
+    if (!res.ok) {
+      return {
+        ok: false,
+        reason: `dpd_api_http_${res.status}`,
+        raw: {
+          diagnostics: buildDpdAuthDiagnostics({
+            endpointPath: createPath,
+            method: "POST",
+            responseStatus: res.status,
+            responseBodySafe: raw,
+            correlationId: res.headers.get("x-correlation-id"),
+            transactionId: res.headers.get("transactionid"),
+          }),
+          body: raw,
+        },
+        httpStatus: res.status,
+        createRequest: payload,
+      };
+    }
     const shipmentId = pickShipmentId(raw);
     if (!shipmentId) return { ok: false, reason: "dpd_api_missing_shipment_id", raw, httpStatus: res.status, createRequest: payload };
     return {
@@ -264,8 +334,9 @@ export async function fetchDpdLabelPdfForShipments(
   const payload = {
     buCode: cfg.buCode,
     customerId: cfg.customerId,
-    labelSize: process.env.DPD_API_LABEL_SIZE?.trim() || "A6",
-    printFormat: "pdf",
+    labelSize: "A4",
+    startPosition: 1,
+    printFormat: "PDF",
     shipmentIdList: shipmentIds.map((s) => Number(s)).filter((n) => Number.isFinite(n)),
   };
   if (payload.shipmentIdList.length === 0) return { ok: false, reason: "dpd_label_missing_shipment_ids" };
@@ -273,7 +344,7 @@ export async function fetchDpdLabelPdfForShipments(
   const started = Date.now();
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.token}` },
+    headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify(payload),
   });
   const contentType = res.headers.get("content-type");
@@ -303,26 +374,33 @@ export async function createDpdPickup(
   const cfg = configured();
   if (!cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
   const path = process.env.DPD_API_PICKUP_PATH?.trim() || "/v1.1/pickup";
+  const senderAddressIdNum = Number(cfg.senderAddressId);
   const body = {
     buCode: cfg.buCode,
     customerId: cfg.customerId,
-    senderAddressId: cfg.senderAddressId,
-    market,
-    pickupDate: input.pickupDate,
-    fromTime: input.fromTime,
-    toTime: input.toTime,
-    contactName: input.contactName,
-    contactPhone: input.phone,
-    additionalInfo: String(input.note || "").slice(0, 300),
-    parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
-    totalWeight: Math.max(0.1, Number(input.totalWeight || 1)),
+    pickupOrder: {
+      contactName: input.contactName,
+      contactPhone: input.phone,
+      contactEmail: process.env.DPD_API_CONTACT_EMAIL?.trim() || undefined,
+      internalPickupAddressId: Number.isFinite(senderAddressIdNum) ? senderAddressIdNum : cfg.senderAddressId,
+      pickupDate: input.pickupDate,
+      fromTime: input.fromTime,
+      toTime: input.toTime,
+      parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
+      totalWeight: Math.max(0.1, Number(input.totalWeight || 1)),
+      additionalInfo: String(input.note || "").slice(0, 300) || undefined,
+      market,
+    },
   };
   const res = await dpdJsonRequest<Record<string, unknown>>("POST", path, body);
   if (!res.ok) return res;
   const raw = res.data as Record<string, unknown>;
   const pickupId = String(raw.pickupId || raw.id || raw.orderId || "").trim();
   if (!pickupId) return { ok: false, reason: "dpd_pickup_missing_id", raw };
-  return { ok: true, data: { pickupId, pickupDate: String(raw.pickupDate || body.pickupDate || "") || null, raw, request: body } };
+  return {
+    ok: true,
+    data: { pickupId, pickupDate: String(raw.pickupDate || body.pickupOrder.pickupDate || "") || null, raw, request: body },
+  };
 }
 
 export async function cancelDpdPickup(pickupId: string): Promise<DpdGenericResult<Record<string, unknown>>> {

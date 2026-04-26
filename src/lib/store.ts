@@ -20,6 +20,7 @@ import {
   fetchPplBatchLabelPdf,
   fetchPplLabelPdfFromUrl,
   fetchPplBatchStatus,
+  fetchPplPickupBatchStatus,
   pplDebugGet,
   fetchPplOrderInfoByCustomerReference,
   fetchPplShipmentByFilters,
@@ -120,8 +121,19 @@ type PplPickupRow = {
   created_at: string;
   market: string;
   pickup_id: string;
+  pickup_batch_id: string | null;
   pickup_reference: string | null;
   pickup_customer_reference: string | null;
+  pickup_order_reference: string | null;
+  pickup_send_date: string | null;
+  pickup_send_time_from: string | null;
+  pickup_send_time_to: string | null;
+  shipment_count: number | null;
+  pickup_http_status: number | null;
+  pickup_last_error: string | null;
+  raw_create_request: string | null;
+  raw_create_response: string | null;
+  raw_status_response: string | null;
   note: string | null;
   status: string;
 };
@@ -147,6 +159,44 @@ function jsonForDb(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function sanitizeCarrierRaw(input: unknown): unknown {
+  if (input == null) return null;
+  if (Array.isArray(input)) return input.map((x) => sanitizeCarrierRaw(x));
+  if (typeof input !== "object") return input;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const lower = key.toLowerCase();
+    if (lower.includes("token") || lower.includes("authorization") || lower.includes("password")) continue;
+    out[key] = sanitizeCarrierRaw(value);
+  }
+  return out;
+}
+
+function persistCarrierApiSnapshot(params: {
+  carrier: "PPL" | "DPD";
+  scope: string;
+  normalized: Record<string, unknown>;
+  raw: unknown;
+  httpStatus?: number | null;
+  error?: string | null;
+}) {
+  const normalizedEntries = Object.entries(params.normalized);
+  const missingFields = normalizedEntries.filter(([, v]) => v == null || String(v).trim?.() === "").map(([k]) => k);
+  const safeRaw = sanitizeCarrierRaw(params.raw);
+  const report = {
+    carrier: params.carrier,
+    scope: params.scope,
+    availableFields: normalizedEntries.filter(([, v]) => v != null && String(v).trim?.() !== "").map(([k]) => k),
+    storedNormalized: params.normalized,
+    rawOnly: Object.keys((safeRaw as Record<string, unknown>) || {}),
+    missingFields,
+    httpStatus: params.httpStatus ?? null,
+    error: params.error || null,
+  };
+  console.info("[carrier-snapshot]", JSON.stringify(report));
+  return { safeRaw, missingFields, report };
 }
 
 function collectTrackingCandidates(input: unknown, out: string[] = []): string[] {
@@ -890,8 +940,19 @@ async function ensureSchema(sql: SqlClient) {
       created_at timestamptz not null default now(),
       market text not null,
       pickup_id text not null,
+      pickup_batch_id text,
       pickup_reference text,
       pickup_customer_reference text,
+      pickup_order_reference text,
+      pickup_send_date text,
+      pickup_send_time_from text,
+      pickup_send_time_to text,
+      shipment_count integer,
+      pickup_http_status integer,
+      pickup_last_error text,
+      raw_create_request text,
+      raw_create_response text,
+      raw_status_response text,
       note text,
       status text not null default 'ORDERED'
     )
@@ -907,6 +968,61 @@ async function ensureSchema(sql: SqlClient) {
     where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_customer_reference'
   `;
   if (pplPickupCustomerRefCol.length === 0) await sql`alter table ppl_pickups add column pickup_customer_reference text`;
+  const pplPickupBatchCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_batch_id'
+  `;
+  if (pplPickupBatchCol.length === 0) await sql`alter table ppl_pickups add column pickup_batch_id text`;
+  const pplPickupOrderRefCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_order_reference'
+  `;
+  if (pplPickupOrderRefCol.length === 0) await sql`alter table ppl_pickups add column pickup_order_reference text`;
+  const pplPickupSendDateCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_send_date'
+  `;
+  if (pplPickupSendDateCol.length === 0) await sql`alter table ppl_pickups add column pickup_send_date text`;
+  const pplPickupFromCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_send_time_from'
+  `;
+  if (pplPickupFromCol.length === 0) await sql`alter table ppl_pickups add column pickup_send_time_from text`;
+  const pplPickupToCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_send_time_to'
+  `;
+  if (pplPickupToCol.length === 0) await sql`alter table ppl_pickups add column pickup_send_time_to text`;
+  const pplPickupCountCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'shipment_count'
+  `;
+  if (pplPickupCountCol.length === 0) await sql`alter table ppl_pickups add column shipment_count integer`;
+  const pplPickupHttpCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_http_status'
+  `;
+  if (pplPickupHttpCol.length === 0) await sql`alter table ppl_pickups add column pickup_http_status integer`;
+  const pplPickupErrCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_last_error'
+  `;
+  if (pplPickupErrCol.length === 0) await sql`alter table ppl_pickups add column pickup_last_error text`;
+  const pplPickupRawReqCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'raw_create_request'
+  `;
+  if (pplPickupRawReqCol.length === 0) await sql`alter table ppl_pickups add column raw_create_request text`;
+  const pplPickupRawResCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'raw_create_response'
+  `;
+  if (pplPickupRawResCol.length === 0) await sql`alter table ppl_pickups add column raw_create_response text`;
+  const pplPickupRawStatusCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'raw_status_response'
+  `;
+  if (pplPickupRawStatusCol.length === 0) await sql`alter table ppl_pickups add column raw_status_response text`;
   await sql`
     create table if not exists dpd_pickups (
       id uuid primary key,
@@ -2375,16 +2491,62 @@ export async function orderPplPickup(
   };
   const result = await createPplPickup(market, payload);
   if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
+  const rawRec = result.data.raw && typeof result.data.raw === "object" ? (result.data.raw as Record<string, unknown>) : {};
+  const statusRec =
+    rawRec.status && typeof rawRec.status === "object"
+      ? (rawRec.status as Record<string, unknown>)
+      : {};
+  const pickupOrderReference = String(
+    (statusRec.data && typeof statusRec.data === "object" ? (statusRec.data as Record<string, unknown>).orderReference : "") || ""
+  ).trim() || null;
+  const pickupStatus = String(
+    (statusRec.data && typeof statusRec.data === "object" ? (statusRec.data as Record<string, unknown>).state : "") || "ORDERED"
+  ).trim() || "ORDERED";
+  const pickupHttpStatus = Number(statusRec.httpStatus || 200) || 200;
+  const pickupError = statusRec.ok === false ? shipmentErrorStatus(String(statusRec.reason || "ppl_pickup_status_error"), statusRec.raw) : null;
+  const pickupSnapshot = persistCarrierApiSnapshot({
+    carrier: "PPL",
+    scope: "pickup_create",
+    normalized: {
+      batchId: result.data.pickupId,
+      referenceId: result.data.pickupReference,
+      customerReference: result.data.pickupCustomerReference,
+      orderReference: pickupOrderReference,
+      sendDate: payload.pickupDate,
+      sendTimeFrom: payload.fromTime,
+      sendTimeTo: payload.toTime,
+      shipmentCount: payload.shipmentCount,
+      status: pickupStatus,
+    },
+    raw: rawRec,
+    httpStatus: pickupHttpStatus,
+    error: pickupError,
+  });
   await sql`
-    insert into ppl_pickups (id, market, pickup_id, pickup_reference, pickup_customer_reference, note, status)
+    insert into ppl_pickups (
+      id, market, pickup_id, pickup_batch_id, pickup_reference, pickup_customer_reference, pickup_order_reference,
+      pickup_send_date, pickup_send_time_from, pickup_send_time_to, shipment_count, pickup_http_status, pickup_last_error,
+      raw_create_request, raw_create_response, raw_status_response, note, status
+    )
     values (
       ${crypto.randomUUID()},
       ${market},
       ${result.data.pickupId},
+      ${result.data.pickupId},
       ${result.data.pickupReference},
       ${result.data.pickupCustomerReference},
+      ${pickupOrderReference},
+      ${payload.pickupDate},
+      ${payload.fromTime},
+      ${payload.toTime},
+      ${payload.shipmentCount},
+      ${pickupHttpStatus},
+      ${pickupError},
+      ${jsonForDb(payload)},
+      ${jsonForDb((pickupSnapshot.safeRaw as Record<string, unknown>).create || null)},
+      ${jsonForDb((pickupSnapshot.safeRaw as Record<string, unknown>).status || statusRec)},
       ${String(payload.note || "").slice(0, 300) || null},
-      'ORDERED'
+      ${pickupStatus}
     )
   `;
   return { ok: true, message: `Svoz objednan: ${result.data.pickupId}` };
@@ -2399,18 +2561,95 @@ export async function cancelPplPickupOrder(pickupId: string, market: Market = "R
     select * from ppl_pickups where market = ${market} and pickup_id = ${cleanId} order by created_at desc limit 1
   `;
   const row = rows[0];
-  const reference = String(row?.pickup_customer_reference || row?.pickup_reference || "").trim();
-  if (!reference) {
-    return { ok: false, message: "PPL svoz nelze zrusit, chybi customerReference/orderReference vytvoreneho svozu." };
+  if (!row) return { ok: false, message: "PPL svoz nebyl nalezen." };
+  let customerReference = String(row.pickup_customer_reference || "").trim();
+  let orderReference = String(row.pickup_order_reference || row.pickup_reference || "").trim();
+  if (!customerReference && !orderReference) {
+    const backfill = await backfillPplPickupReferences(cleanId, market);
+    customerReference = String(backfill.pickupCustomerReference || "").trim();
+    orderReference = String(backfill.pickupOrderReference || backfill.pickupReference || "").trim();
   }
-  const res = await cancelPplPickupByReference(reference);
+  if (!customerReference && !orderReference) {
+    return {
+      ok: false,
+      message:
+        "PPL svoz nelze zrusit, chybi customerReference/orderReference vytvoreneho svozu." +
+        ` Dostupna data: pickupId=${row.pickup_id || ""}, batchId=${row.pickup_batch_id || ""}, pickupReference=${row.pickup_reference || ""}, rawStatus=${String(row.raw_status_response || "").slice(0, 500)}`,
+    };
+  }
+  const res = await cancelPplPickupByReference({
+    customerReference: customerReference || null,
+    orderReference: customerReference ? null : orderReference || null,
+    note: "Cancelled from admin",
+  });
   if (!res.ok) return { ok: false, message: shipmentErrorStatus(res.reason, res.raw) };
   await sql`
     update ppl_pickups
-    set status = 'CANCELLED'
+    set status = 'CANCELLED', pickup_http_status = 200, pickup_last_error = null
     where market = ${market} and pickup_id = ${cleanId}
   `;
   return { ok: true, message: `PPL svoz stornovan: ${cleanId}` };
+}
+
+export async function backfillPplPickupReferences(pickupId: string, market: Market = "RO") {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const cleanId = String(pickupId || "").trim();
+  const rows = await sql<PplPickupRow[]>`
+    select * from ppl_pickups where market = ${market} and pickup_id = ${cleanId} order by created_at desc limit 1
+  `;
+  const row = rows[0];
+  if (!row) return { ok: false, message: "Pickup nebyl nalezen." };
+  const batchId = String(row.pickup_batch_id || row.pickup_id || "").trim();
+  if (!batchId) return { ok: false, message: "Pickup nema batchId pro backfill." };
+  const statusRes = await fetchPplPickupBatchStatus(batchId);
+  const statusRawValue = !statusRes.ok ? statusRes.raw : null;
+  const statusRaw = statusRawValue && typeof statusRawValue === "object" ? (statusRawValue as Record<string, unknown>) : {};
+  const statusData =
+    statusRes.ok && statusRes.data && typeof statusRes.data === "object"
+      ? (statusRes.data as Record<string, unknown>)
+      : statusRaw.data && typeof statusRaw.data === "object"
+        ? (statusRaw.data as Record<string, unknown>)
+        : {};
+  const pickupReference = String(statusData.referenceId || row.pickup_reference || "").trim() || null;
+  const pickupCustomerReference = String(statusData.customerReference || row.pickup_customer_reference || "").trim() || null;
+  const pickupOrderReference = String(statusData.orderReference || row.pickup_order_reference || "").trim() || null;
+  const pickupState = String(statusData.state || statusData.importState || row.status || "ORDERED").trim() || "ORDERED";
+  const snapshot = persistCarrierApiSnapshot({
+    carrier: "PPL",
+    scope: "pickup_backfill_status",
+    normalized: {
+      batchId,
+      referenceId: pickupReference,
+      customerReference: pickupCustomerReference,
+      orderReference: pickupOrderReference,
+      status: pickupState,
+    },
+    raw: statusRawValue || (statusRes.ok ? statusRes.data : null),
+    httpStatus: statusRes.ok ? 200 : 500,
+    error: statusRes.ok ? null : shipmentErrorStatus(statusRes.reason, statusRes.raw),
+  });
+  await sql`
+    update ppl_pickups
+    set
+      pickup_reference = ${pickupReference},
+      pickup_customer_reference = ${pickupCustomerReference},
+      pickup_order_reference = ${pickupOrderReference},
+      status = ${pickupState},
+      pickup_http_status = ${statusRes.ok ? 200 : 500},
+      pickup_last_error = ${statusRes.ok ? null : shipmentErrorStatus(statusRes.reason, statusRes.raw)},
+      raw_status_response = ${jsonForDb(snapshot.safeRaw)}
+    where market = ${market} and pickup_id = ${cleanId}
+  `;
+  return {
+    ok: true,
+    pickupReference,
+    pickupCustomerReference,
+    pickupOrderReference,
+    batchId,
+    state: pickupState,
+    message: "Backfill hotov.",
+  };
 }
 
 export async function getPplPickups(market: Market = "RO", limit = 50) {
@@ -2843,4 +3082,43 @@ export async function hardDeleteOrderWithCarrierCancel(orderId: string, market: 
   const deleted = await sql`delete from orders where id = ${orderId} and market = ${market}`;
   if (deleted.count === 0) return { ok: false, message: "Objednavku se nepodarilo smazat." };
   return { ok: true, message: "Objednavka byla trvale smazana." };
+}
+
+export async function hardDeleteOrdersBulk(orderIds: string[], market: Market = "RO") {
+  const deletedOrders: string[] = [];
+  const failedOrders: Array<{ orderId: string; reason: string }> = [];
+  const carrierCancelAttempts: Array<{ orderId: string; carrier: "PPL" | "DPD"; ok: boolean; reason?: string }> = [];
+  for (const orderId of orderIds.map((x) => String(x || "").trim()).filter(Boolean)) {
+    const order = await getOrderById(orderId, market);
+    if (!order) {
+      failedOrders.push({ orderId, reason: "order_not_found" });
+      continue;
+    }
+    if (order.pplBatchId || order.pplShipmentId || (order.shippingCarrier === "PPL" && order.trackingNumber)) {
+      const ok = await cancelPplShipmentForOrder(orderId, market);
+      carrierCancelAttempts.push({ orderId, carrier: "PPL", ok, reason: ok ? undefined : "ppl_cancel_failed" });
+      if (!ok) {
+        failedOrders.push({ orderId, reason: "ppl_cancel_failed" });
+        continue;
+      }
+    }
+    if (order.dpdShipmentId || (order.shippingCarrier === "DPD" && order.trackingNumber)) {
+      const ok = await cancelDpdShipmentForOrder(orderId, market);
+      carrierCancelAttempts.push({ orderId, carrier: "DPD", ok, reason: ok ? undefined : "dpd_cancel_failed" });
+      if (!ok) {
+        failedOrders.push({ orderId, reason: "dpd_cancel_failed" });
+        continue;
+      }
+    }
+    const one = await hardDeleteOrderWithCarrierCancel(orderId, market);
+    if (one.ok) deletedOrders.push(orderId);
+    else failedOrders.push({ orderId, reason: one.message });
+  }
+  return {
+    ok: failedOrders.length === 0,
+    deletedOrders,
+    failedOrders,
+    carrierCancelAttempts,
+    message: failedOrders.length === 0 ? "Bulk hard delete dokoncen." : "Nektere objednavky nesly smazat.",
+  };
 }

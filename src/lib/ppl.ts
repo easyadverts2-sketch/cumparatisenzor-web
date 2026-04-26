@@ -937,7 +937,18 @@ export async function createPplPickup(
     shipmentCount: number;
     note?: string;
   }
-): Promise<PplGenericResult<{ pickupId: string; pickupReference: string; pickupCustomerReference: string; raw: unknown }>> {
+): Promise<
+  PplGenericResult<{
+    pickupId: string;
+    pickupReference: string;
+    pickupCustomerReference: string;
+    pickupOrderReference: string | null;
+    pickupState: string;
+    pickupHttpStatus: number;
+    pickupError: string | null;
+    raw: unknown;
+  }>
+> {
   const baseUrl = process.env.PPL_API_BASE_URL?.trim();
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
   const token = await requestToken(baseUrl);
@@ -1005,25 +1016,53 @@ export async function createPplPickup(
   const location = createRes.headers.get("location") || "";
   const batchId = extractBatchId(toRecord(createRaw), location);
   if (!batchId) return { ok: false, reason: "ppl_pickup_missing_id", raw: createRaw };
-  const statusRes = await pplJsonRequest<Record<string, unknown>>("GET", "/order/batch/{id}", undefined, batchId);
+  let statusRes: PplGenericResult<Record<string, unknown>> = { ok: false, reason: "ppl_pickup_status_missing" };
+  for (let i = 0; i < 4; i += 1) {
+    statusRes = await pplJsonRequest<Record<string, unknown>>("GET", "/order/batch/{id}", undefined, batchId);
+    if (statusRes.ok) break;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  const statusRaw = !statusRes.ok ? statusRes.raw : null;
+  const statusRawRec = statusRaw && typeof statusRaw === "object" ? toRecord(statusRaw) : {};
+  const statusDataRec = statusRes.ok && statusRes.data ? toRecord(statusRes.data) : toRecord(statusRawRec.data);
+  const statusOrderRef = String(statusDataRec.orderReference || statusDataRec.referenceId || "").trim() || null;
+  const statusState = String(statusDataRec.state || statusDataRec.importState || "").trim() || "ORDERED";
   return {
     ok: true,
     data: {
       pickupId: batchId,
       pickupReference,
       pickupCustomerReference,
+      pickupOrderReference: statusOrderRef,
+      pickupState: statusState,
+      pickupHttpStatus: statusRes.ok ? 200 : 500,
+      pickupError: statusRes.ok ? null : String(statusRes.reason || "ppl_pickup_status_error"),
       raw: { create: createRaw, status: statusRes },
     },
   };
 }
 
-export async function cancelPplPickupByReference(reference: string): Promise<PplGenericResult<Record<string, unknown>>> {
+export async function fetchPplPickupBatchStatus(batchId: string): Promise<PplGenericResult<Record<string, unknown>>> {
+  const clean = String(batchId || "").trim();
+  if (!clean) return { ok: false, reason: "missing_batch_id" };
+  return pplJsonRequest<Record<string, unknown>>("GET", "/order/batch/{id}", undefined, clean);
+}
+
+export async function cancelPplPickupByReference(params: {
+  customerReference?: string | null;
+  orderReference?: string | null;
+  note?: string | null;
+}): Promise<PplGenericResult<Record<string, unknown>>> {
   const baseUrl = process.env.PPL_API_BASE_URL?.trim();
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
   const token = await requestToken(baseUrl);
   if (!token) return { ok: false, reason: "ppl_api_token_failed" };
+  const customerReference = String(params.customerReference || "").trim();
+  const orderReference = String(params.orderReference || "").trim();
+  if (!customerReference && !orderReference) return { ok: false, reason: "missing_pickup_reference" };
   const url = new URL(`${normalizeBaseUrl(baseUrl)}/order/cancel`);
-  url.searchParams.set("customerReference", reference);
+  if (customerReference) url.searchParams.set("customerReference", customerReference);
+  else url.searchParams.set("orderReference", orderReference);
   const res = await fetch(url.toString(), {
     method: "POST",
     headers: {
@@ -1031,7 +1070,7 @@ export async function cancelPplPickupByReference(reference: string): Promise<Ppl
       Authorization: `Bearer ${token}`,
       "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
     },
-    body: JSON.stringify({ note: "Cancelled from admin" }),
+    body: JSON.stringify({ note: String(params.note || "Cancelled from admin") }),
   });
   const raw = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, reason: `ppl_api_http_${res.status}`, raw };
