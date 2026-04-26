@@ -180,18 +180,47 @@ export function buildDpdAuthDiagnostics(params: {
   };
 }
 
+function normalizeAscii(input: string): string {
+  return String(input || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function parseDeliveryAddress(deliveryAddress: string) {
-  const lines = deliveryAddress
-    .split("\n")
-    .map((line) => line.trim())
+  const text = String(deliveryAddress || "").replace(/\n+/g, ", ");
+  const chunks = text
+    .split(",")
+    .map((chunk) => normalizeAscii(chunk))
     .filter(Boolean);
-  const mainLine = lines.find((line) => line.includes(",")) || "";
-  const chunks = mainLine.split(",").map((chunk) => chunk.trim());
-  const street = chunks[0] || lines[0] || "";
-  const city = chunks[1] || "";
-  const zipRaw = chunks[2] || "";
-  const zipCode = zipRaw.replace(/[^\d]/g, "");
-  return { street, city, zipCode, additionalAddressInfo: chunks.slice(3).join(", ") || undefined };
+  const street = chunks[0] || "";
+  const zipMatch = normalizeAscii(text).match(/\b(\d{6})\b/);
+  const zipCode = zipMatch ? zipMatch[1] : "";
+  const countryWords = new Set(["romania", "romania.", "ro", "hungary", "magyarorszag", "hu"]);
+
+  let city = "";
+  const judChunk = chunks.find((c) => /^jud\.?\s+/i.test(c));
+  if (judChunk) {
+    city = judChunk.replace(/^jud\.?\s*/i, "").trim();
+  }
+  if (!city) {
+    const cityCandidate = chunks.find((c) => {
+      const low = c.toLowerCase();
+      if (countryWords.has(low)) return false;
+      if (/^\d{4,8}$/.test(low)) return false;
+      if (/^jud\.?\s+/i.test(low)) return false;
+      return c !== street;
+    });
+    city = cityCandidate || "";
+  }
+
+  const additionalAddressInfo = chunks
+    .slice(1)
+    .filter((c) => c !== zipCode && c !== city)
+    .join(", ");
+
+  return { street, city, zipCode, additionalAddressInfo: additionalAddressInfo || undefined };
 }
 
 function splitPhone(raw: string) {
