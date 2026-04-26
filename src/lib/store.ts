@@ -39,7 +39,6 @@ import {
   createDpdPickup,
   createDpdShipment,
   fetchDpdLabelPdfForShipments,
-  fetchDpdShipmentStatus,
 } from "./dpd";
 import {
   buildInternalOrderAlertEmail,
@@ -1182,9 +1181,10 @@ async function createShipmentForOrder(
       return;
     }
     const dpdErr = shipmentErrorStatus(dpd.reason, dpd.raw);
-    const dpdStatus = dpd.reason === "dpd_cod_not_allowed_hu" ? "DPD_HU_COD_NOT_ENABLED" : dpdErr;
+    const isHuCodBlocked = dpd.reason === "DPD_HU_COD_NOT_ENABLED" || dpd.reason === "dpd_cod_not_allowed_hu";
+    const dpdStatus = isHuCodBlocked ? "DPD_HU_COD_NOT_ENABLED" : dpdErr;
     const dpdHumanError =
-      dpd.reason === "dpd_cod_not_allowed_hu"
+      isHuCodBlocked
         ? "DPD dobírka pro Maďarsko není v naší DPD smlouvě povolená."
         : dpdErr;
     await sql`
@@ -2697,30 +2697,13 @@ export async function refreshDpdShipment(orderId: string, market: Market = "RO")
   await ensureSchema(sql);
   const order = await getOrderById(orderId, market);
   if (!order?.dpdShipmentId) return false;
-  const res = await fetchDpdShipmentStatus(order.dpdShipmentId);
-  if (!res.ok) {
-    await sql`
-      update orders
-      set
-        dpd_shipment_status = ${shipmentErrorStatus(res.reason, res.raw)},
-        dpd_last_http_status = ${res.httpStatus || null},
-        dpd_last_error = ${shipmentErrorStatus(res.reason, res.raw)},
-        dpd_raw_status_response = ${jsonForDb(res.raw || null)}
-      where id = ${orderId}
-    `;
-    return false;
-  }
-  const resolvedTracking = numericTrackingOrNull(res.data.trackingNumber) || numericTrackingOrNull(order.trackingNumber) || null;
   await sql`
     update orders
     set
-      dpd_shipment_status = ${res.data.state || "UNKNOWN"},
-      tracking_number = ${resolvedTracking},
-      dpd_last_http_status = 200,
-      dpd_last_error = null,
-      dpd_raw_status_response = ${jsonForDb(res.data.raw || null)},
-      dpd_tracking_source = ${resolvedTracking ? "shipment_status" : order.dpdTrackingSource || null},
-      dpd_tracking_json_path = ${resolvedTracking ? res.data.trackingSourcePath || order.dpdTrackingJsonPath || null : order.dpdTrackingJsonPath || null}
+      dpd_raw_status_response = ${jsonForDb({
+        mode: "local_snapshot_only",
+        reason: "dpd_status_endpoint_not_confirmed_in_bundled_docs",
+      })}
     where id = ${orderId}
   `;
   return true;
@@ -2730,40 +2713,24 @@ export async function cancelDpdShipmentForOrder(orderId: string, market: Market 
   const sql = getSql();
   await ensureSchema(sql);
   let order = await getOrderById(orderId, market);
-  if (!order?.dpdShipmentId) return false;
-  await refreshDpdShipment(orderId, market).catch(() => undefined);
-  order = (await getOrderById(orderId, market)) || order;
-  if (!order.dpdShipmentId) return false;
-  const cancelled = await cancelDpdShipment(order.dpdShipmentId);
-  if (!cancelled.ok) {
-    await sql`
-      update orders
-      set
-        dpd_shipment_status = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)},
-        dpd_cancel_mode = 'dpd_cancel_failed_no_local_reset',
-        dpd_cancel_attempted = true,
-        dpd_cancel_http_status = ${cancelled.httpStatus || null},
-        dpd_cancel_response = ${jsonForDb(cancelled.raw || cancelled.reason)},
-        dpd_local_reset_done = false,
-        dpd_last_http_status = ${cancelled.httpStatus || null},
-        dpd_last_error = ${shipmentErrorStatus(cancelled.reason, cancelled.raw)},
-        dpd_raw_cancel_response = ${jsonForDb(cancelled.raw || null)}
-      where id = ${orderId}
-    `;
-    return false;
-  }
+  if (!order?.dpdShipmentId && !order?.trackingNumber) return false;
+  const cancelled = order?.dpdShipmentId ? await cancelDpdShipment(order.dpdShipmentId) : { ok: false as const, reason: "dpd_no_remote_shipment_id" };
+  const remoteAttempted = Boolean(order?.dpdShipmentId);
+  const remoteSuccess = cancelled.ok;
+  const remoteHttpStatus = remoteSuccess ? null : (cancelled.httpStatus ?? null);
+  const remoteResponse = remoteSuccess ? (cancelled as { data: unknown }).data : { reason: cancelled.reason, raw: cancelled.raw };
   await sql`
     update orders
     set
-      dpd_shipment_status = 'CANCELLED',
-      dpd_cancel_mode = 'dpd_cancel_then_local_reset',
-      dpd_cancel_attempted = true,
-      dpd_cancel_http_status = 200,
-      dpd_cancel_response = ${jsonForDb(cancelled.data || null)},
+      dpd_shipment_status = ${remoteSuccess ? "CANCELLED" : "RESET_LOCALLY"},
+      dpd_cancel_mode = ${remoteSuccess ? "dpd_cancel_then_local_reset" : remoteAttempted ? "dpd_remote_cancel_failed_local_reset_only" : "dpd_no_remote_shipment_id_local_reset_only"},
+      dpd_cancel_attempted = ${remoteAttempted},
+      dpd_cancel_http_status = ${remoteHttpStatus},
+      dpd_cancel_response = ${jsonForDb(remoteResponse)},
       dpd_local_reset_done = false,
-      dpd_last_http_status = 200,
-      dpd_last_error = null,
-      dpd_raw_cancel_response = ${jsonForDb(cancelled.data || null)}
+      dpd_last_http_status = ${remoteHttpStatus},
+      dpd_last_error = ${remoteSuccess ? null : "Remote DPD shipment cancel failed; local reset performed."},
+      dpd_raw_cancel_response = ${jsonForDb(remoteResponse)}
     where id = ${orderId}
   `;
   await sql`

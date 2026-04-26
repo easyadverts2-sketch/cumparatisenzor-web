@@ -52,8 +52,8 @@ describe("DPD admin wiring", () => {
   it("renders explicit DPD action labels in RO and HU admin", () => {
     const ro = read("src/app/admin/page.tsx");
     const hu = read("src/app/hu-admin/page.tsx");
-    expect(ro).toContain("Zrušit DPD zásilku");
-    expect(hu).toContain("Zrušit DPD zásilku");
+    expect(ro).toContain("Reset DPD zásilky");
+    expect(hu).toContain("Reset DPD zásilky");
     expect(ro).toContain("Lokální reset DPD");
     expect(hu).toContain("Lokální reset DPD");
     expect(ro).toContain("Stáhnout DPD štítek");
@@ -79,14 +79,14 @@ describe("DPD admin wiring", () => {
     expect(hu).toContain("endpointAttemptResults");
   });
 
-  it("DPD helper uses shipmentIdList for labels and cancellation", () => {
+  it("DPD helper uses shipmentIdList for labels and remote cancel endpoint", () => {
     const dpd = read("src/lib/dpd.ts");
     expect(dpd).toContain("shipmentIdList");
-    expect(dpd).toContain("/v1.1/shipments/cancellation");
+    expect(dpd).toContain("/shipments/cancellation");
   });
 
   it("HU COD is explicitly blocked in DPD create flow", () => {
     const dpd = read("src/lib/dpd.ts");
-    expect(dpd).toContain('dpd_cod_not_allowed_hu');
+    expect(dpd).toContain("DPD_HU_COD_NOT_ENABLED");
   });
 });

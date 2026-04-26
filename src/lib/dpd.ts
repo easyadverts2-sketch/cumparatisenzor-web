@@ -16,10 +16,20 @@ type DpdResult =
 type DpdGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null };
 
 export type DpdAuthDiagnostics = {
+  operation?:
+    | "createShipment"
+    | "getLabelByShipmentIds"
+    | "getLabelByParcelNumbers"
+    | "cancelShipment"
+    | "createPickup"
+    | "cancelPickup"
+    | "shipmentInfo";
   tokenPresent: boolean;
   tokenLength: number;
+  tokenDotCount: number;
   tokenLooksLikeJwt: boolean;
   tokenHasWhitespaceAtEdges: boolean;
+  tokenStartsWithBearer: boolean;
   customerIdPresent: boolean;
   customerIdLength: number;
   senderAddressIdPresent: boolean;
@@ -35,6 +45,7 @@ export type DpdAuthDiagnostics = {
   endpointPath: string;
   finalUrl: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
+  actualHttpBodySentToDpd?: unknown;
   responseStatus: number | null;
   responseBodySafe?: unknown;
   correlationId?: string | null;
@@ -140,8 +151,17 @@ export function dpdUrl(apiVersion: "v1.1" | "v1.0", endpointPath: string, baseUr
 }
 
 export function buildDpdAuthDiagnostics(params: {
+  operation?:
+    | "createShipment"
+    | "getLabelByShipmentIds"
+    | "getLabelByParcelNumbers"
+    | "cancelShipment"
+    | "createPickup"
+    | "cancelPickup"
+    | "shipmentInfo";
   endpointPath: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
+  requestBodySafe?: unknown;
   responseStatus?: number | null;
   responseBodySafe?: unknown;
   correlationId?: string | null;
@@ -151,12 +171,16 @@ export function buildDpdAuthDiagnostics(params: {
   const cfg = configured();
   const tokenRaw = String(cfg.tokenRaw || "");
   const token = String(cfg.token || "");
+  const tokenNoTrim = String(cfg.tokenRaw || "");
   const endpoint = resolveEndpoint(cfg.baseUrlRaw, params.apiVersion || "v1.1", params.endpointPath);
   return {
+    operation: params.operation,
     tokenPresent: token.length > 0,
     tokenLength: token.length,
+    tokenDotCount: token.length > 0 ? token.split(".").length - 1 : 0,
     tokenLooksLikeJwt: tokenLooksLikeJwt(cfg.token),
     tokenHasWhitespaceAtEdges: tokenRaw.length > 0 && tokenRaw !== tokenRaw.trim(),
+    tokenStartsWithBearer: /^\s*bearer\s+/i.test(tokenNoTrim),
     customerIdPresent: String(cfg.customerId || "").length > 0,
     customerIdLength: String(cfg.customerId || "").length,
     senderAddressIdPresent: String(cfg.senderAddressId || "").length > 0,
@@ -172,6 +196,7 @@ export function buildDpdAuthDiagnostics(params: {
     endpointPath: endpoint.endpointPath,
     finalUrl: endpoint.finalUrl,
     method: params.method,
+    actualHttpBodySentToDpd: sanitizeBodySafe(params.requestBodySafe),
     responseStatus: params.responseStatus ?? null,
     responseBodySafe: sanitizeBodySafe(params.responseBodySafe),
     correlationId: params.correlationId || null,
@@ -309,29 +334,50 @@ function toCodReference(orderNumber: number): string {
   return digits.slice(-10);
 }
 
-async function dpdJsonRequest<T>(
+async function dpdRequest<T>(params: {
+  operation:
+    | "createShipment"
+    | "getLabelByShipmentIds"
+    | "getLabelByParcelNumbers"
+    | "cancelShipment"
+    | "createPickup"
+    | "cancelPickup"
+    | "shipmentInfo";
   method: "GET" | "POST" | "PUT" | "DELETE",
   endpointPath: string,
   body?: Record<string, unknown>,
-  apiVersion: "v1.1" | "v1.0" = "v1.1"
-): Promise<DpdGenericResult<T>> {
+  apiVersion?: "v1.1" | "v1.0",
+  extraHeaders?: Record<string, string>,
+}): Promise<DpdGenericResult<T>> {
   const cfg = configured();
   if (!cfg.token || !cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
-  const endpoint = resolveEndpoint(cfg.baseUrlRaw, apiVersion, endpointPath);
+  const apiVersion = params.apiVersion || "v1.1";
+  const endpoint = resolveEndpoint(cfg.baseUrlRaw, apiVersion, params.endpointPath);
   const res = await fetch(endpoint.finalUrl, {
-    method,
+    method: params.method,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
       Authorization: `Bearer ${cfg.token}`,
+      ...(params.extraHeaders || {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: params.body ? JSON.stringify(params.body) : undefined,
   });
-  const raw = await res.json().catch(() => ({}));
+  const rawText = await res.text().catch(() => "");
+  let raw: unknown = {};
+  if (rawText) {
+    try {
+      raw = JSON.parse(rawText);
+    } catch {
+      raw = rawText.slice(0, 10000);
+    }
+  }
   const diagnostics = buildDpdAuthDiagnostics({
-    endpointPath,
+    operation: params.operation,
+    endpointPath: params.endpointPath,
     apiVersion,
-    method,
+    method: params.method,
+    requestBodySafe: params.body || null,
     responseStatus: res.status,
     responseBodySafe: raw,
     correlationId: res.headers.get("x-correlation-id"),
@@ -346,7 +392,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
   const cfg = configured();
   if (!cfg.token || !cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
   if (order.paymentMethod === "COD" && market === "HU") {
-    return { ok: false, reason: "dpd_cod_not_allowed_hu" };
+    return { ok: false, reason: "DPD_HU_COD_NOT_ENABLED" };
   }
 
   const parsed = parseDeliveryAddress(order.deliveryAddress);
@@ -365,11 +411,9 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
     contactMobile: phone.number || undefined,
     contactName: order.customerName,
     contactPhone: phone.number || undefined,
-    contactPhonePrefix: phone.prefix || undefined,
     countryCode: receiverCountry,
     name: order.customerName,
-    name2: undefined,
-    street: parsed.street || "N/A",
+    street: parsed.street || "",
     zipCode: parsed.zipCode || "",
     additionalAddressInfo: parsed.additionalAddressInfo,
   };
@@ -398,11 +442,8 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
       mainServiceElementCodes: ["001"],
     },
     reference1: String(order.orderNumber),
-    saveMode: "printed",
-    printFormat: "PDF",
-    labelSize: "A4",
+    saveMode: "draft",
     extendShipmentData: true,
-    printRef1AsBarcode: false,
   };
   if (!Array.isArray(shipment.parcels) || shipment.parcels.length === 0) missingReceiver.push("parcels[0]");
   const mainCodes = (shipment.service as Record<string, unknown>)?.mainServiceElementCodes;
@@ -447,32 +488,21 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
   }) as Record<string, unknown>;
 
   try {
-    const endpoint = resolveEndpoint(cfg.baseUrlRaw, "v1.1", endpointPath);
-    const res = await fetch(endpoint.finalUrl, {
+    const res = await dpdRequest<Record<string, unknown>>({
+      operation: "createShipment",
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${cfg.token}` },
-      body: JSON.stringify(payload),
+      endpointPath,
+      body: payload,
+      apiVersion: "v1.1",
     });
-    const raw = await res.json().catch(() => ({}));
     if (!res.ok) {
       return {
         ok: false,
-        reason: `dpd_api_http_${res.status}`,
-        raw: {
-          diagnostics: buildDpdAuthDiagnostics({
-            endpointPath,
-            apiVersion: "v1.1",
-            method: "POST",
-            responseStatus: res.status,
-            responseBodySafe: raw,
-            correlationId: res.headers.get("x-correlation-id"),
-            transactionId: res.headers.get("transactionid"),
-          }),
-          body: sanitizeBodySafe(raw),
-        },
-        httpStatus: res.status,
+        reason: res.reason,
+        raw: res.raw,
+        httpStatus: res.httpStatus || null,
         createRequest: sanitizeBodySafe({
-          payload,
+          actualHttpBodySentToDpd: payload,
           codDiagnostics: codReference
             ? {
                 originalOrderNumber: String(order.orderNumber),
@@ -483,15 +513,16 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
         }),
       };
     }
+    const raw = res.data;
     const shipmentId = pickShipmentId(raw);
     if (!shipmentId) {
       return {
         ok: false,
         reason: "dpd_api_missing_shipment_id",
         raw: sanitizeBodySafe(raw),
-        httpStatus: res.status,
+        httpStatus: 200,
         createRequest: sanitizeBodySafe({
-          payload,
+          actualHttpBodySentToDpd: payload,
           codDiagnostics: codReference
             ? {
                 originalOrderNumber: String(order.orderNumber),
@@ -520,7 +551,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
             }
           : null,
       }),
-      httpStatus: res.status,
+      httpStatus: 200,
     };
   } catch (error) {
     return {
@@ -544,29 +575,32 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
 export async function fetchDpdShipmentStatus(
   shipmentId: string
 ): Promise<DpdGenericResult<{ state: string; trackingNumber: string | null; trackingSourcePath: string | null; raw: unknown }>> {
-  const endpointPath = `/shipments/${encodeURIComponent(shipmentId)}`;
-  const res = await dpdJsonRequest<Record<string, unknown>>("GET", endpointPath, undefined, "v1.1");
-  if (!res.ok) return res;
-  const raw = res.data as Record<string, unknown>;
-  const state = String(raw.status || raw.state || "").toUpperCase();
-  const tracking = pickTracking(raw);
-  return { ok: true, data: { state, trackingNumber: tracking?.value || null, trackingSourcePath: tracking?.path || null, raw: sanitizeBodySafe(raw) } };
+  void shipmentId;
+  return {
+    ok: false,
+    reason: "dpd_shipment_status_endpoint_not_confirmed_in_docs",
+    raw: {
+      message: "GET shipment status endpoint is not used because it is not confirmed in bundled DPD Shipping API docs.",
+    },
+  };
 }
 
 export async function cancelDpdShipment(shipmentId: string): Promise<DpdGenericResult<Record<string, unknown>>> {
   const cfg = configured();
   if (!cfg.customerId) return { ok: false, reason: "dpd_api_not_configured" };
-  // DPD docs endpoint: /v1.1/shipments/cancellation
-  return dpdJsonRequest<Record<string, unknown>>(
-    "PUT",
-    "/shipments/cancellation",
-    {
+  const cleanShipmentId = String(shipmentId || "").trim();
+  if (!cleanShipmentId) return { ok: false, reason: "dpd_cancel_missing_shipment_id" };
+  return dpdRequest<Record<string, unknown>>({
+    operation: "cancelShipment",
+    method: "PUT",
+    endpointPath: "/shipments/cancellation",
+    body: {
       buCode: cfg.buCode,
       customerId: cfg.customerId,
-      shipmentIdList: [shipmentId],
+      shipmentIds: [cleanShipmentId],
     },
-    "v1.1"
-  );
+    apiVersion: "v1.1",
+  });
 }
 
 export async function fetchDpdLabelPdfForShipments(
@@ -586,7 +620,7 @@ export async function fetchDpdLabelPdfForShipments(
     customerId: cfg.customerId,
     labelSize: "A4",
     startPosition: 1,
-    printFormat: "PDF",
+    printFormat: "pdf",
   };
   if (byParcel) payload.parcelNumberList = cleanedParcels;
   else payload.shipmentIdList = cleanedShipments;
@@ -598,7 +632,7 @@ export async function fetchDpdLabelPdfForShipments(
   const started = Date.now();
   const res = await fetch(endpoint.finalUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${cfg.token}` },
+    headers: { "Content-Type": "application/json", Accept: "application/pdf", Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify(payload),
   });
   const contentType = res.headers.get("content-type");
@@ -627,6 +661,7 @@ export async function createDpdPickup(
   market: Market,
   input: DpdPickupInput
 ): Promise<DpdGenericResult<{ pickupId: string; pickupDate: string | null; raw: unknown; request: unknown }>> {
+  void market;
   const cfg = configured();
   if (!cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
   const senderAddressIdNum = Number(cfg.senderAddressId);
@@ -636,19 +671,21 @@ export async function createDpdPickup(
     pickupOrder: {
       contactName: input.contactName,
       contactPhone: splitPhone(input.phone).number,
-      contactPhonePrefix: splitPhone(input.phone).prefix || undefined,
       contactEmail: process.env.DPD_API_CONTACT_EMAIL?.trim() || undefined,
       internalPickupAddressId: Number.isFinite(senderAddressIdNum) ? senderAddressIdNum : cfg.senderAddressId,
       pickupDate: input.pickupDate,
-      fromTime: input.fromTime,
-      toTime: input.toTime,
       parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
       totalWeight: Math.max(0.1, Number(input.totalWeight || 1)),
       additionalInfo: String(input.note || "").slice(0, 300) || undefined,
-      market,
     },
   };
-  const res = await dpdJsonRequest<Record<string, unknown>>("POST", "/pickup", body, "v1.1");
+  const res = await dpdRequest<Record<string, unknown>>({
+    operation: "createPickup",
+    method: "POST",
+    endpointPath: "/pickup",
+    body,
+    apiVersion: "v1.1",
+  });
   if (!res.ok) return res;
   const raw = res.data as Record<string, unknown>;
   const pickupId = String(raw.pickupId || raw.id || raw.orderId || "").trim();
@@ -662,14 +699,16 @@ export async function createDpdPickup(
 export async function cancelDpdPickup(pickupId: string): Promise<DpdGenericResult<Record<string, unknown>>> {
   const cfg = configured();
   if (!cfg.customerId) return { ok: false, reason: "dpd_api_not_configured" };
-  const path = `/pickup/cancel/${encodeURIComponent(pickupId)}`;
-  return dpdJsonRequest<Record<string, unknown>>(
-    "PUT",
-    path,
-    {
+  const cleanPickupId = String(pickupId || "").trim();
+  if (!cleanPickupId) return { ok: false, reason: "dpd_pickup_cancel_missing_id" };
+  return dpdRequest<Record<string, unknown>>({
+    operation: "cancelPickup",
+    method: "PUT",
+    endpointPath: `/pickup/cancel/${encodeURIComponent(cleanPickupId)}`,
+    body: {
       buCode: cfg.buCode,
       customerId: cfg.customerId,
     },
-    "v1.1"
-  );
+    apiVersion: "v1.1",
+  });
 }

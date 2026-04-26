@@ -110,7 +110,7 @@ async function cancelDpdShipmentAction(formData: FormData) {
   if (!orderId) redirect("/admin?ok=0&msg=Chybi+ID+objednavky");
   const ok = await cancelDpdShipmentForOrder(orderId, "RO");
   revalidatePath("/admin");
-  redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+zasilka+stornovana" : "DPD+storno+selhalo"}`);
+  redirect(`/admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+zasilka+resetovana+lokalne" : "DPD+reset+selhal"}`);
 }
 
 async function deleteDpdShipmentAction(formData: FormData) {
@@ -432,8 +432,8 @@ export default async function AdminPage({
                       <input type="hidden" name="orderId" value={o.id} />
                       <ConfirmSubmitButton
                         className="rounded border px-2 py-1"
-                        label="Zrušit DPD zásilku"
-                        confirmMessage="Tímto rušíš pouze zásilku u dopravce. Objednávka v e-shopu zůstane."
+                        label="Reset DPD zásilky"
+                        confirmMessage="Vzhledem k omezení dokumentace DPD Shipping API proběhne bezpečný lokální reset DPD údajů pro tuto objednávku."
                       />
                     </form>
                     <form action={deleteDpdShipmentAction}>
