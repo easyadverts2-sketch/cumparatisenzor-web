@@ -218,14 +218,23 @@ function normalizeAscii(input: string): string {
     .trim();
 }
 
-function parseDeliveryAddress(deliveryAddress: string) {
+function parseDeliveryAddress(deliveryAddress: string, countryCode: "RO" | "HU") {
   const text = String(deliveryAddress || "").replace(/\n+/g, ", ");
   const chunks = text
     .split(",")
     .map((chunk) => normalizeAscii(chunk))
     .filter(Boolean);
-  const street = chunks[0] || "";
-  const zipMatch = normalizeAscii(text).match(/\b(\d{6})\b/);
+  const badStreetPrefixes = [/^destinatar[:\s]/i, /^cimzett[:\s]/i, /^recipient[:\s]/i];
+  const street =
+    chunks.find((c) => {
+      const low = c.toLowerCase();
+      if (badStreetPrefixes.some((rx) => rx.test(low))) return false;
+      if (/^\d{4,6}$/.test(low)) return false;
+      if (/^(romania|hungary|magyarorszag|ro|hu)$/i.test(low)) return false;
+      return true;
+    }) || "";
+  const zipRegex = countryCode === "HU" ? /\b(\d{4})\b/ : /\b(\d{6})\b/;
+  const zipMatch = normalizeAscii(text).match(zipRegex);
   const zipCode = zipMatch ? zipMatch[1] : "";
   const countryWords = new Set(["romania", "romania.", "ro", "hungary", "magyarorszag", "hu"]);
 
@@ -400,9 +409,9 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
     return { ok: false, reason: "DPD_HU_COD_NOT_ENABLED" };
   }
 
-  const parsed = parseDeliveryAddress(order.deliveryAddress);
-  const phone = normalizePhoneForCountry(order.phone, market === "HU" ? "HU" : "RO");
   const receiverCountry = market === "HU" ? "HU" : "RO";
+  const parsed = parseDeliveryAddress(order.deliveryAddress, receiverCountry);
+  const phone = normalizePhoneForCountry(order.phone, receiverCountry);
   const currency = market === "HU" ? "HUF" : "RON";
   const endpointPath = "/shipments";
   const codPaymentType = process.env.DPD_API_COD_PAYMENT_TYPE?.trim() || "Cash";
