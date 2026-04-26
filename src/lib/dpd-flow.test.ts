@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { isLikelyDpdTrackingNumber } from "./dpd";
+import { dpdUrl, isLikelyDpdTrackingNumber } from "./dpd";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -15,6 +15,36 @@ describe("DPD tracking candidate validation", () => {
   it("rejects uuid and non-numeric values", () => {
     expect(isLikelyDpdTrackingNumber("ed61bea9-df39-4177-8e09-242cb4cb4847")).toBe(false);
     expect(isLikelyDpdTrackingNumber("ORDER-12345")).toBe(false);
+  });
+});
+
+describe("DPD URL builder", () => {
+  it("builds correct v1.1/v1.0 URLs from base with api version", () => {
+    expect(dpdUrl("v1.1", "/shipments", "https://shipping.dpdgroup.com/api/v1.1")).toBe(
+      "https://shipping.dpdgroup.com/api/v1.1/shipments"
+    );
+    expect(dpdUrl("v1.0", "/label/shipment-ids", "https://shipping.dpdgroup.com/api/v1.1")).toBe(
+      "https://shipping.dpdgroup.com/api/v1.0/label/shipment-ids"
+    );
+  });
+
+  it("builds same URLs from origin-only base", () => {
+    expect(dpdUrl("v1.1", "/shipments", "https://shipping.dpdgroup.com")).toBe(
+      "https://shipping.dpdgroup.com/api/v1.1/shipments"
+    );
+    expect(dpdUrl("v1.0", "/label/shipment-ids", "https://shipping.dpdgroup.com")).toBe(
+      "https://shipping.dpdgroup.com/api/v1.0/label/shipment-ids"
+    );
+  });
+
+  it("never produces duplicated api/version path fragments", () => {
+    const url1 = dpdUrl("v1.1", "/v1.1/shipments", "https://shipping.dpdgroup.com/api/v1.1");
+    const url2 = dpdUrl("v1.0", "/v1.0/label/shipment-ids", "https://shipping.dpdgroup.com/api/v1.1");
+    expect(url1).toBe("https://shipping.dpdgroup.com/api/v1.1/shipments");
+    expect(url2).toBe("https://shipping.dpdgroup.com/api/v1.0/label/shipment-ids");
+    expect(url1).not.toContain("/api/v1.1/v1.1/");
+    expect(url2).not.toContain("/api/v1.1/v1.0/");
+    expect(url1).not.toContain("/api/api/");
   });
 });
 

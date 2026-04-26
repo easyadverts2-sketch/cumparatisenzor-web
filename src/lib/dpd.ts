@@ -78,6 +78,18 @@ function normalizeBaseUrl(url: string) {
   return url.replace(/\/+$/, "");
 }
 
+function normalizeDpdOrigin(baseUrlRaw: string): string {
+  const fallback = "https://shipping.dpdgroup.com";
+  const raw = String(baseUrlRaw || "").trim() || fallback;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    parsed = new URL(fallback);
+  }
+  return `${parsed.protocol}//${parsed.host}`;
+}
+
 function configured() {
   const baseUrlRaw = process.env.DPD_API_BASE_URL?.trim() || "https://shipping.dpdgroup.com/api/v1.1";
   const tokenRaw = process.env.DPD_API_TOKEN;
@@ -108,17 +120,23 @@ function sanitizeBodySafe(input: unknown): unknown {
 }
 
 function resolveEndpoint(baseUrlRaw: string, apiVersion: "v1.1" | "v1.0", endpointPath: string) {
-  const base = normalizeBaseUrl(baseUrlRaw);
-  const cleanEndpoint = `/${endpointPath.replace(/^\/+/, "")}`;
-  const hasVersion = /\/api\/v1\.[01]$/i.test(base) || /\/v1\.[01]$/i.test(base);
-  const root = hasVersion ? base.replace(/\/v1\.[01]$/i, "") : base;
-  const normalizedRoot = /\/api$/i.test(root) ? root : `${root}/api`;
+  const origin = normalizeDpdOrigin(baseUrlRaw);
+  const noApiPrefix = endpointPath
+    .replace(/^\/+api\/v1\.[01]\//i, "/")
+    .replace(/^\/+v1\.[01]\//i, "/")
+    .replace(/^\/+api\//i, "/");
+  const cleanEndpoint = `/${noApiPrefix.replace(/^\/+/, "")}`;
+  const normalizedRoot = `${origin}/api`;
   const finalUrl = `${normalizedRoot}/${apiVersion}${cleanEndpoint}`;
   return {
     normalizedBaseUrl: `${normalizedRoot}/${apiVersion}`,
     endpointPath: cleanEndpoint,
     finalUrl: finalUrl.replace(/([^:]\/)\/+/g, "$1"),
   };
+}
+
+export function dpdUrl(apiVersion: "v1.1" | "v1.0", endpointPath: string, baseUrlRaw?: string): string {
+  return resolveEndpoint(baseUrlRaw || configured().baseUrlRaw, apiVersion, endpointPath).finalUrl;
 }
 
 export function buildDpdAuthDiagnostics(params: {
@@ -185,6 +203,20 @@ function splitPhone(raw: string) {
     return { number, prefix };
   }
   return { number: v.replace(/\D/g, ""), prefix: null };
+}
+
+function normalizePhoneForCountry(raw: string, countryCode: "RO" | "HU") {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return { number: "", prefix: undefined as string | undefined };
+  if (countryCode === "RO") {
+    let local = digits;
+    if (local.startsWith("40")) local = local.slice(2);
+    if (local.startsWith("0")) local = local.slice(1);
+    local = local.slice(0, 12);
+    return { number: local, prefix: local ? "+40" : undefined };
+  }
+  const parsed = splitPhone(raw);
+  return { number: parsed.number, prefix: parsed.prefix || undefined };
 }
 
 function isUuid(value: string): boolean {
@@ -289,15 +321,16 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
   }
 
   const parsed = parseDeliveryAddress(order.deliveryAddress);
-  const phone = splitPhone(order.phone);
+  const phone = normalizePhoneForCountry(order.phone, market === "HU" ? "HU" : "RO");
   const receiverCountry = market === "HU" ? "HU" : "RO";
   const currency = market === "HU" ? "HUF" : "RON";
   const endpointPath = "/shipments";
   const codPaymentType = process.env.DPD_API_COD_PAYMENT_TYPE?.trim() || "Cash";
   const parcelRef = `${order.orderNumber}-1`;
+  const codReference = order.paymentMethod === "COD" && market === "RO" ? toCodReference(order.orderNumber) : null;
 
   const receiver: Record<string, unknown> = {
-    city: parsed.city || "N/A",
+    city: parsed.city || "",
     companyName: order.customerName,
     contactEmail: order.email || undefined,
     contactMobile: phone.number || undefined,
@@ -308,9 +341,18 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
     name: order.customerName,
     name2: undefined,
     street: parsed.street || "N/A",
-    zipCode: parsed.zipCode || "000000",
+    zipCode: parsed.zipCode || "",
     additionalAddressInfo: parsed.additionalAddressInfo,
   };
+  const missingReceiver: string[] = [];
+  if (!String(receiver.name || "").trim()) missingReceiver.push("receiver.name");
+  if (!String(receiver.street || "").trim()) missingReceiver.push("receiver.street");
+  if (!String(receiver.city || "").trim()) missingReceiver.push("receiver.city");
+  if (!String(receiver.zipCode || "").trim()) missingReceiver.push("receiver.zipCode");
+  if (!String(receiver.countryCode || "").trim()) missingReceiver.push("receiver.countryCode");
+  if (!String(receiver.contactEmail || "").trim() && !String(receiver.contactPhone || "").trim() && !String(receiver.contactMobile || "").trim()) {
+    missingReceiver.push("receiver.contactEmail|contactPhone|contactMobile");
+  }
 
   const shipment: Record<string, unknown> = {
     numOrder: 1,
@@ -333,6 +375,18 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
     extendShipmentData: true,
     printRef1AsBarcode: false,
   };
+  if (!Array.isArray(shipment.parcels) || shipment.parcels.length === 0) missingReceiver.push("parcels[0]");
+  const mainCodes = (shipment.service as Record<string, unknown>)?.mainServiceElementCodes;
+  if (!Array.isArray(mainCodes) || mainCodes.length === 0) missingReceiver.push("service.mainServiceElementCodes");
+  if (missingReceiver.length > 0) {
+    return {
+      ok: false,
+      reason: "DPD_INVALID_RECEIVER_ADDRESS",
+      raw: { missingFields: missingReceiver, parsedAddress: sanitizeBodySafe(parsed) },
+      createRequest: null,
+      httpStatus: null,
+    };
+  }
 
   if (order.paymentMethod === "COD" && market === "RO") {
     (shipment.service as Record<string, unknown>).additionalService = {
@@ -340,7 +394,7 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
         amount: String(order.totalPrice),
         currency,
         paymentType: codPaymentType,
-        reference: toCodReference(order.orderNumber),
+        reference: codReference,
         split: "First parcel",
       },
     };
@@ -388,7 +442,16 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
           body: sanitizeBodySafe(raw),
         },
         httpStatus: res.status,
-        createRequest: sanitizeBodySafe(payload),
+        createRequest: sanitizeBodySafe({
+          payload,
+          codDiagnostics: codReference
+            ? {
+                originalOrderNumber: String(order.orderNumber),
+                codReferenceUsed: codReference,
+                codReferenceRule: "last 10 digits of numeric order number",
+              }
+            : null,
+        }),
       };
     }
     const shipmentId = pickShipmentId(raw);
@@ -398,7 +461,16 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
         reason: "dpd_api_missing_shipment_id",
         raw: sanitizeBodySafe(raw),
         httpStatus: res.status,
-        createRequest: sanitizeBodySafe(payload),
+        createRequest: sanitizeBodySafe({
+          payload,
+          codDiagnostics: codReference
+            ? {
+                originalOrderNumber: String(order.orderNumber),
+                codReferenceUsed: codReference,
+                codReferenceRule: "last 10 digits of numeric order number",
+              }
+            : null,
+        }),
       };
     }
     const tracking = pickTracking(raw);
@@ -409,11 +481,34 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
       trackingNumber: tracking?.value || null,
       trackingSourcePath: tracking?.path || null,
       raw: sanitizeBodySafe(raw),
-      createRequest: sanitizeBodySafe(payload),
+      createRequest: sanitizeBodySafe({
+        payload,
+        codDiagnostics: codReference
+          ? {
+              originalOrderNumber: String(order.orderNumber),
+              codReferenceUsed: codReference,
+              codReferenceRule: "last 10 digits of numeric order number",
+            }
+          : null,
+      }),
       httpStatus: res.status,
     };
   } catch (error) {
-    return { ok: false, reason: "dpd_api_request_failed", raw: String(error), createRequest: sanitizeBodySafe(payload) };
+    return {
+      ok: false,
+      reason: "dpd_api_request_failed",
+      raw: String(error),
+      createRequest: sanitizeBodySafe({
+        payload,
+        codDiagnostics: codReference
+          ? {
+              originalOrderNumber: String(order.orderNumber),
+              codReferenceUsed: codReference,
+              codReferenceRule: "last 10 digits of numeric order number",
+            }
+          : null,
+      }),
+    };
   }
 }
 

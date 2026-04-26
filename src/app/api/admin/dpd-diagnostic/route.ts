@@ -45,9 +45,10 @@ export async function GET(request: NextRequest) {
         },
         authDiagnostics: debug
           ? {
-              createShipment: buildDpdAuthDiagnostics({ endpointPath: "/v1.1/shipments", method: "POST", responseStatus: order.dpdLastHttpStatus ?? null, responseBodySafe: order.dpdRawCreateResponse }),
-              statusSync: buildDpdAuthDiagnostics({ endpointPath: "/v1.1/shipments/{id}", method: "GET", responseStatus: order.dpdLastHttpStatus ?? null, responseBodySafe: order.dpdRawStatusResponse }),
-              labelByShipmentIds: buildDpdAuthDiagnostics({ endpointPath: "/v1.0/label/shipment-ids", method: "POST", responseStatus: null }),
+              createShipment: buildDpdAuthDiagnostics({ endpointPath: "/shipments", apiVersion: "v1.1", method: "POST", responseStatus: order.dpdLastHttpStatus ?? null, responseBodySafe: order.dpdRawCreateResponse }),
+              statusSync: buildDpdAuthDiagnostics({ endpointPath: "/shipments/{id}", apiVersion: "v1.1", method: "GET", responseStatus: order.dpdLastHttpStatus ?? null, responseBodySafe: order.dpdRawStatusResponse }),
+              labelByShipmentIds: buildDpdAuthDiagnostics({ endpointPath: "/label/shipment-ids", apiVersion: "v1.0", method: "POST", responseStatus: null }),
+              labelByParcelNumbers: buildDpdAuthDiagnostics({ endpointPath: "/label/parcel-numbers", apiVersion: "v1.0", method: "POST", responseStatus: null }),
             }
           : undefined,
         debugCreate: {
