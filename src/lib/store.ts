@@ -923,11 +923,20 @@ async function ensureSchema(sql: SqlClient) {
         market text not null,
         action text not null,
         order_id uuid,
-        order_number integer,
+        order_number bigint,
         details text
       )
     `;
     await sql`create index if not exists admin_audit_logs_market_created_idx on admin_audit_logs(market, created_at desc)`;
+    const auditOrderType = await sql`
+      select data_type
+      from information_schema.columns
+      where table_schema = 'public' and table_name = 'admin_audit_logs' and column_name = 'order_number'
+      limit 1
+    `;
+    if (auditOrderType.length > 0 && String(auditOrderType[0].data_type || "").toLowerCase() === "integer") {
+      await sql`alter table admin_audit_logs alter column order_number type bigint using order_number::bigint`;
+    }
   } catch {
     // Audit logging is optional and must never block checkout/admin core flow.
   }
@@ -1059,17 +1068,25 @@ async function insertAuditLog(
   sql: SqlClient,
   input: { market: Market; action: string; orderId?: string | null; orderNumber?: number | null; details?: string | null }
 ) {
-  await sql`
-    insert into admin_audit_logs (id, market, action, order_id, order_number, details)
-    values (
-      ${crypto.randomUUID()},
-      ${input.market},
-      ${input.action},
-      ${input.orderId || null},
-      ${input.orderNumber || null},
-      ${input.details || null}
-    )
-  `;
+  try {
+    const orderNumberSafe =
+      input.orderNumber != null && Number.isFinite(input.orderNumber)
+        ? Math.trunc(input.orderNumber)
+        : null;
+    await sql`
+      insert into admin_audit_logs (id, market, action, order_id, order_number, details)
+      values (
+        ${crypto.randomUUID()},
+        ${input.market},
+        ${input.action},
+        ${input.orderId || null},
+        ${orderNumberSafe},
+        ${input.details || null}
+      )
+    `;
+  } catch {
+    // Audit logging must never break business flows.
+  }
 }
 
 async function createShipmentForOrder(
