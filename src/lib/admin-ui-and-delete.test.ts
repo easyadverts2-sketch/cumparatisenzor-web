@@ -35,7 +35,7 @@ describe("Hard delete wiring", () => {
 
   it("admin orders list shows destructive confirm text", () => {
     const ui = read("src/components/admin-orders-list.tsx");
-    expect(ui).toContain("trvale smazat objednavku");
-    expect(ui).toContain("stornovat u dopravce");
+    expect(ui).toContain("Objednávka bude trvale smazána ze systému");
+    expect(ui).toContain("storno u dopravce");
   });
 });

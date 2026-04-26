@@ -120,6 +120,8 @@ type PplPickupRow = {
   created_at: string;
   market: string;
   pickup_id: string;
+  pickup_reference: string | null;
+  pickup_customer_reference: string | null;
   note: string | null;
   status: string;
 };
@@ -888,11 +890,23 @@ async function ensureSchema(sql: SqlClient) {
       created_at timestamptz not null default now(),
       market text not null,
       pickup_id text not null,
+      pickup_reference text,
+      pickup_customer_reference text,
       note text,
       status text not null default 'ORDERED'
     )
   `;
   await sql`create index if not exists ppl_pickups_market_created_idx on ppl_pickups(market, created_at desc)`;
+  const pplPickupRefCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_reference'
+  `;
+  if (pplPickupRefCol.length === 0) await sql`alter table ppl_pickups add column pickup_reference text`;
+  const pplPickupCustomerRefCol = await sql`
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'ppl_pickups' and column_name = 'pickup_customer_reference'
+  `;
+  if (pplPickupCustomerRefCol.length === 0) await sql`alter table ppl_pickups add column pickup_customer_reference text`;
   await sql`
     create table if not exists dpd_pickups (
       id uuid primary key,
@@ -2362,8 +2376,16 @@ export async function orderPplPickup(
   const result = await createPplPickup(market, payload);
   if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
   await sql`
-    insert into ppl_pickups (id, market, pickup_id, note, status)
-    values (${crypto.randomUUID()}, ${market}, ${result.data.pickupId}, ${String(payload.note || "").slice(0, 300) || null}, 'ORDERED')
+    insert into ppl_pickups (id, market, pickup_id, pickup_reference, pickup_customer_reference, note, status)
+    values (
+      ${crypto.randomUUID()},
+      ${market},
+      ${result.data.pickupId},
+      ${result.data.pickupReference},
+      ${result.data.pickupCustomerReference},
+      ${String(payload.note || "").slice(0, 300) || null},
+      'ORDERED'
+    )
   `;
   return { ok: true, message: `Svoz objednan: ${result.data.pickupId}` };
 }
@@ -2373,7 +2395,15 @@ export async function cancelPplPickupOrder(pickupId: string, market: Market = "R
   await ensureSchema(sql);
   const cleanId = String(pickupId || "").trim();
   if (!cleanId) return { ok: false, message: "Chybi pickupId" };
-  const res = await cancelPplPickupByReference(cleanId);
+  const rows = await sql<PplPickupRow[]>`
+    select * from ppl_pickups where market = ${market} and pickup_id = ${cleanId} order by created_at desc limit 1
+  `;
+  const row = rows[0];
+  const reference = String(row?.pickup_customer_reference || row?.pickup_reference || "").trim();
+  if (!reference) {
+    return { ok: false, message: "PPL svoz nelze zrusit, chybi customerReference/orderReference vytvoreneho svozu." };
+  }
+  const res = await cancelPplPickupByReference(reference);
   if (!res.ok) return { ok: false, message: shipmentErrorStatus(res.reason, res.raw) };
   await sql`
     update ppl_pickups

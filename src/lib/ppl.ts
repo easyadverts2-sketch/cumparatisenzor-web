@@ -937,7 +937,7 @@ export async function createPplPickup(
     shipmentCount: number;
     note?: string;
   }
-): Promise<PplGenericResult<{ pickupId: string; raw: unknown }>> {
+): Promise<PplGenericResult<{ pickupId: string; pickupReference: string; pickupCustomerReference: string; raw: unknown }>> {
   const baseUrl = process.env.PPL_API_BASE_URL?.trim();
   if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
   const token = await requestToken(baseUrl);
@@ -954,11 +954,14 @@ export async function createPplPickup(
     return { ok: false, reason: "ppl_pickup_sender_not_configured" };
   }
 
+  const pickupReference = `pickup-${market}-${Date.now()}`.slice(0, 50);
+  const pickupCustomerReference = `pickup-customer-${market}-${Date.now()}`.slice(0, 50);
   const payload = {
     orders: [
       {
         orderType: "CollectionOrder",
-        referenceId: `pickup-${market}-${Date.now()}`.slice(0, 50),
+        referenceId: pickupReference,
+        customerReference: pickupCustomerReference,
         shipmentCount: Math.max(1, Math.floor(input.shipmentCount || 1)),
         email: input.email || senderEmail,
         note: String(input.note || "").slice(0, 300) || null,
@@ -1003,14 +1006,36 @@ export async function createPplPickup(
   const batchId = extractBatchId(toRecord(createRaw), location);
   if (!batchId) return { ok: false, reason: "ppl_pickup_missing_id", raw: createRaw };
   const statusRes = await pplJsonRequest<Record<string, unknown>>("GET", "/order/batch/{id}", undefined, batchId);
-  return { ok: true, data: { pickupId: batchId, raw: { create: createRaw, status: statusRes } } };
+  return {
+    ok: true,
+    data: {
+      pickupId: batchId,
+      pickupReference,
+      pickupCustomerReference,
+      raw: { create: createRaw, status: statusRes },
+    },
+  };
 }
 
 export async function cancelPplPickupByReference(reference: string): Promise<PplGenericResult<Record<string, unknown>>> {
-  return pplJsonRequest<Record<string, unknown>>("POST", "/order/cancel", {
-    orderReference: reference,
-    customerReference: reference,
+  const baseUrl = process.env.PPL_API_BASE_URL?.trim();
+  if (!baseUrl) return { ok: false, reason: "ppl_api_not_configured" };
+  const token = await requestToken(baseUrl);
+  if (!token) return { ok: false, reason: "ppl_api_token_failed" };
+  const url = new URL(`${normalizeBaseUrl(baseUrl)}/order/cancel`);
+  url.searchParams.set("customerReference", reference);
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "Accept-Language": process.env.PPL_API_ACCEPT_LANGUAGE || "cs-CZ",
+    },
+    body: JSON.stringify({ note: "Cancelled from admin" }),
   });
+  const raw = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, reason: `ppl_api_http_${res.status}`, raw };
+  return { ok: true, data: raw as Record<string, unknown> };
 }
 
 export async function fetchPplOrderInfoByCustomerReference(

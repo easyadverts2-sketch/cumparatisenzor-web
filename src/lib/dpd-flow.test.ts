@@ -22,8 +22,8 @@ describe("DPD admin wiring", () => {
   it("renders explicit DPD action labels in RO and HU admin", () => {
     const ro = read("src/app/admin/page.tsx");
     const hu = read("src/app/hu-admin/page.tsx");
-    expect(ro).toContain("Stornovat v DPD");
-    expect(hu).toContain("Stornovat v DPD");
+    expect(ro).toContain("Zrušit DPD zásilku");
+    expect(hu).toContain("Zrušit DPD zásilku");
     expect(ro).toContain("Lokální reset DPD");
     expect(hu).toContain("Lokální reset DPD");
     expect(ro).toContain("Stáhnout DPD štítek");

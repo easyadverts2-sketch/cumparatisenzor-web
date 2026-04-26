@@ -4,6 +4,7 @@ import {
   autoCancelExpiredOrders,
   cancelDpdPickupOrder,
   cancelDpdShipmentForOrder,
+  cancelPplShipmentForOrder,
   cancelPplPickupOrder,
   getDpdPickups,
   getDpdShipmentsAdmin,
@@ -13,7 +14,6 @@ import {
   orderDpdPickup,
   orderPplPickup,
   readStore,
-  refreshDpdShipment,
   resetDpdShipmentForOrder,
   resetPplShipmentForOrder,
   writeStore,
@@ -55,6 +55,15 @@ async function deleteShipmentAction(formData: FormData) {
   redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+udaje+lokalne+vycisteny" : "Lokalni+reset+PPL+selhal"}`);
 }
 
+async function cancelShipmentAction(formData: FormData) {
+  "use server";
+  const orderId = String(formData.get("orderId") || "");
+  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
+  const ok = await cancelPplShipmentForOrder(orderId, "HU");
+  revalidatePath("/hu-admin");
+  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "PPL+zasilka+zrusena" : "PPL+zruseni+zasilky+selhalo"}`);
+}
+
 async function orderPickupAction(formData: FormData) {
   "use server";
   const result = await orderPplPickup("HU", {
@@ -77,15 +86,6 @@ async function cancelPickupAction(formData: FormData) {
   const result = await cancelPplPickupOrder(pickupId, "HU");
   revalidatePath("/hu-admin");
   redirect(`/hu-admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
-}
-
-async function refreshDpdShipmentAction(formData: FormData) {
-  "use server";
-  const orderId = String(formData.get("orderId") || "");
-  if (!orderId) redirect("/hu-admin?ok=0&msg=Chybi+ID+objednavky");
-  const ok = await refreshDpdShipment(orderId, "HU");
-  revalidatePath("/hu-admin");
-  redirect(`/hu-admin?ok=${ok ? "1" : "0"}&msg=${ok ? "DPD+stav+obnoven" : "DPD+refresh+selhal"}`);
 }
 
 async function cancelDpdShipmentAction(formData: FormData) {
@@ -281,6 +281,14 @@ export default async function HuAdminPage({
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     <a href={`/api/hu-admin/ppl-label?orderId=${encodeURIComponent(o.id)}`} className="rounded border px-2 py-1">Tisk štítku</a>
+                    <form action={cancelShipmentAction}>
+                      <input type="hidden" name="orderId" value={o.id} />
+                      <ConfirmSubmitButton
+                        className="rounded border px-2 py-1"
+                        label="Zrušit PPL zásilku"
+                        confirmMessage="Tímto rušíš pouze zásilku u dopravce. Objednávka v e-shopu zůstane."
+                      />
+                    </form>
                     <form action={deleteShipmentAction}>
                       <input type="hidden" name="orderId" value={o.id} />
                       <ConfirmSubmitButton
@@ -399,13 +407,12 @@ export default async function HuAdminPage({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    <form action={refreshDpdShipmentAction}><input type="hidden" name="orderId" value={o.id} /><button className="rounded border px-2 py-1">Refresh DPD</button></form>
                     <form action={cancelDpdShipmentAction}>
                       <input type="hidden" name="orderId" value={o.id} />
                       <ConfirmSubmitButton
                         className="rounded border px-2 py-1"
-                        label="Stornovat v DPD"
-                        confirmMessage="Tato akce se pokusi stornovat zasilku v DPD. Po uspechu se lokalne vycisti DPD data."
+                        label="Zrušit DPD zásilku"
+                        confirmMessage="Tímto rušíš pouze zásilku u dopravce. Objednávka v e-shopu zůstane."
                       />
                     </form>
                     <form action={deleteDpdShipmentAction}>
@@ -416,7 +423,6 @@ export default async function HuAdminPage({
                         confirmMessage="Tato akce pouze vycisti lokalni DPD data v e-shopu. Zasilka v DPD tim nemusi byt zrusena."
                       />
                     </form>
-                    <a href={`/api/hu-admin/dpd-diagnostic?orderId=${encodeURIComponent(o.id)}`} target="_blank" rel="noreferrer" className="rounded border px-2 py-1">Diagnostika JSON</a>
                   </div>
                 </td>
               </tr>

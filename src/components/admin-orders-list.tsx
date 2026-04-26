@@ -21,6 +21,9 @@ export function AdminOrdersList({
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [q, setQ] = useState("");
+  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [uiMessage, setUiMessage] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
@@ -69,6 +72,7 @@ export function AdminOrdersList({
       <p className="text-sm text-[#1a4d47]">
         Zobrazeno {filtered.length} z {orders.length} objednávek.
       </p>
+      {uiMessage ? <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{uiMessage}</p> : null}
 
       <div className="max-h-[65vh] overflow-auto rounded-xl border-2 border-[#0d4f4a]/10 bg-white">
         <table className="w-full min-w-[640px] text-left text-sm">
@@ -107,22 +111,9 @@ export function AdminOrdersList({
                     </Link>
                     <button
                       className="text-xs text-red-700 underline"
-                      onClick={async () => {
-                        const ok = window.confirm(
-                          "Opravdu chcete trvale smazat objednavku? Pokud ma zasilku u PPL/DPD, system ji nejdriv zkusi stornovat u dopravce. Pokud storno selze, objednavka se nesmaze."
-                        );
-                        if (!ok) return;
-                        const res = await fetch(deleteApiPath, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ orderId: o.id }),
-                        });
-                        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
-                        if (!data.ok) {
-                          window.alert(data.message || "Hard delete selhal.");
-                          return;
-                        }
-                        window.location.reload();
+                      onClick={() => {
+                        setUiMessage(null);
+                        setConfirmOrderId(o.id);
                       }}
                     >
                       Smazat objednavku
@@ -137,6 +128,53 @@ export function AdminOrdersList({
           <p className="p-8 text-center text-[#1a4d47]">Žádná objednávka neodpovídá filtru.</p>
         ) : null}
       </div>
+      {confirmOrderId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-[#0a2624]">Potvrzení smazání objednávky</h3>
+            <p className="mt-2 text-sm text-[#1a4d47]">
+              Objednávka bude trvale smazána ze systému. Pokud má PPL zásilku, systém nejdřív zavolá storno přes
+              POST /shipment/&#123;shipmentNumber&#125;/cancel. Pokud má DPD zásilku, systém nejdřív zavolá storno přes
+              PUT /shipments/cancellation. Pokud storno u dopravce selže, objednávka se lokálně nesmaže.
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                className="rounded border px-3 py-2"
+                disabled={deleteBusy}
+                onClick={() => setConfirmOrderId(null)}
+              >
+                Zrušit
+              </button>
+              <button
+                className="rounded bg-red-700 px-3 py-2 text-white disabled:opacity-60"
+                disabled={deleteBusy}
+                onClick={async () => {
+                  setDeleteBusy(true);
+                  try {
+                    const res = await fetch(deleteApiPath, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ orderId: confirmOrderId }),
+                    });
+                    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+                    if (!data.ok) {
+                      setUiMessage(data.message || "Hard delete selhal.");
+                      setDeleteBusy(false);
+                      return;
+                    }
+                    window.location.reload();
+                  } catch (err) {
+                    setUiMessage(err instanceof Error ? err.message : "Hard delete selhal.");
+                    setDeleteBusy(false);
+                  }
+                }}
+              >
+                Ano, smazat objednávku
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
