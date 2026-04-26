@@ -9,6 +9,7 @@ export async function resolveDpdLabelDownload(
 ): Promise<Response> {
   let step = "load_order";
   let lastAttempt: DpdEndpointAttempt | null = null;
+  let labelErrorMessage: string | null = null;
   try {
     let order = await getOrderById(orderId, market);
     if (!order) return Response.json({ ok: false, step, reason: "order_not_found", orderId, market }, { status: 404 });
@@ -39,7 +40,21 @@ export async function resolveDpdLabelDownload(
     const label = await fetchDpdLabelPdfForShipments(
       hasTracking ? { parcelNumbers: [tracking] } : { shipmentIds: [shipmentId] }
     );
-    lastAttempt = (label.ok ? label.data.attempt : (label.raw as DpdEndpointAttempt)) || null;
+    if (label.ok) {
+      lastAttempt = label.data.attempt;
+      labelErrorMessage = null;
+    } else {
+      const rawObj = (label.raw || null) as
+        | DpdEndpointAttempt
+        | { attempt?: DpdEndpointAttempt; dpdError?: string | null }
+        | null;
+      lastAttempt = (rawObj && "attempt" in rawObj ? rawObj.attempt || null : (rawObj as DpdEndpointAttempt | null)) || null;
+      const responseTextSafe = lastAttempt?.responseTextSafe || null;
+      const dpdError =
+        rawObj && typeof rawObj === "object" && "dpdError" in rawObj ? String(rawObj.dpdError || "") : "";
+      const detailed = responseTextSafe || dpdError || label.reason;
+      labelErrorMessage = detailed ? `DPD label API error: ${detailed}` : label.reason;
+    }
 
     if (debug) {
       return Response.json(
@@ -53,7 +68,7 @@ export async function resolveDpdLabelDownload(
           trackingNumber: order.trackingNumber || null,
           dpdStatusInDb: order.dpdShipmentStatus || null,
           endpointAttemptResults: lastAttempt,
-          errorMessage: label.ok ? null : label.reason,
+          errorMessage: label.ok ? null : labelErrorMessage,
         },
         { status: 200 }
       );
@@ -70,7 +85,7 @@ export async function resolveDpdLabelDownload(
           dpdShipmentId: shipmentId,
           dpdStatusInDb: order.dpdShipmentStatus || null,
           endpointAttemptResults: lastAttempt,
-          errorMessage: "DPD label endpoint did not return valid PDF.",
+          errorMessage: labelErrorMessage || label.reason,
         },
         { status: 502 }
       );

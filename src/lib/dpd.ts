@@ -641,34 +641,52 @@ export async function fetchDpdLabelPdfForShipments(
 
   const endpoint = resolveEndpoint(cfg.baseUrlRaw, "v1.0", endpointPath);
   const started = Date.now();
+  const step = byParcel ? "label_parcel_numbers" : cleanedShipments.length > 1 ? "label_bulk_shipment_ids" : "label_single_shipment_id";
   const res = await fetch(endpoint.finalUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/pdf", Authorization: `Bearer ${cfg.token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.token}`,
+    },
     body: JSON.stringify(payload),
   });
-  const contentType = res.headers.get("content-type");
-  const contentLength = res.headers.get("content-length");
-  const bytes = Buffer.from(await res.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  const bytes = Buffer.from(await res.arrayBuffer());
   const responseTextSafe = bytes.length ? bytes.toString("utf8").slice(0, 10000) : null;
-  const looksLikePdf =
-    String(contentType || "").toLowerCase().includes("application/pdf") ||
-    (bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF");
+  const looksLikePdf = bytes.length >= 4 && bytes.subarray(0, 4).toString("utf8") === "%PDF";
   const attempt: DpdEndpointAttempt = {
-    step: byParcel ? "label_parcel_numbers" : cleanedShipments.length > 1 ? "label_bulk_shipment_ids" : "label_single_shipment_id",
+    step,
     method: "POST",
     url: endpoint.finalUrl,
     status: res.status,
-    contentType,
-    contentLength,
+    contentType: res.headers.get("content-type"),
+    contentLength: res.headers.get("content-length"),
     durationMs: Date.now() - started,
     looksLikePdf,
     requestBodySafe: sanitizeBodySafe(payload),
     responseTextSafe,
   };
-  if (!res.ok || !looksLikePdf || bytes.length === 0) {
-    return { ok: false, reason: !res.ok ? `dpd_api_http_${res.status}` : "dpd_label_not_pdf", raw: attempt, httpStatus: res.status };
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: `dpd_api_http_${res.status}`,
+      raw: {
+        attempt,
+        dpdError: responseTextSafe,
+      },
+      httpStatus: res.status,
+    };
   }
-  return { ok: true, data: { bytes, contentType: contentType || "application/pdf", attempt } };
+  if (!looksLikePdf) {
+    return {
+      ok: false,
+      reason: "dpd_label_not_pdf",
+      raw: {
+        attempt,
+      },
+      httpStatus: res.status,
+    };
+  }
+  return { ok: true, data: { bytes, contentType: "application/pdf", attempt } };
 }
 
 export async function createDpdPickup(
