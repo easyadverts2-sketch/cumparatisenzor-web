@@ -115,6 +115,7 @@ async function orderDpdPickupAction(formData: FormData) {
     note: String(formData.get("note") || "").trim(),
     contactName: String(formData.get("contactName") || "").trim(),
     phone: String(formData.get("phone") || "").trim(),
+    contactEmail: String(formData.get("contactEmail") || "").trim(),
     parcelCount: Number(formData.get("parcelCount") || 1),
     totalWeight: Number(formData.get("totalWeight") || 1),
   });
@@ -326,6 +327,10 @@ export default async function HuAdminPage({
         <label className="min-w-[160px] text-sm">
           <span className="mb-1 block text-[#1a4d47]">Telefon</span>
           <input name="phone" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
+        </label>
+        <label className="min-w-[220px] text-sm">
+          <span className="mb-1 block text-[#1a4d47]">E-mail</span>
+          <input name="contactEmail" type="email" className="w-full rounded-lg border border-slate-300 px-3 py-2" required />
         </label>
         <label className="min-w-[120px] text-sm">
           <span className="mb-1 block text-[#1a4d47]">Počet balíků</span>

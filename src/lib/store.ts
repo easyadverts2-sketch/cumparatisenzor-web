@@ -2848,6 +2848,7 @@ export async function orderDpdPickup(
     note?: string;
     contactName: string;
     phone: string;
+    contactEmail?: string;
     parcelCount: number;
     totalWeight: number;
   }

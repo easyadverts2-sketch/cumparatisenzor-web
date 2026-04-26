@@ -76,6 +76,7 @@ export type DpdPickupInput = {
   toTime: string;
   contactName: string;
   phone: string;
+  contactEmail?: string;
   note?: string;
   parcelCount: number;
   totalWeight: number;
@@ -817,6 +818,16 @@ export async function createDpdPickup(
   void market;
   const cfg = configured();
   if (!cfg.customerId || !cfg.senderAddressId) return { ok: false, reason: "dpd_api_not_configured" };
+  const contactEmail = String(input.contactEmail || process.env.DPD_API_CONTACT_EMAIL || "").trim();
+  if (!contactEmail) {
+    return {
+      ok: false,
+      reason: "dpd_pickup_missing_contact_email",
+      raw: {
+        message: "DPD pickup requires contactEmail.",
+      },
+    };
+  }
   const senderAddressIdNum = Number(cfg.senderAddressId);
   const body = {
     buCode: cfg.buCode,
@@ -824,7 +835,7 @@ export async function createDpdPickup(
     pickupOrder: {
       contactName: input.contactName,
       contactPhone: splitPhone(input.phone).number,
-      contactEmail: process.env.DPD_API_CONTACT_EMAIL?.trim() || undefined,
+      contactEmail,
       internalPickupAddressId: Number.isFinite(senderAddressIdNum) ? senderAddressIdNum : cfg.senderAddressId,
       pickupDate: input.pickupDate,
       parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
