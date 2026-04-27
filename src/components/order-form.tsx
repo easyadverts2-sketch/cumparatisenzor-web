@@ -14,6 +14,7 @@ type ApiOk = {
 };
 
 function parsePaymentMethod(raw: string): PaymentMethod {
+  if (raw === "CARD_STRIPE") return "CARD_STRIPE";
   if (raw === "BANK_TRANSFER") return "BANK_TRANSFER";
   return "COD";
 }
@@ -192,6 +193,10 @@ export function OrderForm() {
 
       if (data.paymentMethod === "BANK_TRANSFER") {
         router.push(`/comanda/plata?nr=${encodeURIComponent(nr)}`);
+      } else if (data.paymentMethod === "CARD_STRIPE") {
+        router.push(
+          `/comanda/plata-card?nr=${encodeURIComponent(nr)}&orderId=${encodeURIComponent(data.orderId)}`
+        );
       } else {
         router.push(`/comanda/multumesc?nr=${encodeURIComponent(nr)}`);
       }
@@ -221,7 +226,7 @@ export function OrderForm() {
           rambursul este disponibil prin DPD). La transfer bancar, expedem dupa ce plata este
           inregistrata; transferul permite si livrare prin PPL.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
             <input
               type="radio"
@@ -252,6 +257,20 @@ export function OrderForm() {
               <span className="mt-1 block text-sm text-[#1a4d47]">
                 Expediem dupa ce primim plata in cont.
               </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="CARD_STRIPE"
+              checked={paymentMethod === "CARD_STRIPE"}
+              onChange={() => setPaymentMethod("CARD_STRIPE")}
+              className="mt-1 accent-[#0d9488]"
+            />
+            <span>
+              <span className="font-semibold text-[#0a2624]">Card bancar</span>
+              <span className="mt-1 block text-sm text-[#1a4d47]">Plata securizata Stripe.</span>
             </span>
           </label>
         </div>

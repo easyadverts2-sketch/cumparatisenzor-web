@@ -14,6 +14,7 @@ type ApiOk = {
 };
 
 function parsePaymentMethod(raw: string): PaymentMethod {
+  if (raw === "CARD_STRIPE") return "CARD_STRIPE";
   if (raw === "BANK_TRANSFER") return "BANK_TRANSFER";
   return "COD";
 }
@@ -188,6 +189,10 @@ export function OrderFormHu() {
 
       if (data.paymentMethod === "BANK_TRANSFER") {
         router.push(`/hu/comanda/plata?nr=${encodeURIComponent(nr)}`);
+      } else if (data.paymentMethod === "CARD_STRIPE") {
+        router.push(
+          `/hu/comanda/plata-card?nr=${encodeURIComponent(nr)}&orderId=${encodeURIComponent(data.orderId)}`
+        );
       } else {
         router.push(`/hu/comanda/multumesc?nr=${encodeURIComponent(nr)}`);
       }
@@ -210,7 +215,7 @@ export function OrderFormHu() {
 
       <div className="md:col-span-2">
         <h3 className="text-lg font-semibold text-[#0a2624]">Fizetesi mod</h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
             <input
               type="radio"
@@ -244,6 +249,20 @@ export function OrderFormHu() {
               <span className="mt-1 block text-sm text-[#1a4d47]">A feladast a jovairas utan inditjuk.</span>
             </span>
           </label>
+          <label className="flex cursor-pointer gap-3 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#f0faf8] p-4 has-[:checked]:border-[#0d9488] has-[:checked]:bg-[#e6f7f4]">
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="CARD_STRIPE"
+              checked={paymentMethod === "CARD_STRIPE"}
+              onChange={() => setPaymentMethod("CARD_STRIPE")}
+              className="mt-1 accent-[#0d9488]"
+            />
+            <span>
+              <span className="font-semibold text-[#0a2624]">Bankkartya</span>
+              <span className="mt-1 block text-sm text-[#1a4d47]">Biztonsagos Stripe fizetes.</span>
+            </span>
+          </label>
         </div>
       </div>
 
@@ -251,7 +270,7 @@ export function OrderFormHu() {
         <h3 className="text-lg font-semibold text-[#0a2624]">Futar / szallitas</h3>
         {carrier === "DPD" ? (
           <p className="mt-1 text-sm text-[#7a3f54]">
-            DPD eseteben jelenleg csak banki atutalas valaszthato (utanvet nem).
+            DPD eseteben utanvet nem valaszthato, banki atutalas vagy bankkartya igen.
           </p>
         ) : null}
         <div className="mt-4 grid gap-3 md:grid-cols-2">

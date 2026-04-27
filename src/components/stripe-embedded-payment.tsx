@@ -8,11 +8,12 @@ import { useEffect, useMemo, useState } from "react";
 type Props = {
   orderId: string;
   orderNumber: string;
+  market?: "RO" | "HU";
 };
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
-function EmbeddedPaymentForm({ orderNumber }: { orderNumber: string }) {
+function EmbeddedPaymentForm({ orderNumber, market = "RO" }: { orderNumber: string; market?: "RO" | "HU" }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState("");
@@ -27,7 +28,7 @@ function EmbeddedPaymentForm({ orderNumber }: { orderNumber: string }) {
     const { error: confirmError } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/comanda/plata-card/rezultat?nr=${encodeURIComponent(orderNumber)}`,
+        return_url: `${window.location.origin}${market === "HU" ? "/hu/comanda/plata-card/rezultat" : "/comanda/plata-card/rezultat"}?nr=${encodeURIComponent(orderNumber)}`,
       },
     });
     if (confirmError) {
@@ -52,7 +53,7 @@ function EmbeddedPaymentForm({ orderNumber }: { orderNumber: string }) {
   );
 }
 
-export function StripeEmbeddedPayment({ orderId, orderNumber }: Props) {
+export function StripeEmbeddedPayment({ orderId, orderNumber, market = "RO" }: Props) {
   const [clientSecret, setClientSecret] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,7 +65,7 @@ export function StripeEmbeddedPayment({ orderId, orderNumber }: Props) {
         const res = await fetch("/api/orders/card-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId }),
+          body: JSON.stringify({ orderId, market }),
         });
         const data = (await res.json()) as { ok: boolean; clientSecret?: string; message?: string };
         if (!active) return;
@@ -85,7 +86,7 @@ export function StripeEmbeddedPayment({ orderId, orderNumber }: Props) {
     return () => {
       active = false;
     };
-  }, [orderId]);
+  }, [orderId, market]);
 
   const options = useMemo(() => (clientSecret ? { clientSecret } : undefined), [clientSecret]);
 
@@ -116,7 +117,7 @@ export function StripeEmbeddedPayment({ orderId, orderNumber }: Props) {
 
   return (
     <Elements stripe={stripePromise} options={options}>
-      <EmbeddedPaymentForm orderNumber={orderNumber} />
+      <EmbeddedPaymentForm orderNumber={orderNumber} market={market} />
     </Elements>
   );
 }

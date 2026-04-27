@@ -19,12 +19,13 @@ export async function createStripePaymentIntent(
   }
   const intent = await stripe.paymentIntents.create({
     amount: Math.round(Number(order.totalPrice) * 100),
-    currency: "ron",
+    currency: order.market === "HU" ? "huf" : "ron",
     receipt_email: order.email,
     automatic_payment_methods: { enabled: true },
     metadata: {
       orderId: order.id,
       orderNumber: String(order.orderNumber),
+      market: order.market || "RO",
     },
     description: `Comanda ${order.orderNumber} - FreeStyle Libre 2 Plus`,
   });

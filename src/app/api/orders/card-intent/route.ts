@@ -6,11 +6,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const orderId = String(body.orderId || "");
+    const market = String(body.market || "RO").toUpperCase() === "HU" ? "HU" : "RO";
     if (!orderId) {
       return NextResponse.json({ ok: false, message: "Lipseste orderId." }, { status: 400 });
     }
 
-    const order = await getOrderById(orderId);
+    const order = await getOrderById(orderId, market);
     if (!order) {
       return NextResponse.json({ ok: false, message: "Comanda nu a fost gasita." }, { status: 404 });
     }
