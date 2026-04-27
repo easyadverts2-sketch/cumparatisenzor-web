@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     if (!/^\+?[0-9]{9,15}$/.test(phone)) {
       return NextResponse.json({ ok: false, message: "Ervenytelen telefonszam." }, { status: 400 });
     }
-    if (street.length < 5 || city.length < 2 || !/^\d{4}$/.test(postalCode)) {
+    if (!street || !city || !postalCode) {
       return NextResponse.json({ ok: false, message: "Kerlek toltsd ki helyesen a szallitasi cimet." }, { status: 400 });
     }
 
