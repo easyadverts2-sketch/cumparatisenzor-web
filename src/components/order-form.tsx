@@ -76,23 +76,6 @@ export function OrderForm() {
   const productsTotal = quantity * UNIT_PRICE;
   const orderTotal = productsTotal + shippingPrice;
   const postalRegex = /^\d{6}$/;
-  const customerStepReady =
-    deliveryFullName.trim().split(/\s+/).length >= 2 &&
-    email.includes("@") &&
-    /^\+?[0-9]{9,15}$/.test(phone.replace(/\s+/g, "")) &&
-    deliveryStreet.trim().length >= 5 &&
-    deliveryCity.trim().length >= 2 &&
-    postalRegex.test(deliveryPostalCode);
-  const shippingStepReady = carrier === "PPL" || carrier === "DPD" || carrier === "FINESHIP";
-  const billingStepReady = !billingDifferent
-    ? true
-    : billingCompanyName.trim().length >= 2 &&
-      billingTaxId.trim().length >= 2 &&
-      billingTradeRegNo.trim().length >= 2 &&
-      billingStreet.trim().length >= 5 &&
-      billingCity.trim().length >= 2 &&
-      postalRegex.test(billingPostalCode);
-
   async function onSubmit(formData: FormData) {
     if (submitLockRef.current) return;
     submitLockRef.current = true;
@@ -232,33 +215,6 @@ export function OrderForm() {
       ) : null}
 
       <div className="md:col-span-2">
-        <div className="mb-5 rounded-2xl border border-[#de6a44]/30 bg-[#fff4ec] p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-[#7a3f54]">Progres comanda</h3>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <div
-              className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                customerStepReady ? "bg-[#e6f7f4] text-[#0f766e]" : "bg-white text-[#7a3f54]"
-              }`}
-            >
-              1. Date client {customerStepReady ? "✓" : ""}
-            </div>
-            <div
-              className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                shippingStepReady ? "bg-[#e6f7f4] text-[#0f766e]" : "bg-white text-[#7a3f54]"
-              }`}
-            >
-              2. Livrare {shippingStepReady ? "✓" : ""}
-            </div>
-            <div
-              className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                billingStepReady ? "bg-[#e6f7f4] text-[#0f766e]" : "bg-white text-[#7a3f54]"
-              }`}
-            >
-              3. Facturare {billingStepReady ? "✓" : ""}
-            </div>
-          </div>
-        </div>
-
         <h3 className="text-lg font-semibold text-[#0a2624]">Metoda de plata</h3>
         <p className="mt-1 text-sm text-[#1a4d47]">
           Alegeti cum doriti sa platiti. La ramburs platiti curierului la livrare (in Romania,

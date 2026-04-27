@@ -288,37 +288,11 @@ function parseRecipientZip(deliveryAddress: string): string {
 }
 
 function validateDeliveryAddressForMarket(
-  deliveryAddress: string,
-  market: Market
+  _deliveryAddress: string,
+  _market: Market
 ): { ok: true } | { ok: false; message: string } {
-  const text = String(deliveryAddress || "").trim();
-  if (text.length < 8) {
-    return { ok: false, message: "Dodaci adresa je prilis kratka." };
-  }
-
-  const lower = text.toLowerCase();
-  const hasRoZip = /\b\d{6}\b/.test(text);
-  const hasHuZip = /\b\d{4}\b/.test(text);
-
-  if (market === "RO" && !hasRoZip) {
-    return { ok: false, message: "Pro Rumunsko zadejte prosim platne PSC (6 cislic) v dodaci adrese." };
-  }
-  if (market === "HU" && !hasHuZip) {
-    return { ok: false, message: "Pro Madarsko zadejte prosim platne PSC (4 cislice) v dodaci adrese." };
-  }
-
-  // Guard against clearly mismatched countries in address text.
-  const czSkHints = /\b(praha|prague|cesk|czech|slovak|slovensko)\b/i.test(lower);
-  const huHints = /\b(hungary|magyar|budapest)\b/i.test(lower);
-  const roHints = /\b(romania|romania\.|bucuresti|bucharest|jud\.)\b/i.test(lower);
-
-  if (market === "RO" && (czSkHints || huHints)) {
-    return { ok: false, message: "Dodaci adresa nevypada jako rumunska. Zkontrolujte stat a PSC." };
-  }
-  if (market === "HU" && (czSkHints || roHints)) {
-    return { ok: false, message: "Dodaci adresa nevypada jako madarska. Zkontrolujte stat a PSC." };
-  }
-
+  // Address structure is already validated in localized API routes/forms.
+  // Keep checkout permissive here to avoid false negatives from heuristic parsing.
   return { ok: true };
 }
 
