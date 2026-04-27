@@ -3,6 +3,7 @@ import { sendEmail } from "./email";
 import { getSql } from "./db";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { TransactionSql } from "postgres";
 import { formatOrderNumber } from "./order-format";
 import { getStripe } from "./stripe-checkout";
 import { PDFDocument } from "pdf-lib";
@@ -90,6 +91,7 @@ function settingKey(market: Market, key: "inventory" | "sku" | "price" | "shippi
 
 type Row = Record<string, unknown>;
 type SqlClient = ReturnType<typeof getSql>;
+type TxClient = TransactionSql<Record<string, never>>;
 
 type InvoiceRow = {
   id: string;
@@ -321,7 +323,7 @@ function validateDeliveryAddressForMarket(
 }
 
 async function consumeInventoryAtomic(
-  sql: SqlClient,
+  sql: SqlClient | TxClient,
   market: Market,
   quantity: number
 ): Promise<boolean> {
@@ -347,14 +349,14 @@ function isAllowedStatusTransition(current: OrderStatus, next: OrderStatus): boo
   ]);
   if (cancelled.has(current)) return false;
   const allowed: Record<OrderStatus, Set<OrderStatus>> = {
-    ORDERED_NOT_PAID: new Set(["ORDERED_PAID_NOT_SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
-    ORDERED_PAID_NOT_SHIPPED: new Set(["ORDERED_PPLRDY", "SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
-    WAITING_FOR_SHIPPING: new Set(["ORDERED_PPLRDY", "ORDERED_PAID_NOT_SHIPPED", "SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
-    ORDERED_PPLRDY: new Set(["SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
-    SHIPPED: new Set([]),
-    CANCELLED_BY_US: new Set([]),
-    CANCELLED_BY_CUSTOMER: new Set([]),
-    CANCELLED_QUANTITY: new Set([]),
+    ORDERED_NOT_PAID: new Set<OrderStatus>(["ORDERED_PAID_NOT_SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    ORDERED_PAID_NOT_SHIPPED: new Set<OrderStatus>(["ORDERED_PPLRDY", "SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    WAITING_FOR_SHIPPING: new Set<OrderStatus>(["ORDERED_PPLRDY", "ORDERED_PAID_NOT_SHIPPED", "SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    ORDERED_PPLRDY: new Set<OrderStatus>(["SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    SHIPPED: new Set<OrderStatus>([]),
+    CANCELLED_BY_US: new Set<OrderStatus>([]),
+    CANCELLED_BY_CUSTOMER: new Set<OrderStatus>([]),
+    CANCELLED_QUANTITY: new Set<OrderStatus>([]),
   };
   return allowed[current]?.has(next) ?? false;
 }
