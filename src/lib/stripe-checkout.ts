@@ -17,8 +17,12 @@ export async function createStripePaymentIntent(
   if (!stripe) {
     return null;
   }
+  const amount =
+    order.market === "HU"
+      ? Math.round(Number(order.totalPrice)) // HUF is zero-decimal currency in Stripe
+      : Math.round(Number(order.totalPrice) * 100); // RON uses cents (bani)
   const intent = await stripe.paymentIntents.create({
-    amount: Math.round(Number(order.totalPrice) * 100),
+    amount,
     currency: order.market === "HU" ? "huf" : "ron",
     receipt_email: order.email,
     automatic_payment_methods: { enabled: true },

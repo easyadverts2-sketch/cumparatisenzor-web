@@ -197,6 +197,18 @@ export default function Home() {
           </p>
         </div>
       </section>
+
+      <section className="mx-auto mt-10 max-w-6xl px-6">
+        <div className="rounded-3xl border border-[#b44b67]/20 bg-white p-6 text-center shadow-sm">
+          <p className="text-sm text-[#14534d]">Vrei sa testezi plata cu cardul in Stripe?</p>
+          <Link
+            href="/comanda-test"
+            className="mt-3 inline-flex rounded-xl bg-[#8f2c53] px-6 py-3 font-semibold text-white no-underline hover:bg-[#7b2749]"
+          >
+            Produs test (1 RON)
+          </Link>
+        </div>
+      </section>
     </main>
   );
 }

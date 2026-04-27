@@ -1550,7 +1550,10 @@ export async function createOrder(input: {
   shippingCarrier: ShippingCarrier;
   shippingCarrierOther?: string | null;
   additionalNotes?: string | null;
-}, market: Market = "RO"): Promise<{ ok: boolean; order?: Order; message: string }> {
+}, market: Market = "RO", options?: {
+  fixedItemPrice?: number;
+  fixedShippingPrice?: number;
+}): Promise<{ ok: boolean; order?: Order; message: string }> {
   try {
     const senderFrom = senderEmailForMarket(market);
     const sql = getSql();
@@ -1572,7 +1575,10 @@ export async function createOrder(input: {
 
     const defaults = defaultsByMarket[market];
     const inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
-    const price = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+    const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+    const price = Number.isFinite(options?.fixedItemPrice)
+      ? Math.max(0, Number(options?.fixedItemPrice))
+      : configuredPrice;
     if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
       return {
         ok: false,
@@ -1599,18 +1605,19 @@ export async function createOrder(input: {
         message: addressValidation.message,
       };
     }
-    const shippingPrice =
-      market === "HU"
-        ? input.shippingCarrier === "FINESHIP"
-          ? 16000
-          : input.quantity >= 5
-            ? 0
-            : 3199
-        : input.shippingCarrier === "FINESHIP"
-          ? 200
-          : input.quantity >= 5
-            ? 0
-            : 40;
+    const shippingPrice = Number.isFinite(options?.fixedShippingPrice)
+      ? Math.max(0, Number(options?.fixedShippingPrice))
+      : market === "HU"
+          ? input.shippingCarrier === "FINESHIP"
+            ? 16000
+            : input.quantity >= 5
+              ? 0
+              : 3199
+          : input.shippingCarrier === "FINESHIP"
+            ? 200
+            : input.quantity >= 5
+              ? 0
+              : 40;
     const totalPrice = input.quantity * price + shippingPrice;
 
     const carrierOther = null;
