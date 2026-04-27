@@ -25,7 +25,6 @@ type AddressPayload = {
   street: string;
   city: string;
   postalCode: string;
-  county: string;
   country?: string;
 };
 
@@ -37,12 +36,11 @@ function validateAddress(addr: AddressPayload): string | null {
   if (addr.street.length < 5) return "Az utca mezot pontositsd.";
   if (addr.city.length < 2) return "A varos kotelezo.";
   if (!/^\d{4}$/.test(addr.postalCode)) return "Az iranyitoszam 4 szamjegy legyen.";
-  if (addr.county.length < 2) return "A megye kotelezo.";
   return null;
 }
 
 function formatAddress(addr: AddressPayload): string {
-  return `${addr.street}, ${addr.city}, ${addr.postalCode}, ${addr.county}, Magyarorszag`;
+  return `${addr.street}, ${addr.city}, ${addr.postalCode}, Magyarorszag`;
 }
 
 export async function POST(request: Request) {
@@ -101,7 +99,6 @@ export async function POST(request: Request) {
       street: toSafe(body.delivery?.street),
       city: toSafe(body.delivery?.city),
       postalCode: toSafe(body.delivery?.postalCode),
-      county: toSafe(body.delivery?.county),
       country: "HU",
     };
     const billingDifferent = Boolean(body.billing?.different);
@@ -109,7 +106,6 @@ export async function POST(request: Request) {
       street: toSafe(body.billing?.street),
       city: toSafe(body.billing?.city),
       postalCode: toSafe(body.billing?.postalCode),
-      county: toSafe(body.billing?.county),
       country: "HU",
     };
     const billingCompanyName = toSafe(body.billing?.companyName);

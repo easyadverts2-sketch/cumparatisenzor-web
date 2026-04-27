@@ -56,3 +56,10 @@ If SMTP is not configured, order notifications are stored in admin but not sent 
 ## Numar comanda
 
 - Comenzile au numar secvential afisat (ex. `0000001`), stocat in coloana `order_number`.
+
+## Shipping address inputs (RO/HU)
+
+- Checkout address fields used for carrier calls are: street, city, postal code, country, contact name, phone, email.
+- County-level administrative fields (`judet` in RO, `megye` in HU) are intentionally not required in checkout.
+- Reason: current DPD/PPL shipment creation flow validates and sends street/city/zip/country/contact data, while county is not required by the implemented API requests and is not printed on generated labels in our flow.
+- If a carrier account later enforces county/region for a specific service, reintroduce it as a carrier-specific conditional field, not as a global mandatory checkout field.

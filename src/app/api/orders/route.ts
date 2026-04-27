@@ -25,7 +25,6 @@ type AddressPayload = {
   street: string;
   city: string;
   postalCode: string;
-  county: string;
   country?: string;
 };
 
@@ -37,12 +36,11 @@ function validateAddress(addr: AddressPayload): string | null {
   if (addr.street.length < 5) return "Strada este prea scurta.";
   if (addr.city.length < 2) return "Orasul este obligatoriu.";
   if (!/^\d{6}$/.test(addr.postalCode)) return "Codul postal trebuie sa aiba 6 cifre.";
-  if (addr.county.length < 2) return "Judetul este obligatoriu.";
   return null;
 }
 
 function formatAddress(addr: AddressPayload): string {
-  return `${addr.street}, ${addr.city}, ${addr.postalCode}, jud. ${addr.county}, Romania`;
+  return `${addr.street}, ${addr.city}, ${addr.postalCode}, Romania`;
 }
 
 export async function POST(request: Request) {
@@ -112,7 +110,6 @@ export async function POST(request: Request) {
       street: toSafe(body.delivery?.street),
       city: toSafe(body.delivery?.city),
       postalCode: toSafe(body.delivery?.postalCode),
-      county: toSafe(body.delivery?.county),
       country: "RO",
     };
     const billingDifferent = Boolean(body.billing?.different);
@@ -120,7 +117,6 @@ export async function POST(request: Request) {
       street: toSafe(body.billing?.street),
       city: toSafe(body.billing?.city),
       postalCode: toSafe(body.billing?.postalCode),
-      county: toSafe(body.billing?.county),
       country: "RO",
     };
     const billingCompanyName = toSafe(body.billing?.companyName);

@@ -45,7 +45,6 @@ export function OrderForm() {
   const [deliveryStreet, setDeliveryStreet] = useState("");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryPostalCode, setDeliveryPostalCode] = useState("");
-  const [deliveryCounty, setDeliveryCounty] = useState("");
   const [billingDifferent, setBillingDifferent] = useState(false);
   const [billingCompanyName, setBillingCompanyName] = useState("");
   const [billingTaxId, setBillingTaxId] = useState("");
@@ -53,7 +52,6 @@ export function OrderForm() {
   const [billingStreet, setBillingStreet] = useState("");
   const [billingCity, setBillingCity] = useState("");
   const [billingPostalCode, setBillingPostalCode] = useState("");
-  const [billingCounty, setBillingCounty] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeGdpr, setAgreeGdpr] = useState(false);
   const [additionalNotes, setAdditionalNotes] = useState("");
@@ -84,8 +82,7 @@ export function OrderForm() {
     /^\+?[0-9]{9,15}$/.test(phone.replace(/\s+/g, "")) &&
     deliveryStreet.trim().length >= 5 &&
     deliveryCity.trim().length >= 2 &&
-    postalRegex.test(deliveryPostalCode) &&
-    deliveryCounty.trim().length >= 2;
+    postalRegex.test(deliveryPostalCode);
   const shippingStepReady = carrier === "PPL" || carrier === "DPD" || carrier === "FINESHIP";
   const billingStepReady = !billingDifferent
     ? true
@@ -94,8 +91,7 @@ export function OrderForm() {
       billingTradeRegNo.trim().length >= 2 &&
       billingStreet.trim().length >= 5 &&
       billingCity.trim().length >= 2 &&
-      postalRegex.test(billingPostalCode) &&
-      billingCounty.trim().length >= 2;
+      postalRegex.test(billingPostalCode);
 
   async function onSubmit(formData: FormData) {
     if (submitLockRef.current) return;
@@ -114,7 +110,6 @@ export function OrderForm() {
         street: String(formData.get("deliveryStreet") || "").trim(),
         city: String(formData.get("deliveryCity") || "").trim(),
         postalCode: String(formData.get("deliveryPostalCode") || "").trim(),
-        county: String(formData.get("deliveryCounty") || "").trim(),
         country: "RO",
       };
       const billing = {
@@ -125,7 +120,6 @@ export function OrderForm() {
         street: String(formData.get("billingStreet") || "").trim(),
         city: String(formData.get("billingCity") || "").trim(),
         postalCode: String(formData.get("billingPostalCode") || "").trim(),
-        county: String(formData.get("billingCounty") || "").trim(),
         country: "RO",
       };
 
@@ -147,10 +141,9 @@ export function OrderForm() {
       if (
         delivery.street.length < 5 ||
         delivery.city.length < 2 ||
-        !postalRegex.test(delivery.postalCode) ||
-        delivery.county.length < 2
+        !postalRegex.test(delivery.postalCode)
       ) {
-        setError("Completati corect adresa de livrare din Romania (strada, oras, cod postal 6 cifre, judet).");
+        setError("Completati corect adresa de livrare din Romania (strada, oras, cod postal 6 cifre).");
         setLoading(false);
         return;
       }
@@ -171,8 +164,7 @@ export function OrderForm() {
           !billing.tradeRegNo ||
           billing.street.length < 5 ||
           billing.city.length < 2 ||
-          !postalRegex.test(billing.postalCode) ||
-          billing.county.length < 2)
+          !postalRegex.test(billing.postalCode))
       ) {
         setError("Completati toate datele de facturare ale companiei (inclusiv CUI/CIF si Nr. Reg. Com.).");
         setLoading(false);
@@ -437,14 +429,6 @@ export function OrderForm() {
         onChange={(e) => setDeliveryPostalCode(e.target.value)}
         className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
       />
-      <input
-        name="deliveryCounty"
-        placeholder="Judet (livrare)"
-        required
-        value={deliveryCounty}
-        onChange={(e) => setDeliveryCounty(e.target.value)}
-        className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624] placeholder:text-[#3d6b66]/80"
-      />
 
       <div className="md:col-span-2 rounded-2xl border border-[#de6a44]/25 bg-white p-4">
         <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">
@@ -509,14 +493,6 @@ export function OrderForm() {
             value={billingPostalCode}
             onChange={(e) => setBillingPostalCode(e.target.value)}
             className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
-          />
-          <input
-            name="billingCounty"
-            placeholder="Judet (facturare)"
-            required
-            value={billingCounty}
-            onChange={(e) => setBillingCounty(e.target.value)}
-            className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
           />
         </>
       ) : null}

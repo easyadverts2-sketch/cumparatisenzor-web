@@ -6,7 +6,7 @@ const huUrl = "https://szenzorvasarlas.hu";
 
 export const metadata: Metadata = {
   title: "Szenzorvasarlas.hu - FreeStyle Libre 2 Plus",
-  description: "FreeStyle Libre 2 Plus online rendeles Magyarorszagon, gyors EU szallitas, magyar nyelvu tamogatas.",
+  description: "FreeStyle Libre 2 Plus online rendeles Magyarorszagon, gyors szallitas, magyar nyelvu tamogatas.",
   alternates: { canonical: "/hu" },
   openGraph: {
     url: `${huUrl}/`,
@@ -114,7 +114,7 @@ export default function HuHomePage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               {[
-                { id: "01", title: "Gyors EU-szallitas", detail: "2-5 nap", icon: "🚚" },
+                { id: "01", title: "Gyors szallitas", detail: "2-5 nap", icon: "🚚" },
                 { id: "02", title: "Eredeti szenzorok", detail: "bontatlan csomagolas", icon: "📦" },
                 { id: "03", title: "Magyar nyelvu tamogatas", detail: "gyors valasz ugyfelszolgalat", icon: "🇭🇺" },
                 { id: "04", title: "Egyszeru fizetes", detail: "utanvet vagy atutalas", icon: "💳" },

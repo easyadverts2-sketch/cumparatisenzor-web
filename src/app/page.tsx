@@ -138,7 +138,7 @@ export default function Home() {
               {[
                 {
                   id: "01",
-                  title: "Livrare rapida din UE",
+                  title: "Livrare rapida",
                   detail: "2-5 zile",
                   icon: "🚚",
                 },

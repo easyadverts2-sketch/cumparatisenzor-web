@@ -45,7 +45,6 @@ export function OrderFormHu() {
   const [deliveryStreet, setDeliveryStreet] = useState("");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryPostalCode, setDeliveryPostalCode] = useState("");
-  const [deliveryCounty, setDeliveryCounty] = useState("");
   const [billingDifferent, setBillingDifferent] = useState(false);
   const [billingCompanyName, setBillingCompanyName] = useState("");
   const [billingTaxId, setBillingTaxId] = useState("");
@@ -53,7 +52,6 @@ export function OrderFormHu() {
   const [billingStreet, setBillingStreet] = useState("");
   const [billingCity, setBillingCity] = useState("");
   const [billingPostalCode, setBillingPostalCode] = useState("");
-  const [billingCounty, setBillingCounty] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeGdpr, setAgreeGdpr] = useState(false);
   const [additionalNotes, setAdditionalNotes] = useState("");
@@ -96,7 +94,6 @@ export function OrderFormHu() {
         street: String(formData.get("deliveryStreet") || "").trim(),
         city: String(formData.get("deliveryCity") || "").trim(),
         postalCode: String(formData.get("deliveryPostalCode") || "").trim(),
-        county: String(formData.get("deliveryCounty") || "").trim(),
         country: "HU",
       };
       const billing = {
@@ -107,7 +104,6 @@ export function OrderFormHu() {
         street: String(formData.get("billingStreet") || "").trim(),
         city: String(formData.get("billingCity") || "").trim(),
         postalCode: String(formData.get("billingPostalCode") || "").trim(),
-        county: String(formData.get("billingCounty") || "").trim(),
         country: "HU",
       };
 
@@ -129,10 +125,9 @@ export function OrderFormHu() {
       if (
         delivery.street.length < 5 ||
         delivery.city.length < 2 ||
-        !postalRegex.test(delivery.postalCode) ||
-        delivery.county.length < 2
+        !postalRegex.test(delivery.postalCode)
       ) {
-        setError("Kerlek toltsd ki helyesen a szallitasi cimet (utca, varos, iranyitoszam, megye).");
+        setError("Kerlek toltsd ki helyesen a szallitasi cimet (utca, varos, iranyitoszam).");
         setLoading(false);
         return;
       }
@@ -148,8 +143,7 @@ export function OrderFormHu() {
           !billing.tradeRegNo ||
           billing.street.length < 5 ||
           billing.city.length < 2 ||
-          !postalRegex.test(billing.postalCode) ||
-          billing.county.length < 2)
+          !postalRegex.test(billing.postalCode))
       ) {
         setError("Kerlek toltsd ki a kulon szamlazasi adatokat is.");
         setLoading(false);
@@ -363,14 +357,6 @@ export function OrderFormHu() {
         onChange={(e) => setDeliveryPostalCode(e.target.value)}
         className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
       />
-      <input
-        name="deliveryCounty"
-        placeholder="Megye"
-        required
-        value={deliveryCounty}
-        onChange={(e) => setDeliveryCounty(e.target.value)}
-        className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
-      />
 
       <div className="md:col-span-2 rounded-2xl border border-[#de6a44]/25 bg-white p-4">
         <label className="flex items-start gap-3 text-sm text-[#3a1d2d]">
@@ -435,14 +421,6 @@ export function OrderFormHu() {
             value={billingPostalCode}
             onChange={(e) => setBillingPostalCode(e.target.value)}
             className="rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
-          />
-          <input
-            name="billingCounty"
-            placeholder="Szamlazasi megye"
-            required
-            value={billingCounty}
-            onChange={(e) => setBillingCounty(e.target.value)}
-            className="md:col-span-2 rounded-xl border-2 border-[#0d4f4a]/20 bg-[#fafdfb] p-3 text-[#0a2624]"
           />
         </>
       ) : null}
