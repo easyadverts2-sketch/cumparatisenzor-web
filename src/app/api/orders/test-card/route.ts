@@ -14,7 +14,8 @@ function parseShippingCarrier(raw: unknown): ShippingCarrier | null {
 }
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV === "production" && process.env.ENABLE_PUBLIC_TEST_CARD !== "true") {
+  const testCardEnabled = (process.env.ENABLE_PUBLIC_TEST_CARD || "true").toLowerCase() !== "false";
+  if (process.env.NODE_ENV === "production" && !testCardEnabled) {
     return NextResponse.json({ ok: false, message: "Not found" }, { status: 404 });
   }
   try {
