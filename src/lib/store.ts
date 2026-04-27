@@ -285,6 +285,41 @@ function parseRecipientZip(deliveryAddress: string): string {
   return m ? m[1] : "";
 }
 
+function validateDeliveryAddressForMarket(
+  deliveryAddress: string,
+  market: Market
+): { ok: true } | { ok: false; message: string } {
+  const text = String(deliveryAddress || "").trim();
+  if (text.length < 8) {
+    return { ok: false, message: "Dodaci adresa je prilis kratka." };
+  }
+
+  const lower = text.toLowerCase();
+  const hasRoZip = /\b\d{6}\b/.test(text);
+  const hasHuZip = /\b\d{4}\b/.test(text);
+
+  if (market === "RO" && !hasRoZip) {
+    return { ok: false, message: "Pro Rumunsko zadejte prosim platne PSC (6 cislic) v dodaci adrese." };
+  }
+  if (market === "HU" && !hasHuZip) {
+    return { ok: false, message: "Pro Madarsko zadejte prosim platne PSC (4 cislice) v dodaci adrese." };
+  }
+
+  // Guard against clearly mismatched countries in address text.
+  const czSkHints = /\b(praha|prague|cesk|czech|slovak|slovensko)\b/i.test(lower);
+  const huHints = /\b(hungary|magyar|budapest)\b/i.test(lower);
+  const roHints = /\b(romania|romania\.|bucuresti|bucharest|jud\.)\b/i.test(lower);
+
+  if (market === "RO" && (czSkHints || huHints)) {
+    return { ok: false, message: "Dodaci adresa nevypada jako rumunska. Zkontrolujte stat a PSC." };
+  }
+  if (market === "HU" && (czSkHints || roHints)) {
+    return { ok: false, message: "Dodaci adresa nevypada jako madarska. Zkontrolujte stat a PSC." };
+  }
+
+  return { ok: true };
+}
+
 function getByJsonPath(input: unknown, jsonPath: string): unknown {
   if (!jsonPath) return undefined;
   const tokenized = jsonPath.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
@@ -1511,6 +1546,13 @@ export async function createOrder(input: {
         ok: false,
         message:
           "PPL nu permite plata ramburs pentru livrari in Romania. Alegeti DPD sau transfer bancar.",
+      };
+    }
+    const addressValidation = validateDeliveryAddressForMarket(input.deliveryAddress, market);
+    if (!addressValidation.ok) {
+      return {
+        ok: false,
+        message: addressValidation.message,
       };
     }
     const shippingPrice =

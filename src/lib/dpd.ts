@@ -343,10 +343,101 @@ function pickTracking(raw: unknown): { value: string; path: string } | null {
   return candidates[0] || null;
 }
 
+function extractShipmentValidationErrors(raw: unknown): Array<{ errorCode?: string; errorContent?: string; numOrder?: unknown }> {
+  if (!raw || typeof raw !== "object") return [];
+  const rec = raw as Record<string, unknown>;
+  const results = Array.isArray(rec.shipmentResults) ? rec.shipmentResults : [];
+  const out: Array<{ errorCode?: string; errorContent?: string; numOrder?: unknown }> = [];
+  for (const row of results) {
+    if (!row || typeof row !== "object") continue;
+    const item = row as Record<string, unknown>;
+    const errs = Array.isArray(item.errors) ? item.errors : [];
+    for (const e of errs) {
+      if (!e || typeof e !== "object") continue;
+      const er = e as Record<string, unknown>;
+      out.push({
+        errorCode: er.errorCode != null ? String(er.errorCode) : undefined,
+        errorContent: er.errorContent != null ? String(er.errorContent) : undefined,
+        numOrder: item.numOrder,
+      });
+    }
+  }
+  return out;
+}
+
 function toCodReference(orderNumber: number): string {
   const digits = String(orderNumber).replace(/\D/g, "");
   if (!digits) return String(Date.now()).slice(-10);
   return digits.slice(-10);
+}
+
+function formatDateYmdCompact(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
+function parseInputDate(input: string): Date | null {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+  if (/^\d{8}$/.test(raw)) {
+    const y = Number(raw.slice(0, 4));
+    const m = Number(raw.slice(4, 6));
+    const d = Number(raw.slice(6, 8));
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+    return dt;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mm = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(y, mm - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mm - 1 || dt.getDate() !== d) return null;
+  return dt;
+}
+
+function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function addDays(date: Date, days: number): Date {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function normalizePickupDateForDpd(inputDate: string): { ok: true; value: string } | { ok: false; reason: string; raw: unknown } {
+  const parsed = parseInputDate(inputDate);
+  if (!parsed) {
+    return {
+      ok: false,
+      reason: "dpd_pickup_invalid_pickup_date_format",
+      raw: { inputDate, expected: "YYYY-MM-DD or YYYYMMDD" },
+    };
+  }
+  const today = new Date();
+  const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const nextDay = addDays(todayLocal, 1);
+  const maxDay = addDays(nextDay, 29);
+  const parsedLocal = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  if (parsedLocal < nextDay || parsedLocal > maxDay || isWeekend(parsedLocal)) {
+    return {
+      ok: false,
+      reason: "dpd_pickup_invalid_pickup_date_window",
+      raw: {
+        inputDate,
+        normalized: formatDateYmdCompact(parsedLocal),
+        minAllowed: formatDateYmdCompact(nextDay),
+        maxAllowed: formatDateYmdCompact(maxDay),
+        weekend: isWeekend(parsedLocal),
+      },
+    };
+  }
+  return { ok: true, value: formatDateYmdCompact(parsedLocal) };
 }
 
 async function dpdRequest<T>(params: {
@@ -529,6 +620,32 @@ export async function createDpdShipment(order: Order, market: Market): Promise<D
       };
     }
     const raw = res.data;
+    const shipmentValidationErrors = extractShipmentValidationErrors(raw);
+    if (shipmentValidationErrors.length > 0) {
+      const message = shipmentValidationErrors
+        .map((e) => `${e.errorCode || "UNKNOWN"}:${e.errorContent || "Validation error"}`)
+        .join(" | ");
+      return {
+        ok: false,
+        reason: "dpd_api_create_validation_error",
+        raw: sanitizeBodySafe({
+          message,
+          shipmentValidationErrors,
+          response: raw,
+        }),
+        httpStatus: 200,
+        createRequest: sanitizeBodySafe({
+          actualHttpBodySentToDpd: payload,
+          codDiagnostics: codReference
+            ? {
+                originalOrderNumber: String(order.orderNumber),
+                codReferenceUsed: codReference,
+                codReferenceRule: "last 10 digits of numeric order number",
+              }
+            : null,
+        }),
+      };
+    }
     const shipmentId = pickShipmentId(raw);
     if (!shipmentId) {
       return {
@@ -828,6 +945,14 @@ export async function createDpdPickup(
       },
     };
   }
+  const pickupDateNorm = normalizePickupDateForDpd(input.pickupDate);
+  if (!pickupDateNorm.ok) {
+    return {
+      ok: false,
+      reason: pickupDateNorm.reason,
+      raw: pickupDateNorm.raw,
+    };
+  }
   const senderAddressIdNum = Number(cfg.senderAddressId);
   const body = {
     buCode: cfg.buCode,
@@ -837,7 +962,7 @@ export async function createDpdPickup(
       contactPhone: splitPhone(input.phone).number,
       contactEmail,
       internalPickupAddressId: Number.isFinite(senderAddressIdNum) ? senderAddressIdNum : cfg.senderAddressId,
-      pickupDate: input.pickupDate,
+      pickupDate: pickupDateNorm.value,
       parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
       totalWeight: Math.max(0.1, Number(input.totalWeight || 1)),
       additionalInfo: String(input.note || "").slice(0, 300) || undefined,
