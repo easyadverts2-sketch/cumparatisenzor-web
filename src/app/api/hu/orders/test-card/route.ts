@@ -14,6 +14,9 @@ function parseShippingCarrier(raw: unknown): ShippingCarrier | null {
 }
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production" && process.env.ENABLE_PUBLIC_TEST_CARD !== "true") {
+    return NextResponse.json({ ok: false, message: "Not found" }, { status: 404 });
+  }
   try {
     const body = await request.json();
     const shippingCarrier = parseShippingCarrier(body.shippingCarrier);

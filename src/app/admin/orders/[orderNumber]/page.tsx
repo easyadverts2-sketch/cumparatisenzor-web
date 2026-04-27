@@ -15,12 +15,12 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-function statusLabel(status: OrderStatus) {
+function statusLabel(status: OrderStatus, paymentMethod?: "COD" | "BANK_TRANSFER" | "CARD_STRIPE") {
   switch (status) {
     case "ORDERED_NOT_PAID":
       return "Objednáno (převod)";
     case "ORDERED_PAID_NOT_SHIPPED":
-      return "Zaplaceno převodem";
+      return paymentMethod === "CARD_STRIPE" ? "Zaplaceno kartou" : "Zaplaceno převodem";
     case "WAITING_FOR_SHIPPING":
     case "ORDERED_PPLRDY":
       return "Čeká na odeslání";
@@ -168,7 +168,7 @@ export default async function AdminOrderDetailPage({
             <select name="status" defaultValue={order.status} className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2">
               {ORDER_STATUSES.filter((status) => status !== "ORDERED_PPLRDY").map((status) => (
                 <option key={status} value={status}>
-                  {statusLabel(status)}
+                  {statusLabel(status, order.paymentMethod)}
                 </option>
               ))}
             </select>

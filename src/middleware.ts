@@ -4,7 +4,11 @@ const ADMIN_SESSION_COOKIE_NAME = "admin_session";
 const HU_ADMIN_SESSION_COOKIE_NAME = "hu_admin_session";
 
 function getAdminSessionSecret() {
-  return process.env.ADMIN_SESSION_SECRET || "change-this-in-production";
+  const secret = process.env.ADMIN_SESSION_SECRET?.trim();
+  if (!secret) {
+    throw new Error("ADMIN_SESSION_SECRET is required");
+  }
+  return secret;
 }
 
 function toHex(input: ArrayBuffer): string {
@@ -105,6 +109,20 @@ export async function middleware(request: NextRequest) {
   const isAdminApiPath = pathname.startsWith("/api/admin");
   const isHuAdminApiPath = pathname.startsWith("/api/hu-admin");
   const requiresAdminSession = isAdminPath || isHuAdminPath || isAdminApiPath || isHuAdminApiPath;
+
+  if ((isAdminApiPath || isHuAdminApiPath) && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const requestOrigin = request.nextUrl.origin;
+    const origin = request.headers.get("origin")?.trim() || "";
+    const referer = request.headers.get("referer")?.trim() || "";
+    const sameOrigin =
+      (origin && origin === requestOrigin) ||
+      (!origin && referer && referer.startsWith(`${requestOrigin}/`));
+    if (!sameOrigin) {
+      return applySecurityHeaders(
+        NextResponse.json({ ok: false, message: "Invalid admin request origin." }, { status: 403 })
+      );
+    }
+  }
 
   if (!requiresAdminSession) {
     return applySecurityHeaders(NextResponse.next({ request: { headers } }));

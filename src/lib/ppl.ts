@@ -46,8 +46,20 @@ export function buildPplBatchLabelFallbackUrl(baseUrl: string, batchId: string):
 
 export function resolvePplLabelEndpoint(baseUrl: string, labelUrl: string): string {
   const raw = String(labelUrl || "").trim();
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `${normalizeBaseUrl(baseUrl)}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  if (!raw) return "";
+  const base = new URL(normalizeBaseUrl(baseUrl));
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const absolute = new URL(raw);
+      const sameHost = absolute.protocol === "https:" && absolute.host === base.host;
+      return sameHost ? absolute.toString() : "";
+    } catch {
+      return "";
+    }
+  }
+  const resolved = new URL(raw.startsWith("/") ? raw : `/${raw}`, base);
+  if (resolved.protocol !== "https:" || resolved.host !== base.host) return "";
+  return resolved.toString();
 }
 
 function normalizePplText(input: unknown, maxLen = 250): string {
@@ -1118,7 +1130,8 @@ export async function fetchPplBatchLabelPdf(params: {
   const token = await requestToken(baseUrl);
   if (!token) return { ok: false, reason: "ppl_api_token_failed" };
   const fallbackEndpoint = buildPplBatchLabelFallbackUrl(baseUrl, params.batchId);
-  const endpoint = params.completeLabelUrl?.trim() || fallbackEndpoint;
+  const endpoint =
+    resolvePplLabelEndpoint(baseUrl, params.completeLabelUrl || "") || fallbackEndpoint;
   const res = await fetch(endpoint, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -1146,6 +1159,7 @@ export async function fetchPplLabelPdfFromUrl(labelUrl: string): Promise<PplGene
   const token = await requestToken(baseUrl);
   if (!token) return { ok: false, reason: "ppl_api_token_failed" };
   const endpoint = resolvePplLabelEndpoint(baseUrl, labelUrl);
+  if (!endpoint) return { ok: false, reason: "ppl_label_url_untrusted" };
   const res = await fetch(endpoint, {
     headers: {
       Authorization: `Bearer ${token}`,

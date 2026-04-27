@@ -8,6 +8,16 @@ import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 
+function expectedStripeCurrency(market: "RO" | "HU"): "ron" | "huf" {
+  return market === "HU" ? "huf" : "ron";
+}
+
+function expectedStripeAmount(order: { market?: "RO" | "HU"; totalPrice: number }): number {
+  return order.market === "HU"
+    ? Math.round(Number(order.totalPrice))
+    : Math.round(Number(order.totalPrice) * 100);
+}
+
 async function ensureWebhookEventTable() {
   const sql = getSql();
   await sql`
@@ -71,6 +81,17 @@ async function processStripeEvent(event: Stripe.Event) {
     return;
   }
 
+  const expectedCurrency = expectedStripeCurrency(market);
+  const receivedCurrency = String(intent.currency || "").toLowerCase();
+  if (receivedCurrency !== expectedCurrency) {
+    throw new Error(`stripe_currency_mismatch:${receivedCurrency}:${expectedCurrency}`);
+  }
+  const expectedAmount = expectedStripeAmount(order);
+  const paidAmount = Number(intent.amount_received || intent.amount || 0);
+  if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) {
+    throw new Error(`stripe_amount_mismatch:${paidAmount}:${expectedAmount}`);
+  }
+
   await updateOrderStatus(orderId, "ORDERED_PAID_NOT_SHIPPED", market);
   const refreshed = await getOrderById(orderId, market);
   const mailOrder = refreshed || order;
@@ -121,7 +142,33 @@ export async function POST(request: Request) {
     on conflict (event_id) do nothing
     returning event_id
   `;
-  if (inserted.length === 0) {
+  let shouldProcess = inserted.length > 0;
+  if (!shouldProcess) {
+    const existing = await sql<{ status: string; created_at: string }[]>`
+      select status, created_at
+      from stripe_webhook_events
+      where event_id = ${event.id}
+      limit 1
+    `;
+    const row = existing[0];
+    if (row) {
+      const status = String(row.status || "").toUpperCase();
+      const createdAt = new Date(row.created_at);
+      const staleProcessing =
+        status === "PROCESSING" &&
+        Number.isFinite(createdAt.getTime()) &&
+        Date.now() - createdAt.getTime() > 10 * 60 * 1000;
+      if (status === "FAILED" || staleProcessing) {
+        await sql`
+          update stripe_webhook_events
+          set status = 'PROCESSING', processed_at = null, last_error = null, created_at = now()
+          where event_id = ${event.id}
+        `;
+        shouldProcess = true;
+      }
+    }
+  }
+  if (!shouldProcess) {
     return NextResponse.json({ received: true });
   }
 

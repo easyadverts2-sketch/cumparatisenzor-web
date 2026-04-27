@@ -38,8 +38,11 @@ export async function POST(request: Request) {
       totalPrice: order.totalPrice,
     });
   } catch (error) {
-    const message =
-      error instanceof Error && error.message ? error.message : "Eroare server.";
-    return NextResponse.json({ ok: false, message }, { status: 500 });
+    const detail = String(error instanceof Error ? error.message : error).slice(0, 500);
+    console.error("[card-intent]", detail);
+    return NextResponse.json(
+      { ok: false, message: "Plata cu cardul nu poate fi initializata momentan." },
+      { status: 500 }
+    );
   }
 }

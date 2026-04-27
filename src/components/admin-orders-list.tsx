@@ -17,12 +17,12 @@ function statusBucket(status: Order["status"]) {
   return status;
 }
 
-function statusLabel(status: Order["status"] | "CANCELLED") {
+function statusLabel(status: Order["status"] | "CANCELLED", paymentMethod?: Order["paymentMethod"]) {
   switch (status) {
     case "ORDERED_NOT_PAID":
       return "Objednáno (převod)";
     case "ORDERED_PAID_NOT_SHIPPED":
-      return "Zaplaceno převodem";
+      return paymentMethod === "CARD_STRIPE" ? "Zaplaceno kartou" : "Zaplaceno převodem";
     case "WAITING_FOR_SHIPPING":
     case "ORDERED_PPLRDY":
       return "Čeká na odeslání";
@@ -114,7 +114,7 @@ export function AdminOrdersList({
           >
             <option value="ALL">Vše</option>
             <option value="ORDERED_NOT_PAID">{statusLabel("ORDERED_NOT_PAID")}</option>
-            <option value="ORDERED_PAID_NOT_SHIPPED">{statusLabel("ORDERED_PAID_NOT_SHIPPED")}</option>
+            <option value="ORDERED_PAID_NOT_SHIPPED">Zaplaceno</option>
             <option value="WAITING_FOR_SHIPPING">{statusLabel("WAITING_FOR_SHIPPING")}</option>
             <option value="SHIPPED">{statusLabel("SHIPPED")}</option>
             <option value="CANCELLED">{statusLabel("CANCELLED")}</option>
@@ -263,7 +263,7 @@ export function AdminOrdersList({
                 </td>
                 <td className="max-w-[180px] px-4 py-3 text-xs">
                   <span className={`inline-flex rounded-full border px-2 py-1 font-medium ${statusTone(o.status)}`}>
-                    {statusLabel(o.status)}
+                    {statusLabel(o.status, o.paymentMethod)}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -292,7 +292,7 @@ export function AdminOrdersList({
                       >
                         {options.map((st) => (
                           <option key={st} value={st}>
-                            {statusLabel(st)}
+                            {statusLabel(st, o.paymentMethod)}
                           </option>
                         ))}
                       </select>
