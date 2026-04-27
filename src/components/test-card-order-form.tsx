@@ -36,34 +36,35 @@ export function TestCardOrderForm({ market }: Props) {
   const [error, setError] = useState("");
 
   const content = useMemo(() => {
-    if (market === "HU") {
-      return {
-        title: "Teszt termek - csak kartyas fizetes",
-        subtitle: "Ar: 15 HUF",
-        submit: "Teszt rendeles letrehozasa",
-        cardOnly: "Csak kartya (Stripe)",
-        name: "Teljes nev",
-        email: "E-mail",
-        phone: "Telefonszam",
-        street: "Utca, hazszam",
-        city: "Varos",
-        postal: "Iranyitoszam (4 szamjegy)",
-        carrier: "Szallitas",
-      };
-    }
-    return {
-      title: "Produs test - plata doar cu cardul",
-      subtitle: "Pret: 1 RON",
-      submit: "Creeaza comanda de test",
-      cardOnly: "Doar card (Stripe)",
-      name: "Nume complet",
-      email: "E-mail",
-      phone: "Telefon",
-      street: "Strada, numar",
-      city: "Oras",
-      postal: "Cod postal (6 cifre)",
-      carrier: "Livrare",
-    };
+    return market === "HU"
+      ? {
+          title: "Testovaci produkt - pouze platba kartou",
+          subtitle: "Cena produktu: 15 HUF (test transakce Stripe: 175 HUF).",
+          submit: "Vytvorit test objednavku",
+          cardOnly: "Pouze karta (Stripe)",
+          name: "Jmeno a prijmeni",
+          email: "E-mail",
+          phone: "Telefon",
+          street: "Ulice a cislo domu",
+          city: "Mesto",
+          postal: "PSC (4 cislice)",
+          carrier: "Doprava",
+          fallback: "Objednavku se nepodarilo vytvorit.",
+        }
+      : {
+          title: "Testovaci produkt - pouze platba kartou",
+          subtitle: "Cena produktu: 1 RON (test transakce Stripe: 2 RON).",
+          submit: "Vytvorit test objednavku",
+          cardOnly: "Pouze karta (Stripe)",
+          name: "Jmeno a prijmeni",
+          email: "E-mail",
+          phone: "Telefon",
+          street: "Ulice a cislo domu",
+          city: "Mesto",
+          postal: "PSC (6 cifer)",
+          carrier: "Doprava",
+          fallback: "Objednavku se nepodarilo vytvorit.",
+        };
   }, [market]);
 
   const setField = (k: keyof FormState, v: string) =>
@@ -95,10 +96,11 @@ export function TestCardOrderForm({ market }: Props) {
         throw new Error(data?.message || "Request failed");
       }
       const base = market === "HU" ? "/hu/comanda/plata-card" : "/comanda/plata-card";
-      router.push(`${base}?orderId=${encodeURIComponent(data.orderId)}&nr=${encodeURIComponent(String(data.orderNumber))}`);
+      router.push(
+        `${base}?orderId=${encodeURIComponent(data.orderId)}&nr=${encodeURIComponent(String(data.orderNumber))}&test=1`
+      );
     } catch (err) {
-      const fallback = market === "HU" ? "A rendeles nem sikerult." : "Comanda nu a putut fi creata.";
-      setError(err instanceof Error && err.message ? err.message : fallback);
+      setError(err instanceof Error && err.message ? err.message : content.fallback);
     } finally {
       setSubmitting(false);
     }

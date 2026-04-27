@@ -37,7 +37,9 @@ export async function POST(request: Request) {
       orderNumber: order.orderNumber,
       totalPrice: order.totalPrice,
     });
-  } catch {
-    return NextResponse.json({ ok: false, message: "Eroare server." }, { status: 500 });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message ? error.message : "Eroare server.";
+    return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

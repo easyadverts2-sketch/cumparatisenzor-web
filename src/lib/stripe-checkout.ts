@@ -9,6 +9,11 @@ export function getStripe(): Stripe | null {
   return new Stripe(key, { apiVersion: "2025-02-24.acacia" });
 }
 
+function marketMinimumTotal(order: Order): number {
+  // Stripe minimums for creating a payment intent in these markets.
+  return order.market === "HU" ? 175 : 2;
+}
+
 export async function createStripePaymentIntent(
   order: Order,
   _appBaseUrl?: string
@@ -16,6 +21,14 @@ export async function createStripePaymentIntent(
   const stripe = getStripe();
   if (!stripe) {
     return null;
+  }
+  const minimum = marketMinimumTotal(order);
+  if (Number(order.totalPrice) < minimum) {
+    throw new Error(
+      order.market === "HU"
+        ? `Stripe minimum charge for HUF is ${minimum}.`
+        : `Stripe minimum charge for RON is ${minimum}.`
+    );
   }
   const amount =
     order.market === "HU"

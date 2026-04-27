@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TestCardOrderForm } from "@/components/test-card-order-form";
 
 export const metadata: Metadata = {
-  title: "Kartya teszt termek | Sensor Sale",
-  description: "Teszt rendeles kizarolag kartyas fizetessel (Stripe).",
+  title: "Testovaci produkt karta | Sensor Sale",
+  description: "Testovaci objednavka pouze s platbou kartou (Stripe).",
 };
 
 export default function TestOrderHuPage() {
@@ -13,7 +13,7 @@ export default function TestOrderHuPage() {
       <TestCardOrderForm market="HU" />
       <div className="mt-5">
         <Link href="/hu" className="text-sm text-[color:var(--brand-700)] underline underline-offset-2">
-          Vissza a fooldalra
+          Zpet na hlavni stranku
         </Link>
       </div>
     </main>

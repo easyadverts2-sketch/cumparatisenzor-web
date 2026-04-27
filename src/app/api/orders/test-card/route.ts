@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         additionalNotes: "TEST_PRODUCT_CARD_RO",
       },
       "RO",
-      { fixedItemPrice: 1, fixedShippingPrice: 0 }
+      { fixedItemPrice: 1, fixedShippingPrice: 1 }
     );
 
     if (result.ok && result.order) {

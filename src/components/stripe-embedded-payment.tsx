@@ -9,11 +9,21 @@ type Props = {
   orderId: string;
   orderNumber: string;
   market?: "RO" | "HU";
+  uiLanguage?: "RO" | "HU" | "CS";
+  backHref?: string;
 };
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
-function EmbeddedPaymentForm({ orderNumber, market = "RO" }: { orderNumber: string; market?: "RO" | "HU" }) {
+function EmbeddedPaymentForm({
+  orderNumber,
+  market = "RO",
+  uiLanguage = "RO",
+}: {
+  orderNumber: string;
+  market?: "RO" | "HU";
+  uiLanguage?: "RO" | "HU" | "CS";
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState("");
@@ -32,7 +42,14 @@ function EmbeddedPaymentForm({ orderNumber, market = "RO" }: { orderNumber: stri
       },
     });
     if (confirmError) {
-      setError(confirmError.message || "Nu s-a putut confirma plata.");
+      setError(
+        confirmError.message ||
+          (uiLanguage === "CS"
+            ? "Platbu se nepodarilo potvrdit."
+            : uiLanguage === "HU"
+              ? "A fizetest nem sikerult megerositeni."
+              : "Nu s-a putut confirma plata.")
+      );
       setLoading(false);
       return;
     }
@@ -47,13 +64,29 @@ function EmbeddedPaymentForm({ orderNumber, market = "RO" }: { orderNumber: stri
         disabled={!stripe || loading}
         className="w-full rounded-xl bg-[#be3f6f] px-6 py-3.5 font-semibold text-white hover:bg-[#9d2f56] disabled:opacity-60"
       >
-        {loading ? "Se proceseaza plata..." : "Plateste acum"}
+        {loading
+          ? uiLanguage === "CS"
+            ? "Platba se zpracovava..."
+            : uiLanguage === "HU"
+              ? "Fizetes feldolgozasa..."
+              : "Se proceseaza plata..."
+          : uiLanguage === "CS"
+            ? "Zaplatit ted"
+            : uiLanguage === "HU"
+              ? "Fizetes most"
+              : "Plateste acum"}
       </button>
     </form>
   );
 }
 
-export function StripeEmbeddedPayment({ orderId, orderNumber, market = "RO" }: Props) {
+export function StripeEmbeddedPayment({
+  orderId,
+  orderNumber,
+  market = "RO",
+  uiLanguage = "RO",
+  backHref,
+}: Props) {
   const [clientSecret, setClientSecret] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,13 +103,26 @@ export function StripeEmbeddedPayment({ orderId, orderNumber, market = "RO" }: P
         const data = (await res.json()) as { ok: boolean; clientSecret?: string; message?: string };
         if (!active) return;
         if (!data.ok || !data.clientSecret) {
-          setError(data.message || "Nu am putut initializa plata cu card.");
+          setError(
+            data.message ||
+              (uiLanguage === "CS"
+                ? "Platbu kartou se nepodarilo inicializovat."
+                : uiLanguage === "HU"
+                  ? "A kartyas fizetest nem sikerult inicializalni."
+                  : "Nu am putut initializa plata cu card.")
+          );
           return;
         }
         setClientSecret(data.clientSecret);
       } catch {
         if (active) {
-          setError("Eroare la initializarea platii.");
+          setError(
+            uiLanguage === "CS"
+              ? "Chyba pri inicializaci platby."
+              : uiLanguage === "HU"
+                ? "Hiba a fizetes inditasakor."
+                : "Eroare la initializarea platii."
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -86,28 +132,44 @@ export function StripeEmbeddedPayment({ orderId, orderNumber, market = "RO" }: P
     return () => {
       active = false;
     };
-  }, [orderId, market]);
+  }, [orderId, market, uiLanguage]);
 
   const options = useMemo(() => (clientSecret ? { clientSecret } : undefined), [clientSecret]);
 
   if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
     return (
       <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Plata cu cardul nu este inca activata (lipseste cheia publica Stripe).
+        {uiLanguage === "CS"
+          ? "Platba kartou zatim neni aktivni (chybi verejny Stripe klic)."
+          : uiLanguage === "HU"
+            ? "A kartyas fizetes meg nincs aktivalva (hianyzik a nyilvanos Stripe kulcs)."
+            : "Plata cu cardul nu este inca activata (lipseste cheia publica Stripe)."}
       </p>
     );
   }
 
   if (loading) {
-    return <p className="text-sm text-[#6b3b4d]">Se initializeaza plata securizata…</p>;
+    return (
+      <p className="text-sm text-[#6b3b4d]">
+        {uiLanguage === "CS"
+          ? "Inicializuje se zabezpecena platba..."
+          : uiLanguage === "HU"
+            ? "A biztonsagos fizetes inicializalasa..."
+            : "Se initializeaza plata securizata…"}
+      </p>
+    );
   }
 
   if (error) {
     return (
       <div className="space-y-3">
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
-        <Link href="/comanda" className="text-sm font-medium text-[#be3f6f] underline">
-          Inapoi la formular
+        <Link href={backHref || "/comanda"} className="text-sm font-medium text-[#be3f6f] underline">
+          {uiLanguage === "CS"
+            ? "Zpet na formular"
+            : uiLanguage === "HU"
+              ? "Vissza az urlaphoz"
+              : "Inapoi la formular"}
         </Link>
       </div>
     );
@@ -117,7 +179,7 @@ export function StripeEmbeddedPayment({ orderId, orderNumber, market = "RO" }: P
 
   return (
     <Elements stripe={stripePromise} options={options}>
-      <EmbeddedPaymentForm orderNumber={orderNumber} market={market} />
+      <EmbeddedPaymentForm orderNumber={orderNumber} market={market} uiLanguage={uiLanguage} />
     </Elements>
   );
 }
