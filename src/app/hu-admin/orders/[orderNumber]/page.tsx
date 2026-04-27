@@ -15,6 +15,26 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
+function statusLabel(status: OrderStatus) {
+  switch (status) {
+    case "ORDERED_NOT_PAID":
+      return "Objednáno (převod)";
+    case "ORDERED_PAID_NOT_SHIPPED":
+      return "Zaplaceno převodem";
+    case "WAITING_FOR_SHIPPING":
+    case "ORDERED_PPLRDY":
+      return "Čeká na odeslání";
+    case "SHIPPED":
+      return "Odesláno";
+    case "CANCELLED_BY_US":
+    case "CANCELLED_BY_CUSTOMER":
+    case "CANCELLED_QUANTITY":
+      return "Zamítnuto";
+    default:
+      return status;
+  }
+}
+
 async function updateStatus(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
@@ -111,9 +131,9 @@ export default async function HuAdminOrderDetailPage({
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-[#0f766e]">Stav</span>
             <select name="status" defaultValue={order.status} className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2">
-              {ORDER_STATUSES.map((status) => (
+              {ORDER_STATUSES.filter((status) => status !== "ORDERED_PPLRDY").map((status) => (
                 <option key={status} value={status}>
-                  {status}
+                  {statusLabel(status)}
                 </option>
               ))}
             </select>

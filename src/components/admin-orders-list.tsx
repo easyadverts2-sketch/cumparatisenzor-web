@@ -1,10 +1,42 @@
 "use client";
 
 import type { Order } from "@/lib/types";
-import { ORDER_STATUSES } from "@/lib/types";
 import { formatOrderNumber } from "@/lib/order-format";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+
+function statusBucket(status: Order["status"]) {
+  if (status === "ORDERED_PPLRDY") return "WAITING_FOR_SHIPPING";
+  if (
+    status === "CANCELLED_BY_US" ||
+    status === "CANCELLED_BY_CUSTOMER" ||
+    status === "CANCELLED_QUANTITY"
+  ) {
+    return "CANCELLED";
+  }
+  return status;
+}
+
+function statusLabel(status: Order["status"] | "CANCELLED") {
+  switch (status) {
+    case "ORDERED_NOT_PAID":
+      return "Objednáno (převod)";
+    case "ORDERED_PAID_NOT_SHIPPED":
+      return "Zaplaceno převodem";
+    case "WAITING_FOR_SHIPPING":
+    case "ORDERED_PPLRDY":
+      return "Čeká na odeslání";
+    case "SHIPPED":
+      return "Odesláno";
+    case "CANCELLED":
+    case "CANCELLED_BY_US":
+    case "CANCELLED_BY_CUSTOMER":
+    case "CANCELLED_QUANTITY":
+      return "Zamítnuto";
+    default:
+      return status;
+  }
+}
 
 function statusTone(status: Order["status"]) {
   switch (status) {
@@ -54,7 +86,7 @@ export function AdminOrdersList({
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
-      if (statusFilter !== "ALL" && o.status !== statusFilter) return false;
+      if (statusFilter !== "ALL" && statusBucket(o.status) !== statusFilter) return false;
       if (!q.trim()) return true;
       const s = q.toLowerCase();
       return (
@@ -81,11 +113,11 @@ export function AdminOrdersList({
             className="rounded-lg border-2 border-[#0d4f4a]/20 bg-white px-3 py-2 text-[#0a2624]"
           >
             <option value="ALL">Vše</option>
-            {ORDER_STATUSES.map((st) => (
-              <option key={st} value={st}>
-                {st}
-              </option>
-            ))}
+            <option value="ORDERED_NOT_PAID">{statusLabel("ORDERED_NOT_PAID")}</option>
+            <option value="ORDERED_PAID_NOT_SHIPPED">{statusLabel("ORDERED_PAID_NOT_SHIPPED")}</option>
+            <option value="WAITING_FOR_SHIPPING">{statusLabel("WAITING_FOR_SHIPPING")}</option>
+            <option value="SHIPPED">{statusLabel("SHIPPED")}</option>
+            <option value="CANCELLED">{statusLabel("CANCELLED")}</option>
           </select>
         </label>
         <label className="min-w-[200px] flex-1">
@@ -231,26 +263,41 @@ export function AdminOrdersList({
                 </td>
                 <td className="max-w-[180px] px-4 py-3 text-xs">
                   <span className={`inline-flex rounded-full border px-2 py-1 font-medium ${statusTone(o.status)}`}>
-                    {o.status}
+                    {statusLabel(o.status)}
                   </span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-2">
+                      {(() => {
+                        const selectStatuses: Order["status"][] = [
+                          "ORDERED_NOT_PAID",
+                          "ORDERED_PAID_NOT_SHIPPED",
+                          "WAITING_FOR_SHIPPING",
+                          "SHIPPED",
+                          "CANCELLED_BY_US",
+                        ];
+                        const current = (statusByOrderId[o.id] ?? o.status) as Order["status"];
+                        const options = selectStatuses.includes(current)
+                          ? selectStatuses
+                          : [...selectStatuses, current];
+                        return (
                       <select
                         className="rounded border border-[#0d4f4a]/25 bg-white px-2 py-1 text-xs"
-                        value={statusByOrderId[o.id] ?? o.status}
+                        value={current}
                         onChange={(e) =>
                           setStatusByOrderId((prev) => ({ ...prev, [o.id]: e.target.value }))
                         }
                         disabled={statusBusyId === o.id}
                       >
-                        {ORDER_STATUSES.map((st) => (
+                        {options.map((st) => (
                           <option key={st} value={st}>
-                            {st}
+                            {statusLabel(st)}
                           </option>
                         ))}
                       </select>
+                        );
+                      })()}
                       <button
                         className="rounded border border-[#0f766e]/30 bg-[#f0faf8] px-2 py-1 text-xs text-[#0f766e] hover:bg-[#e6f7f4]"
                         disabled={statusBusyId === o.id}

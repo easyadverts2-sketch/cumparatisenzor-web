@@ -1742,7 +1742,7 @@ export async function createOrder(input: {
         if (consumed) {
           await sql`
             update orders
-            set status = 'ORDERED_PPLRDY'
+            set status = 'WAITING_FOR_SHIPPING'
             where id = ${order.id}
           `;
           void createShipmentForOrder(sql, order, market, senderFrom, "immediate_cod_shipment_async").catch(
