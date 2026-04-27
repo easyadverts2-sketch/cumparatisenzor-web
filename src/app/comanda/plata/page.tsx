@@ -14,7 +14,6 @@ function getBankConfig() {
     accountName: "Česká Maloobchodní s.r.o.",
     bankName: "",
     bic: "KOMBCZPP",
-    referenceNote: "Folositi variabila din factura proforma.",
   };
 }
 
@@ -72,10 +71,8 @@ export default async function PlataPage({
               <dd className="font-semibold text-[#0a2624]">{order ? `${order.totalPrice} RON` : "-"}</dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-[#0f766e]">Referinta / detalii plata</dt>
-              <dd>
-                {proforma ? proforma.variable_symbol : `Comanda ${nr}`} — {bank.referenceNote}
-              </dd>
+              <dt className="text-sm font-medium text-[#0f766e]">Simbol variabil</dt>
+              <dd>{proforma ? proforma.variable_symbol : `Comanda ${nr}`}</dd>
             </div>
           </dl>
         </div>

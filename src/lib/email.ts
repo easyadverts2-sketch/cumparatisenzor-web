@@ -26,7 +26,7 @@ export async function sendEmail(params: {
   html?: string;
   attachments?: Array<{
     filename: string;
-    content: string;
+    content: string | Buffer;
     contentType?: string;
   }>;
 }) {

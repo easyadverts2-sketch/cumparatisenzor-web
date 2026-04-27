@@ -10,7 +10,7 @@ import { PDFDocument } from "pdf-lib";
 import {
   marketCurrency,
   renderInvoiceHtml,
-  renderInvoiceText,
+  renderInvoicePdf,
   type InvoiceKind,
 } from "./billing";
 import {
@@ -1702,6 +1702,7 @@ export async function createOrder(input: {
       (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD");
     try {
       let proforma: InvoiceRow | null = null;
+      let proformaPdf: Buffer | null = null;
       if (input.paymentMethod === "BANK_TRANSFER") {
         proforma = await createInvoiceRecord(sql, order, market, "PROFORMA");
       }
@@ -1710,7 +1711,7 @@ export async function createOrder(input: {
       let customerMailOrder = order;
 
       if (proforma) {
-        const invoiceText = renderInvoiceText(order, {
+        const invoiceData = {
           invoiceNo: proforma.invoice_no,
           sequenceNo: Number(proforma.sequence_no),
           variableSymbol: proforma.variable_symbol,
@@ -1720,45 +1721,8 @@ export async function createOrder(input: {
           market,
           kind: "PROFORMA",
           total: Number(proforma.amount),
-        });
-        const invoiceHtml = renderInvoiceHtml(order, {
-          invoiceNo: proforma.invoice_no,
-          sequenceNo: Number(proforma.sequence_no),
-          variableSymbol: proforma.variable_symbol,
-          issueDateIso: String(proforma.issue_date),
-          dueDateIso: String(proforma.due_date),
-          currency: marketCurrency(market),
-          market,
-          kind: "PROFORMA",
-          total: Number(proforma.amount),
-        });
-        const proformaSubject =
-          market === "HU"
-            ? `Dijbekero / proforma #${proforma.invoice_no}`
-            : `Factura proforma #${proforma.invoice_no}`;
-        const proformaBody =
-          market === "HU"
-            ? `A rendeleshez dijbekero keszult. A csatolt proforma tartalmazza a fizetendo osszeget es a valtozo szamot (${proforma.variable_symbol}).`
-            : `Pentru comanda a fost emisa factura proforma. In fisierul atasat gasiti suma de plata si numarul variabil (${proforma.variable_symbol}).`;
-        await sendEmail({
-          to: input.email,
-          subject: proformaSubject,
-          text: proformaBody,
-          html: invoiceHtml,
-          from: senderFrom,
-          attachments: [
-            {
-              filename: `${proforma.invoice_no}.html`,
-              content: invoiceHtml,
-              contentType: "text/html; charset=utf-8",
-            },
-            {
-              filename: `${proforma.invoice_no}.txt`,
-              content: invoiceText,
-              contentType: "text/plain; charset=utf-8",
-            },
-          ],
-        }).catch(() => undefined);
+        } as const;
+        proformaPdf = await renderInvoicePdf(order, invoiceData).catch(() => null);
       }
 
       const internal = internalOrderEmailForMarket(market);
@@ -1798,6 +1762,16 @@ export async function createOrder(input: {
         text: createdEmail.text,
         html: createdEmail.html,
         from: senderFrom,
+        attachments:
+          proforma && proformaPdf
+            ? [
+                {
+                  filename: `${proforma.invoice_no}.pdf`,
+                  content: proformaPdf,
+                  contentType: "application/pdf",
+                },
+              ]
+            : undefined,
       }).catch(() => undefined);
     } catch (postProcessError) {
       console.error("[createOrder] post-process warning", {
@@ -1976,7 +1950,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       if (shouldIssueFinalInvoice) {
         try {
           const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
-          const invoiceText = renderInvoiceText(refreshed, {
+          const invoiceData = {
             invoiceNo: finalInvoice.invoice_no,
             sequenceNo: Number(finalInvoice.sequence_no),
             variableSymbol: finalInvoice.variable_symbol,
@@ -1986,7 +1960,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
             market,
             kind: "FINAL",
             total: Number(finalInvoice.amount),
-          });
+          } as const;
           const invoiceHtml = renderInvoiceHtml(refreshed, {
             invoiceNo: finalInvoice.invoice_no,
             sequenceNo: Number(finalInvoice.sequence_no),
@@ -1998,6 +1972,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
             kind: "FINAL",
             total: Number(finalInvoice.amount),
           });
+          const finalPdf = await renderInvoicePdf(refreshed, invoiceData);
           await sendEmail({
             to: refreshed.email,
             subject:
@@ -2012,14 +1987,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
             from: senderFrom,
             attachments: [
               {
-                filename: `${finalInvoice.invoice_no}.html`,
-                content: invoiceHtml,
-                contentType: "text/html; charset=utf-8",
-              },
-              {
-                filename: `${finalInvoice.invoice_no}.txt`,
-                content: invoiceText,
-                contentType: "text/plain; charset=utf-8",
+                filename: `${finalInvoice.invoice_no}.pdf`,
+                content: finalPdf,
+                contentType: "application/pdf",
               },
             ],
           }).catch(() => undefined);

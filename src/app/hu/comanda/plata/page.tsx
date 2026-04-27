@@ -48,7 +48,7 @@ export default async function HuPaymentPage({
             <strong>Fizetendo osszeg:</strong> {order ? `${order.totalPrice} HUF` : "-"}
           </p>
           <p className="mt-2 text-[#1a4d47]">
-            <strong>Valtozo szam / kozlemeny:</strong> {proforma ? proforma.variable_symbol : `Rendeles ${nr}`}
+            <strong>Valtozo szam:</strong> {proforma ? proforma.variable_symbol : `Rendeles ${nr}`}
           </p>
           {proforma ? (
             <p className="mt-2 text-sm text-[#1a4d47]">
