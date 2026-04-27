@@ -15,6 +15,15 @@ function toSafe(input: unknown) {
   return String(input || "").trim();
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function marketFromHost(host: string) {
   const h = host.toLowerCase();
   return h.includes("szenzorvasarlas.hu") ? "HU" : "RO";
@@ -23,6 +32,17 @@ function marketFromHost(host: string) {
 export async function POST(request: Request) {
   try {
     const host = request.headers.get("host") || "";
+    const origin = request.headers.get("origin") || "";
+    if (origin) {
+      try {
+        const originHost = new URL(origin).host;
+        if (originHost !== host) {
+          return NextResponse.json({ ok: false, message: "Request origin not allowed." }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ ok: false, message: "Invalid request origin." }, { status: 403 });
+      }
+    }
     const market = marketFromHost(host);
     try {
       const limited = await enforceRateLimit({
@@ -84,6 +104,21 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (name.length > 120 || email.length > 160 || phone.length > 40 || orderNumber.length > 32 || message.length > 4000) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: market === "HU" ? "A megadott adatok tul hosszuak." : "Datele introduse sunt prea lungi.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const safeName = escapeHtml(name);
+    const safeEmail = escapeHtml(email);
+    const safePhone = escapeHtml(phone || "-");
+    const safeOrderNumber = escapeHtml(orderNumber || "-");
+    const safeMessage = escapeHtml(message);
 
     const recipient =
       market === "HU"
@@ -111,19 +146,31 @@ export async function POST(request: Request) {
           </div>
           <div style="padding:22px;">
             <p><strong>Web:</strong> ${site}</p>
-            <p><strong>Jméno:</strong> ${name}</p>
-            <p><strong>E-mail:</strong> ${email}</p>
-            <p><strong>Telefon:</strong> ${phone || "-"}</p>
-            <p><strong>Číslo objednávky:</strong> ${orderNumber || "-"}</p>
+            <p><strong>Jméno:</strong> ${safeName}</p>
+            <p><strong>E-mail:</strong> ${safeEmail}</p>
+            <p><strong>Telefon:</strong> ${safePhone}</p>
+            <p><strong>Číslo objednávky:</strong> ${safeOrderNumber}</p>
             <div style="margin-top:14px;padding:12px;border:1px solid #eadce4;border-radius:12px;background:#faf7fb;white-space:pre-line;">
-              ${message}
+              ${safeMessage}
             </div>
           </div>
         </div>
       </div>
     `;
 
-    await sendEmail({ to: recipient, subject, text, html, from }).catch(() => undefined);
+    const sent = await sendEmail({ to: recipient, subject, text, html, from }).then(() => true).catch(() => false);
+    if (!sent) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            market === "HU"
+              ? "Most nem sikerult elkuldeni az uzenetet. Kerlek probald ujra."
+              : "Mesajul nu a putut fi trimis momentan. Va rugam reincercati.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(

@@ -26,11 +26,21 @@ export default function GdprPage() {
       <p className="mt-2 text-[#14534d]">
         Česká maloobchodní s.r.o., Braunerova 563/7, Libeň (Praha 8), 180 00 Praha, ID 23504463.
       </p>
+      <p className="mt-2 text-[#14534d]">
+        Pentru solicitari privind datele personale (acces, stergere, opozitie, corectare), ne puteti contacta prin
+        formularul public de pe site: <strong>/kontakt</strong>.
+      </p>
       <h2 className="mt-8 text-xl font-semibold text-[#042f2c]">Date colectate</h2>
       <p className="mt-2 text-[#14534d]">
         Colectam: nume, adresa de facturare/livrare, e-mail, telefon, continutul comenzii, date despre plata
         (fara a stoca date complete de card pe serverul nostru), istoricul comunicarii si date tehnice minime
         necesare functionarii site-ului.
+      </p>
+      <h2 className="mt-8 text-xl font-semibold text-[#042f2c]">Scopurile prelucrarii</h2>
+      <p className="mt-2 text-[#14534d]">
+        Prelucram datele pentru: (1) procesarea comenzii si emiterea documentelor fiscale, (2) organizarea livrarii
+        prin curier, (3) solutionarea reclamatiilor, retururilor si rambursarilor, (4) prevenirea fraudelor si
+        securitatea platformei, (5) comunicari comerciale doar unde exista baza legala.
       </p>
       <h2 className="mt-8 text-xl font-semibold text-[#042f2c]">Temei legal</h2>
       <p className="mt-2 text-[#14534d]">
@@ -43,11 +53,19 @@ export default function GdprPage() {
         Datele pot fi partajate cu firme de curierat, procesatori de plati, furnizori IT/hosting,
         furnizori de e-mail si, cand legea o impune, autoritati publice.
       </p>
+      <p className="mt-2 text-[#14534d]">
+        Partajam doar datele strict necesare pentru executarea serviciului (ex: nume, telefon, adresa pentru livrare;
+        identificatori de plata la procesatorul de plata).
+      </p>
       <h2 className="mt-8 text-xl font-semibold text-[#042f2c]">Perioada de stocare</h2>
       <p className="mt-2 text-[#14534d]">
         Datele de comanda/facturare sunt pastrate pe durata impusa de obligatiile fiscale si contabile.
         Datele folosite pentru comunicari comerciale se pastreaza pana la retragerea consimtamantului
         sau pana la expirarea perioadelor legale aplicabile.
+      </p>
+      <p className="mt-2 text-[#14534d]">
+        Datele aferente solicitarilor de retur/reclamatie sunt pastrate pe durata necesara solutionarii si pentru
+        apararea eventualelor drepturi legale, conform termenelor aplicabile.
       </p>
       <h2 className="mt-8 text-xl font-semibold text-[#042f2c]">Transferuri internationale</h2>
       <p className="mt-2 text-[#14534d]">
@@ -58,6 +76,10 @@ export default function GdprPage() {
       <p className="mt-2 text-[#14534d]">
         Puteti solicita acces, rectificare, stergere, restrictionarea prelucrarii, portabilitatea si puteti
         depune plangere la autoritatea de supraveghere competenta.
+      </p>
+      <p className="mt-2 text-[#14534d]">
+        Pentru solicitari, va putem cere date minime de verificare a identitatii pentru a preveni accesul neautorizat
+        la date personale.
       </p>
       <h2 className="mt-8 text-xl font-semibold text-[#042f2c]">Autoritate de supraveghere</h2>
       <p className="mt-2 text-[#14534d]">

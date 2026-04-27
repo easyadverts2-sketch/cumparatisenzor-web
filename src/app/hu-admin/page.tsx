@@ -224,6 +224,8 @@ export default async function HuAdminPage({
           currency="HUF"
           detailsBasePath="/hu-admin/orders"
           deleteApiPath="/api/hu-admin/order-hard-delete"
+          statusApiPath="/api/hu-admin/status"
+          docxExportApiPath="/api/hu-admin/export/docx"
         />
       </div>
 

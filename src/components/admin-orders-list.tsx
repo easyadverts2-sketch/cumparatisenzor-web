@@ -6,23 +6,50 @@ import { formatOrderNumber } from "@/lib/order-format";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+function statusTone(status: Order["status"]) {
+  switch (status) {
+    case "ORDERED_NOT_PAID":
+      return "bg-amber-50 text-amber-800 border-amber-200";
+    case "ORDERED_PAID_NOT_SHIPPED":
+      return "bg-indigo-50 text-indigo-800 border-indigo-200";
+    case "WAITING_FOR_SHIPPING":
+    case "ORDERED_PPLRDY":
+      return "bg-sky-50 text-sky-800 border-sky-200";
+    case "SHIPPED":
+      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+    case "CANCELLED_BY_US":
+    case "CANCELLED_BY_CUSTOMER":
+    case "CANCELLED_QUANTITY":
+      return "bg-rose-50 text-rose-800 border-rose-200";
+    default:
+      return "bg-slate-50 text-slate-700 border-slate-200";
+  }
+}
+
 export function AdminOrdersList({
   orders,
   locale = "ro-RO",
   currency = "RON",
   detailsBasePath = "/admin/orders",
   deleteApiPath = "/api/admin/order-hard-delete",
+  statusApiPath = "/api/admin/status",
+  docxExportApiPath = "/api/admin/export/docx",
 }: {
   orders: Order[];
   locale?: string;
   currency?: string;
   detailsBasePath?: string;
   deleteApiPath?: string;
+  statusApiPath?: string;
+  docxExportApiPath?: string;
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [q, setQ] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
+  const [statusByOrderId, setStatusByOrderId] = useState<Record<string, string>>({});
+  const [exportBusy, setExportBusy] = useState(false);
   const [uiMessage, setUiMessage] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -44,7 +71,8 @@ export function AdminOrdersList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="rounded-xl border border-[#0d4f4a]/10 bg-[#f8fcfb] p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-[#0f766e]">Filtr stavu</span>
           <select
@@ -70,14 +98,54 @@ export function AdminOrdersList({
           />
         </label>
       </div>
+      </div>
 
       <p className="text-sm text-[#1a4d47]">
         Zobrazeno {filtered.length} z {orders.length} objednávek.
       </p>
       {uiMessage ? <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{uiMessage}</p> : null}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#0d4f4a]/10 bg-white p-3">
         <button
-          className="rounded border px-3 py-2 text-sm"
+          className="rounded-lg border border-[#0d4f4a]/25 bg-white px-3 py-2 text-sm text-[#0a2624] hover:bg-[#f0faf8] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={exportBusy || selectedOrderIds.length === 0}
+          onClick={async () => {
+            setExportBusy(true);
+            setUiMessage(null);
+            try {
+              const res = await fetch(docxExportApiPath, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ orderIds: selectedOrderIds }),
+              });
+              if (!res.ok) {
+                const data = (await res.json().catch(() => ({}))) as { message?: string };
+                setUiMessage(data.message || "DOCX export selhal.");
+                setExportBusy(false);
+                return;
+              }
+              const blob = await res.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              const cd = res.headers.get("content-disposition") || "";
+              const fileNameMatch = /filename=\"?([^\";]+)\"?/i.exec(cd);
+              const fileName = fileNameMatch?.[1] || "orders-export.docx";
+              a.href = url;
+              a.download = fileName;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(url);
+              setExportBusy(false);
+            } catch (err) {
+              setUiMessage(err instanceof Error ? err.message : "DOCX export selhal.");
+              setExportBusy(false);
+            }
+          }}
+        >
+          Export vybraných do DOCX
+        </button>
+        <button
+          className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={deleteBusy || selectedOrderIds.length === 0}
           onClick={async () => {
             setDeleteBusy(true);
@@ -113,7 +181,7 @@ export function AdminOrdersList({
 
       <div className="max-h-[65vh] overflow-auto rounded-xl border-2 border-[#0d4f4a]/10 bg-white">
         <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="sticky top-0 bg-[#e6f7f4] text-[#0a2624]">
+          <thead className="sticky top-0 z-10 bg-[#e6f7f4] text-[#0a2624] shadow-sm">
             <tr>
               <th className="px-4 py-3 font-semibold">
                 <input
@@ -161,18 +229,66 @@ export function AdminOrdersList({
                 <td className="px-4 py-3 text-[#0a2624]">
                   {o.totalPrice} {currency}
                 </td>
-                <td className="max-w-[140px] truncate px-4 py-3 text-xs text-[#1a4d47]">{o.status}</td>
+                <td className="max-w-[180px] px-4 py-3 text-xs">
+                  <span className={`inline-flex rounded-full border px-2 py-1 font-medium ${statusTone(o.status)}`}>
+                    {o.status}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="rounded border border-[#0d4f4a]/25 bg-white px-2 py-1 text-xs"
+                        value={statusByOrderId[o.id] ?? o.status}
+                        onChange={(e) =>
+                          setStatusByOrderId((prev) => ({ ...prev, [o.id]: e.target.value }))
+                        }
+                        disabled={statusBusyId === o.id}
+                      >
+                        {ORDER_STATUSES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="rounded border border-[#0f766e]/30 bg-[#f0faf8] px-2 py-1 text-xs text-[#0f766e] hover:bg-[#e6f7f4]"
+                        disabled={statusBusyId === o.id}
+                        onClick={async () => {
+                          setStatusBusyId(o.id);
+                          setUiMessage(null);
+                          try {
+                            const nextStatus = statusByOrderId[o.id] ?? o.status;
+                            const res = await fetch(statusApiPath, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ orderId: o.id, status: nextStatus }),
+                            });
+                            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+                            if (!data.ok) {
+                              setUiMessage(data.message || "Zmena statusu selhala.");
+                              setStatusBusyId(null);
+                              return;
+                            }
+                            window.location.reload();
+                          } catch (err) {
+                            setUiMessage(err instanceof Error ? err.message : "Zmena statusu selhala.");
+                            setStatusBusyId(null);
+                          }
+                        }}
+                      >
+                        Uložit status
+                      </button>
+                    </div>
                     <Link
                       href={`${detailsBasePath}/${o.orderNumber}`}
-                      className="font-medium text-[#0f766e] hover:underline"
+                      className="rounded px-1 py-1 font-medium text-[#0f766e] hover:bg-[#e6f7f4] hover:underline"
                     >
                       Detail
                     </Link>
                     <button
                       disabled={deleteBusy}
-                      className="text-xs text-red-700 underline"
+                      className="rounded px-1 py-1 text-xs text-red-700 hover:bg-red-50 hover:underline"
                       onClick={async () => {
                         setDeleteBusy(true);
                         setUiMessage(null);

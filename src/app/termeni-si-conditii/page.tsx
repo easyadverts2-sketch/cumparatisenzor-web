@@ -35,6 +35,10 @@ export default function TermeniPage() {
           Contact pentru comenzi si intrebari: prin functionalitatile site-ului si la adresa de e-mail indicata pe
           site. Limba principala a contractului la distanta este romana.
         </p>
+        <p>
+          Pentru asistenta comerciala puteti folosi pagina de contact: <strong>/kontakt</strong>. Comunicarea privind
+          returul si rambursarea se face in scris (e-mail/formular contact), pentru trasabilitate.
+        </p>
       </section>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
@@ -72,6 +76,10 @@ export default function TermeniPage() {
           transfer bancar, expedierea poate avea loc dupa confirmarea platii in contul Vanzatorului. In cazul neplatii
           in termenul comunicat, comanda poate fi anulata.
         </p>
+        <p>
+          Nu folosim costuri ascunse. Costul total (produse + transport) este afisat clar in checkout inainte de
+          plasarea comenzii.
+        </p>
       </section>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
@@ -91,10 +99,14 @@ export default function TermeniPage() {
         <p>
           Riscul privind produsul trece la Cumparator la momentul predarii coletului de catre curier.
         </p>
+        <p>
+          Politica de livrare este valabila pentru toate comenzile. Daca in campanii apar praguri de transport gratuit,
+          acestea sunt comunicate explicit in pagina de produs sau checkout.
+        </p>
       </section>
 
       <section className="mt-10 space-y-4 text-[#14534d]">
-        <h2 className="text-xl font-semibold text-[#042f2c]">7. Retragere, retur si produse desigilate</h2>
+        <h2 className="text-xl font-semibold text-[#042f2c]">7. Politica de retur si rambursare</h2>
         <p>
           Consumatorul are, in principiu, drept de retragere in 14 zile de la primirea produsului, cu exceptiile
           prevazute de legislatia aplicabila pentru produse de natura sanitara/medicala desigilate.
@@ -108,6 +120,18 @@ export default function TermeniPage() {
         <p>
           In lipsa dovezilor obiective privind defectul, produsul desigilat/utilizat nu poate fi acceptat la retur
           pentru rambursare.
+        </p>
+        <p>
+          Pentru retur, solicitarea trebuie trimisa in perioada legala, cu numarul comenzii si motivul returului.
+          Confirmam in scris pasii urmatori (adresa de retur, transport, verificare produs).
+        </p>
+        <p>
+          Daca returul este acceptat, rambursarea se face prin aceeasi metoda de plata folosita la comanda, in termenul
+          legal aplicabil dupa receptia si verificarea produsului.
+        </p>
+        <p>
+          Chiar si in situatia in care un produs nu este eligibil pentru retur, aceasta politica este afisata public si
+          transparent, pentru a permite decizia informata inainte de cumparare.
         </p>
       </section>
 
@@ -146,6 +170,10 @@ export default function TermeniPage() {
         <p>
           Ne rezervam dreptul de a actualiza acesti termeni. Versiunea aplicabila este cea publicata pe site la
           data comenzii dumneavoastra.
+        </p>
+        <p>
+          Politicile de livrare, retur si rambursare trebuie sa ramana in concordanta cu informatiile afisate in
+          checkout si in comunicarile comerciale.
         </p>
       </section>
     </main>

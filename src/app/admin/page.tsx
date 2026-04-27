@@ -237,7 +237,12 @@ export default async function AdminPage({
       </a>
 
       <div className="mt-10">
-        <AdminOrdersList orders={store.orders} deleteApiPath="/api/admin/order-hard-delete" />
+        <AdminOrdersList
+          orders={store.orders}
+          deleteApiPath="/api/admin/order-hard-delete"
+          statusApiPath="/api/admin/status"
+          docxExportApiPath="/api/admin/export/docx"
+        />
       </div>
 
       <h2 className="mt-12 text-2xl font-semibold">PPL zásilky a svozy</h2>

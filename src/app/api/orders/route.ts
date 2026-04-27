@@ -6,7 +6,9 @@ import { NextResponse } from "next/server";
 
 function parsePaymentMethod(raw: unknown): Order["paymentMethod"] {
   const s = String(raw || "");
+  if (s === "CARD_STRIPE") return "CARD_STRIPE";
   if (s === "BANK_TRANSFER") return "BANK_TRANSFER";
+  if (s === "COD") return "COD";
   return "COD";
 }
 
@@ -46,6 +48,17 @@ function formatAddress(addr: AddressPayload): string {
 export async function POST(request: Request) {
   try {
     const host = request.headers.get("host") || "";
+    const origin = request.headers.get("origin") || "";
+    if (origin) {
+      try {
+        const originHost = new URL(origin).host;
+        if (originHost !== host) {
+          return NextResponse.json({ ok: false, message: "Origine request nepermisa." }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ ok: false, message: "Origine request invalida." }, { status: 403 });
+      }
+    }
     if (host.includes("szenzorvasarlas.hu")) {
       return NextResponse.json(
         { ok: false, message: "Endpoint invalid pentru domeniul HU." },
@@ -71,8 +84,15 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const shippingCarrier = parseShippingCarrier(body.shippingCarrier) ?? "PPL";
+    const shippingCarrierParsed = parseShippingCarrier(body.shippingCarrier);
+    if (!shippingCarrierParsed) {
+      return NextResponse.json({ ok: false, message: "Transportator invalid." }, { status: 400 });
+    }
+    const shippingCarrier = shippingCarrierParsed;
     const paymentMethod = parsePaymentMethod(body.paymentMethod);
+    if (!["COD", "BANK_TRANSFER", "CARD_STRIPE"].includes(String(body.paymentMethod || ""))) {
+      return NextResponse.json({ ok: false, message: "Metoda de plata invalida." }, { status: 400 });
+    }
     if (shippingCarrier === "PPL" && paymentMethod === "COD") {
       return NextResponse.json(
         {
@@ -110,11 +130,20 @@ export async function POST(request: Request) {
     if (customerName.split(/\s+/).length < 2) {
       return NextResponse.json({ ok: false, message: "Introduceti nume si prenume valide." }, { status: 400 });
     }
+    if (customerName.length > 120) {
+      return NextResponse.json({ ok: false, message: "Numele este prea lung." }, { status: 400 });
+    }
     if (!email.includes("@")) {
       return NextResponse.json({ ok: false, message: "E-mail invalid." }, { status: 400 });
     }
+    if (email.length > 160) {
+      return NextResponse.json({ ok: false, message: "E-mail prea lung." }, { status: 400 });
+    }
     if (!/^\+?[0-9]{9,15}$/.test(phone)) {
       return NextResponse.json({ ok: false, message: "Telefon invalid." }, { status: 400 });
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+      return NextResponse.json({ ok: false, message: "Cantitate invalida." }, { status: 400 });
     }
 
     const deliveryErr = validateAddress(delivery);

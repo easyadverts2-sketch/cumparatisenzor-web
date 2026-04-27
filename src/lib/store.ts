@@ -320,6 +320,68 @@ function validateDeliveryAddressForMarket(
   return { ok: true };
 }
 
+async function consumeInventoryAtomic(
+  sql: SqlClient,
+  market: Market,
+  quantity: number
+): Promise<boolean> {
+  const key = settingKey(market, "inventory");
+  const qty = Math.max(1, Math.floor(quantity || 0));
+  if (!Number.isFinite(qty) || qty < 1) return false;
+  const updated = await sql<{ value: string }[]>`
+    update app_settings
+    set value = ((value)::int - ${qty})::text
+    where key = ${key}
+      and (value)::int >= ${qty}
+    returning value
+  `;
+  return updated.length > 0;
+}
+
+function isAllowedStatusTransition(current: OrderStatus, next: OrderStatus): boolean {
+  if (current === next) return true;
+  const cancelled = new Set<OrderStatus>([
+    "CANCELLED_BY_US",
+    "CANCELLED_BY_CUSTOMER",
+    "CANCELLED_QUANTITY",
+  ]);
+  if (cancelled.has(current)) return false;
+  const allowed: Record<OrderStatus, Set<OrderStatus>> = {
+    ORDERED_NOT_PAID: new Set(["ORDERED_PAID_NOT_SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    ORDERED_PAID_NOT_SHIPPED: new Set(["ORDERED_PPLRDY", "SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    WAITING_FOR_SHIPPING: new Set(["ORDERED_PPLRDY", "ORDERED_PAID_NOT_SHIPPED", "SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    ORDERED_PPLRDY: new Set(["SHIPPED", "CANCELLED_BY_US", "CANCELLED_BY_CUSTOMER", "CANCELLED_QUANTITY"]),
+    SHIPPED: new Set([]),
+    CANCELLED_BY_US: new Set([]),
+    CANCELLED_BY_CUSTOMER: new Set([]),
+    CANCELLED_QUANTITY: new Set([]),
+  };
+  return allowed[current]?.has(next) ?? false;
+}
+
+function validatePickupInputCommon(input: {
+  pickupDate: string;
+  fromTime: string;
+  toTime: string;
+  phone: string;
+  contactName: string;
+  email?: string;
+}): string | null {
+  if (!String(input.contactName || "").trim()) return "Chybi kontaktni osoba.";
+  if (!String(input.phone || "").replace(/\D/g, "")) return "Chybi telefon pro svoz.";
+  if (!/^\d{2}:\d{2}$/.test(String(input.fromTime || "")) || !/^\d{2}:\d{2}$/.test(String(input.toTime || ""))) {
+    return "Neplatny cas svozu.";
+  }
+  if (String(input.fromTime) >= String(input.toTime)) return "Cas od musi byt drive nez cas do.";
+  const pickupDate = String(input.pickupDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate) && !/^\d{8}$/.test(pickupDate)) return "Neplatne datum svozu.";
+  if (input.email != null && input.email.trim()) {
+    const email = input.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Neplatny e-mail pro svoz.";
+  }
+  return null;
+}
+
 function getByJsonPath(input: unknown, jsonPath: string): unknown {
   if (!jsonPath) return undefined;
   const tokenized = jsonPath.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
@@ -1517,6 +1579,12 @@ export async function createOrder(input: {
     const senderFrom = senderEmailForMarket(market);
     const sql = getSql();
     await ensureSchema(sql);
+    if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100) {
+      return {
+        ok: false,
+        message: "Neplatny pocet kusu. Zadejte prosim cele cislo od 1 do 100.",
+      };
+    }
 
     if (input.paymentMethod === "CARD_STRIPE" && !getStripe()) {
       return {
@@ -1730,11 +1798,8 @@ export async function createOrder(input: {
       }
 
       if (shouldCreateShipmentImmediately) {
-        const defaults = defaultsByMarket[market];
-        const invRows = await sql`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
-        const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
-        if (inventory >= order.quantity) {
-          await sql`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
+        const consumed = await consumeInventoryAtomic(sql, market, order.quantity);
+        if (consumed) {
           await sql`
             update orders
             set status = 'ORDERED_PPLRDY'
@@ -1824,6 +1889,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     return false;
   }
   const order = toOrder(rows[0] as unknown as Row);
+  if (!isAllowedStatusTransition(order.status, status)) {
+    return false;
+  }
   const senderFrom = senderEmailForMarket(market);
   const oldStatus = order.status;
 
@@ -1831,18 +1899,14 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
   let shouldCreateShipment = false;
 
   const updated = await sql.begin(async (tx) => {
-    const defaults = defaultsByMarket[market];
-    const invRows = await tx`select value from app_settings where key = ${settingKey(market, "inventory")} limit 1`;
-    const inventory = invRows.length === 0 ? defaults.inventory : Number(invRows[0].value);
-
     const prepaid =
       order.paymentMethod === "BANK_TRANSFER" || order.paymentMethod === "CARD_STRIPE";
     if (status === "ORDERED_PAID_NOT_SHIPPED" && prepaid && order.status === "ORDERED_NOT_PAID") {
-      if (inventory < order.quantity) {
+      const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+      if (!consumed) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
       }
-      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
       shouldIssueFinalInvoice = true;
       shouldCreateShipment = true;
     }
@@ -1869,11 +1933,11 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
         await tx`update orders set status = 'WAITING_FOR_SHIPPING' where id = ${orderId}`;
         return true;
       }
-      if (inventory < order.quantity) {
+      const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+      if (!consumed) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
       }
-      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
       shouldCreateShipment = true;
     }
 
@@ -1888,11 +1952,11 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
         return true;
       }
       if (order.status === "WAITING_FOR_SHIPPING") {
-        if (inventory < order.quantity) {
+        const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+        if (!consumed) {
           await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
           return true;
         }
-        await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
       }
       if (
         order.status === "WAITING_FOR_SHIPPING" ||
@@ -1907,11 +1971,11 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       order.paymentMethod === "COD" &&
       order.status === "WAITING_FOR_SHIPPING"
     ) {
-      if (inventory < order.quantity) {
+      const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+      if (!consumed) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
       }
-      await tx`update app_settings set value = ${String(inventory - order.quantity)} where key = ${settingKey(market, "inventory")}`;
     }
 
     await tx`update orders set status = ${status} where id = ${orderId}`;
@@ -2590,6 +2654,8 @@ export async function orderPplPickup(
     shipmentCount: 1,
     note: "",
   };
+  const commonErr = validatePickupInputCommon(payload);
+  if (commonErr) return { ok: false, message: commonErr };
   const result = await createPplPickup(market, payload);
   if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
   const rawRec = result.data.raw && typeof result.data.raw === "object" ? (result.data.raw as Record<string, unknown>) : {};
@@ -2897,6 +2963,15 @@ export async function orderDpdPickup(
 ) {
   const sql = getSql();
   await ensureSchema(sql);
+  const commonErr = validatePickupInputCommon({
+    pickupDate: input.pickupDate,
+    fromTime: input.fromTime,
+    toTime: input.toTime,
+    contactName: input.contactName,
+    phone: input.phone,
+    email: input.contactEmail,
+  });
+  if (commonErr) return { ok: false, message: commonErr };
   const result = await createDpdPickup(market, input);
   if (!result.ok) return { ok: false, message: shipmentErrorStatus(result.reason, result.raw) };
   await sql`

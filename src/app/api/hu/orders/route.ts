@@ -6,7 +6,9 @@ import { NextResponse } from "next/server";
 
 function parsePaymentMethod(raw: unknown): Order["paymentMethod"] {
   const s = String(raw || "");
+  if (s === "CARD_STRIPE") return "CARD_STRIPE";
   if (s === "BANK_TRANSFER") return "BANK_TRANSFER";
+  if (s === "COD") return "COD";
   return "COD";
 }
 
@@ -46,6 +48,17 @@ function formatAddress(addr: AddressPayload): string {
 export async function POST(request: Request) {
   try {
     const host = request.headers.get("host") || "";
+    const origin = request.headers.get("origin") || "";
+    if (origin) {
+      try {
+        const originHost = new URL(origin).host;
+        if (originHost !== host) {
+          return NextResponse.json({ ok: false, message: "Nem engedelyezett keresi eredet." }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ ok: false, message: "Ervenytelen keresi eredet." }, { status: 403 });
+      }
+    }
     if (!host.includes("szenzorvasarlas.hu")) {
       return NextResponse.json(
         { ok: false, message: "Ervenytelen HU vegpont ehhez a domainhez." },
@@ -71,7 +84,14 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const shippingCarrier = parseShippingCarrier(body.shippingCarrier) ?? "PPL";
+    const shippingCarrierParsed = parseShippingCarrier(body.shippingCarrier);
+    if (!shippingCarrierParsed) {
+      return NextResponse.json({ ok: false, message: "Ervenytelen szallitasi mod." }, { status: 400 });
+    }
+    const shippingCarrier = shippingCarrierParsed;
+    if (!["COD", "BANK_TRANSFER", "CARD_STRIPE"].includes(String(body.paymentMethod || ""))) {
+      return NextResponse.json({ ok: false, message: "Ervenytelen fizetesi mod." }, { status: 400 });
+    }
     const customerName = toSafe(body.customerName);
     const email = toSafe(body.email);
     const phone = toSafe(body.phone).replace(/\s+/g, "");
@@ -99,11 +119,20 @@ export async function POST(request: Request) {
     if (customerName.split(/\s+/).length < 2) {
       return NextResponse.json({ ok: false, message: "Add meg a teljes nevet." }, { status: 400 });
     }
+    if (customerName.length > 120) {
+      return NextResponse.json({ ok: false, message: "A nev tul hosszu." }, { status: 400 });
+    }
     if (!email.includes("@")) {
       return NextResponse.json({ ok: false, message: "Ervenytelen e-mail cim." }, { status: 400 });
     }
+    if (email.length > 160) {
+      return NextResponse.json({ ok: false, message: "Az e-mail cim tul hosszu." }, { status: 400 });
+    }
     if (!/^\+?[0-9]{9,15}$/.test(phone)) {
       return NextResponse.json({ ok: false, message: "Ervenytelen telefonszam." }, { status: 400 });
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+      return NextResponse.json({ ok: false, message: "Ervenytelen darabszam." }, { status: 400 });
     }
 
     const deliveryErr = validateAddress(delivery);
