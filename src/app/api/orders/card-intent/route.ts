@@ -3,10 +3,14 @@ import { getOrderById } from "@/lib/store";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
+  let safeOrderId = "";
+  let safeMarket: "RO" | "HU" = "RO";
   try {
     const body = await request.json();
     const orderId = String(body.orderId || "");
     const market = String(body.market || "RO").toUpperCase() === "HU" ? "HU" : "RO";
+    safeOrderId = orderId;
+    safeMarket = market;
     if (!orderId) {
       return NextResponse.json({ ok: false, message: "Lipseste orderId." }, { status: 400 });
     }
@@ -25,7 +29,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const intent = await createStripePaymentIntent(order);
+    const isPublicTestOrder = String(order.additionalNotes || "").toUpperCase().includes("TEST_PRODUCT_CARD_");
+    let intent;
+    try {
+      intent = await createStripePaymentIntent(order);
+    } catch (error) {
+      const detail = String(error instanceof Error ? error.message : error).slice(0, 500);
+      console.error("[card-intent:create]", {
+        market,
+        orderId,
+        orderNumber: order.orderNumber,
+        detail,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "Plata cu cardul nu poate fi initializata momentan.",
+          ...(isPublicTestOrder ? { debug: detail } : {}),
+        },
+        { status: 500 }
+      );
+    }
     if (!intent) {
       return NextResponse.json({ ok: false, message: "Plata card nu este configurata." }, { status: 503 });
     }
@@ -39,7 +63,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error).slice(0, 500);
-    console.error("[card-intent]", detail);
+    console.error("[card-intent]", { market: safeMarket, orderId: safeOrderId, detail });
     return NextResponse.json(
       { ok: false, message: "Plata cu cardul nu poate fi initializata momentan." },
       { status: 500 }
