@@ -12,7 +12,7 @@ export function getStripe(): Stripe | null {
 function marketMinimumTotal(order: Order): number {
   // Keep a safety buffer because Stripe also enforces minimums after
   // conversion to the account settlement currency (CZK in this setup).
-  return order.market === "HU" ? 700 : 4;
+  return order.market === "HU" ? 250 : 4;
 }
 
 export async function createStripePaymentIntent(
@@ -31,9 +31,11 @@ export async function createStripePaymentIntent(
         : `Stripe minimum charge for RON is ${minimum}.`
     );
   }
+  // This Stripe account expects HUF in minor units (fillér-like cents),
+  // i.e. 250 HUF must be sent as 25000.
   const amount =
     order.market === "HU"
-      ? Math.round(Number(order.totalPrice)) // HUF is zero-decimal currency in Stripe
+      ? Math.round(Number(order.totalPrice) * 100)
       : Math.round(Number(order.totalPrice) * 100); // RON uses cents (bani)
   const currency = order.market === "HU" ? "huf" : "ron";
   let intent: Stripe.PaymentIntent;

@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         additionalNotes: "TEST_PRODUCT_CARD_HU",
       },
       "HU",
-      { fixedItemPrice: 15, fixedShippingPrice: 685 }
+      { fixedItemPrice: 15, fixedShippingPrice: 235 }
     );
 
     if (result.ok && result.order) {

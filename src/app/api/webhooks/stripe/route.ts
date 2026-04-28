@@ -14,7 +14,7 @@ function expectedStripeCurrency(market: "RO" | "HU"): "ron" | "huf" {
 
 function expectedStripeAmount(order: { market?: "RO" | "HU"; totalPrice: number }): number {
   return order.market === "HU"
-    ? Math.round(Number(order.totalPrice))
+    ? Math.round(Number(order.totalPrice) * 100)
     : Math.round(Number(order.totalPrice) * 100);
 }
 
