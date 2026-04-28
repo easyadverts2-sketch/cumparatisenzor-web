@@ -74,6 +74,7 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith("/_next") ||
       pathname.startsWith("/favicon") ||
       pathname.startsWith("/icon") ||
+      pathname.startsWith("/app-assets") ||
       pathname.startsWith("/sensor-motif") ||
       pathname.startsWith("/brand-logo") ||
       pathname.startsWith("/libre-");
