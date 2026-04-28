@@ -34,11 +34,10 @@ const whatsapp = "+420 777 577 352";
 
 export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
   ro: {
-    pageTitle: "Aplicatii pentru FreeStyle Libre 2 Plus",
-    topDisclaimer:
-      "Pe aceasta pagina gasiti o scurta prezentare a aplicatiilor oficiale Abbott si a unor aplicatii terte folosite impreuna cu senzorii FreeStyle Libre 2 Plus. Compatibilitatea si disponibilitatea pot varia in functie de regiune, versiunea aplicatiei, telefon si senzor.",
+    pageTitle: "Aplicații pentru FreeStyle Libre 2 Plus",
+    topDisclaimer: "",
     intro:
-      "Am pregatit aceasta pagina ca un punct de orientare pentru clientii care cauta aplicatii compatibile sau complementare pentru FreeStyle Libre 2 Plus. Mai intai gasiti aplicatiile oficiale Abbott, apoi cateva solutii terte folosite frecvent in practica.",
+      "Pe această pagină găsiți o selecție de aplicații și servicii care pot fi folosite împreună cu senzorii FreeStyle Libre 2 Plus. Mai jos prezentăm mai întâi aplicațiile oficiale Abbott, urmate de câteva soluții terțe utilizate frecvent de utilizatori.",
     officialTitle: "Aplicatii oficiale Abbott",
     thirdPartyTitle: "Aplicatii terte",
     officialApps: [
@@ -200,10 +199,9 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
   },
   hu: {
     pageTitle: "Alkalmazások FreeStyle Libre 2 Plus szenzorokhoz",
-    topDisclaimer:
-      "Rovid, gyakorlati osszefoglalo a FreeStyle Libre 2 Plus szenzorral hasznalt alkalmazasokrol. A kompatibilitas es az elerhetoseg regio, alkalmazasverzio, telefon es szenzor szerint elterhet.",
+    topDisclaimer: "",
     intro:
-      "Ezt az oldalt azoknak a vasarloknak keszitettuk, akik kompatibilis vagy kiegeszito alkalmazasokat keresnek. Eloszor az Abbott hivatalos alkalmazasait mutatjuk be, majd nehany gyakran hasznalt kulso megoldast.",
+      "Ezen az oldalon olyan alkalmazásokat és szolgáltatásokat gyűjtöttünk össze, amelyeket a FreeStyle Libre 2 Plus szenzorokkal lehet használni. Az alábbiakban először az Abbott hivatalos alkalmazásai szerepelnek, ezután pedig néhány gyakran használt külső megoldás következik.",
     officialTitle: "Hivatalos Abbott alkalmazások",
     thirdPartyTitle: "Harmadik féltől származó alkalmazások",
     officialApps: [

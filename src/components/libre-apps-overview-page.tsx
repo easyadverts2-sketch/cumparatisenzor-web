@@ -104,7 +104,7 @@ export function LibreAppsOverviewPage({ locale }: { locale: AppsLocale }) {
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
       <section className="rounded-3xl border border-[#0d4f4a]/10 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm leading-relaxed text-[#6d1c3f]">{c.topDisclaimer}</p>
+        {c.topDisclaimer ? <p className="text-sm leading-relaxed text-[#6d1c3f]">{c.topDisclaimer}</p> : null}
         <h1 className="text-3xl font-bold text-[#042f2c]">{c.pageTitle}</h1>
         <p className="mt-3 max-w-4xl leading-relaxed text-[#14534d]">{c.intro}</p>
       </section>
