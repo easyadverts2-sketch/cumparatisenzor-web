@@ -84,7 +84,7 @@ function Card({
               alt={app.screenshotAlt || app.title}
               width={1200}
               height={675}
-              className="aspect-[16/9] w-full object-cover"
+              className={`aspect-[16/9] w-full ${app.screenshotFit === "contain" ? "object-contain bg-white p-2" : "object-cover"}`}
             />
           </div>
         ) : (

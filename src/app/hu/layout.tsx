@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { HeaderNavHu } from "@/components/header-nav-hu";
 
 function FacebookIcon({ className }: { className?: string }) {
   return (
@@ -54,21 +55,7 @@ export default function HuLayout({ children }: { children: ReactNode }) {
             <Image src="/brand-logo.png" alt="Szenzorvasarlas.hu logo" width={34} height={34} className="h-[34px] w-[34px] rounded-full bg-white/90 p-0.5" />
             <span>Szenzorvasarlas.hu</span>
           </Link>
-          <nav className="flex flex-1 flex-wrap gap-2 text-[15px] font-semibold lg:justify-center">
-            {[
-              ["/hu/rolunk", "Rolunk"],
-              ["/hu/libre-2-plus-alkalmazasok", "Alkalmazasok"],
-              ["/hu/comanda", "Rendeles"],
-            ].map(([href, label]) => (
-              <Link
-                key={href}
-                href={href}
-                className="rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-white no-underline shadow-sm backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-white/40 hover:bg-white/20"
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
+          <HeaderNavHu />
           <div className="hidden flex-col items-end gap-1 border-l border-white/30 pl-4 text-xs lg:flex">
             <a href="mailto:info@szenzorvasarlas.hu" className="font-semibold text-white no-underline">
               info@szenzorvasarlas.hu

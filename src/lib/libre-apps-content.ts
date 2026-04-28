@@ -13,6 +13,7 @@ export type AppsCard = {
   availabilityNote?: string;
   screenshotSrc?: string;
   screenshotAlt?: string;
+  screenshotFit?: "cover" | "contain";
 };
 
 export type AppsPageContent = {
@@ -61,8 +62,9 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Abbott indica faptul ca aplicatia functioneaza doar pe anumite dispozitive si sisteme de operare compatibile.",
         availabilityNote: `Disponibilitatea exacta pentru Romania nu am reusit sa o verificam in mod oficial. Daca aveti experienta directa, ne puteti scrie la ${roEmail}.`,
-        screenshotSrc: "/app-assets/libre-app-usage.webp",
-        screenshotAlt: "Captura de ecran din utilizarea aplicatiei Libre",
+        screenshotSrc: "/app-assets/librelink-home.webp",
+        screenshotAlt: "Ecran principal aplicatie Libre",
+        screenshotFit: "contain",
       },
       {
         name: "LibreLinkUp",
@@ -84,8 +86,9 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Abbott mentioneaza ca aplicatia poate urmari mai multe persoane dintr-un singur cont.",
         availabilityNote: `Disponibilitatea exacta pentru Romania nu am reusit sa o verificam in mod oficial. Daca aveti experienta directa, ne puteti scrie la ${roEmail}.`,
-        screenshotSrc: "/app-assets/librelinkup-hero.png",
-        screenshotAlt: "Captura de ecran LibreLinkUp",
+        screenshotSrc: "/app-assets/librelinkup-notifications.webp",
+        screenshotAlt: "Ecran notificari LibreLinkUp",
+        screenshotFit: "contain",
       },
       {
         name: "LibreView",
@@ -149,7 +152,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
           "pentru Libre 2 Plus este potrivit mai ales in scenariile UE",
         ],
         note: "Este un proiect comunitar activ actualizat frecvent.",
-        screenshotSrc: "/app-assets/xdrip-screenshot.png",
+        screenshotSrc: "/app-assets/xdrip-wide.png",
         screenshotAlt: "Captura de ecran xDrip+",
       },
       {
@@ -225,8 +228,9 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Az Abbott kulon jelzi, hogy az alkalmazas csak bizonyos kompatibilis keszulekeken es operacios rendszereken mukodik.",
         availabilityNote: `A pontos magyarorszagi elerhetoseget hivatalos forrasbol nem tudtuk egyertelmuen megerositeni. Ha van kozvetlen tapasztalata, irjon nekunk a ${huEmail} cimre.`,
-        screenshotSrc: "/app-assets/libre-app-usage.webp",
-        screenshotAlt: "Libre alkalmazas hasznalati kepernyokep",
+        screenshotSrc: "/app-assets/librelink-home.webp",
+        screenshotAlt: "Libre alkalmazas fo kepernyo",
+        screenshotFit: "contain",
       },
       {
         name: "LibreLinkUp",
@@ -248,8 +252,9 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Az Abbott szerint az alkalmazas egy fiokbol tobb szemely koveteset is lehetove teheti.",
         availabilityNote: `A pontos magyarorszagi elerhetoseget hivatalos forrasbol nem tudtuk egyertelmuen megerositeni. Ha van kozvetlen tapasztalata, irjon nekunk a ${huEmail} cimre.`,
-        screenshotSrc: "/app-assets/librelinkup-hero.png",
-        screenshotAlt: "LibreLinkUp kepernyokep",
+        screenshotSrc: "/app-assets/librelinkup-notifications.webp",
+        screenshotAlt: "LibreLinkUp ertesitesi kepernyo",
+        screenshotFit: "contain",
       },
       {
         name: "LibreView",
