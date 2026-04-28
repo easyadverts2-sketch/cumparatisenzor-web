@@ -78,13 +78,15 @@ function Card({
 
       <div className="mt-4 mt-auto">
         {app.screenshotSrc ? (
-          <Image
-            src={app.screenshotSrc}
-            alt={app.screenshotAlt || app.title}
-            width={900}
-            height={520}
-            className="h-44 w-full rounded-2xl border border-[#0d4f4a]/10 bg-[#fbfdfd] object-contain p-2"
-          />
+          <div className="overflow-hidden rounded-2xl border border-[#0d4f4a]/10 bg-[#f3f8f8]">
+            <Image
+              src={app.screenshotSrc}
+              alt={app.screenshotAlt || app.title}
+              width={1200}
+              height={675}
+              className="aspect-[16/9] w-full object-cover"
+            />
+          </div>
         ) : (
           <DevicePlaceholder />
         )}
@@ -101,13 +103,10 @@ export function LibreAppsOverviewPage({ locale }: { locale: AppsLocale }) {
       : { advantages: "Avantaje", drawbacks: "Limitari", note: "Nota" };
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
-      <div className="rounded-2xl border border-[#8f2c53]/20 bg-[#fff8fb] p-5 text-sm text-[#6d1c3f]">
-        {c.topDisclaimer}
-      </div>
-
-      <section className="mt-6 rounded-3xl border border-[#0d4f4a]/10 bg-white p-6 shadow-sm sm:p-8">
+      <section className="rounded-3xl border border-[#0d4f4a]/10 bg-white p-6 shadow-sm sm:p-8">
+        <p className="text-sm leading-relaxed text-[#6d1c3f]">{c.topDisclaimer}</p>
         <h1 className="text-3xl font-bold text-[#042f2c]">{c.pageTitle}</h1>
-        <p className="mt-3 max-w-4xl text-[#14534d]">{c.intro}</p>
+        <p className="mt-3 max-w-4xl leading-relaxed text-[#14534d]">{c.intro}</p>
       </section>
 
       <section className="mt-10">

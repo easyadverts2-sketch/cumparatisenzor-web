@@ -85,7 +85,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Abbott mentioneaza ca aplicatia poate urmari mai multe persoane dintr-un singur cont.",
         availabilityNote: `Disponibilitatea exacta pentru Romania nu am reusit sa o verificam in mod oficial. Daca aveti experienta directa, ne puteti scrie la ${roEmail}.`,
-        screenshotSrc: "/app-assets/librelinkup-screenshot.png",
+        screenshotSrc: "/app-assets/librelinkup-hero.png",
         screenshotAlt: "Captura de ecran LibreLinkUp",
       },
       {
@@ -108,7 +108,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "LibreView este prezentat de Abbott ca sistem cloud de gestionare a datelor pentru utilizatori si profesionisti din domeniul sanatatii.",
         availabilityNote: `Disponibilitatea exacta pentru Romania nu am reusit sa o verificam in mod oficial. Daca aveti experienta directa, ne puteti scrie la ${roEmail}.`,
-        screenshotSrc: "/app-assets/libreview-screenshot.png",
+        screenshotSrc: "/app-assets/libreview-reports.png",
         screenshotAlt: "Captura de ecran LibreView",
       },
     ],
@@ -201,9 +201,9 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
   hu: {
     pageTitle: "Alkalmazások FreeStyle Libre 2 Plus szenzorokhoz",
     topDisclaimer:
-      "Ezen az oldalon rovid attekintest talal az Abbott hivatalos alkalmazasairol, valamint nehany harmadik feltol szarmazo alkalmazasrol, amelyeket FreeStyle Libre 2 Plus szenzorokkal hasznalnak. A kompatibilitas es az elerhetoseg regio, alkalmazasverzio, telefon es szenzor szerint elterhet.",
+      "Rovid, gyakorlati osszefoglalo a FreeStyle Libre 2 Plus szenzorral hasznalt alkalmazasokrol. A kompatibilitas es az elerhetoseg regio, alkalmazasverzio, telefon es szenzor szerint elterhet.",
     intro:
-      "Ezt az oldalt tajekozodasi pontkent keszitettuk azoknak a vasarloknak, akik kompatibilis vagy kiegeszito alkalmazasokat keresnek a FreeStyle Libre 2 Plus szenzorhoz. Eloszor az Abbott hivatalos alkalmazasai szerepelnek, utana nehany gyakran hasznalt kulso megoldas.",
+      "Ezt az oldalt azoknak a vasarloknak keszitettuk, akik kompatibilis vagy kiegeszito alkalmazasokat keresnek. Eloszor az Abbott hivatalos alkalmazasait mutatjuk be, majd nehany gyakran hasznalt kulso megoldast.",
     officialTitle: "Hivatalos Abbott alkalmazások",
     thirdPartyTitle: "Harmadik féltől származó alkalmazások",
     officialApps: [
@@ -250,7 +250,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Az Abbott szerint az alkalmazas egy fiokbol tobb szemely koveteset is lehetove teheti.",
         availabilityNote: `A pontos magyarorszagi elerhetoseget hivatalos forrasbol nem tudtuk egyertelmuen megerositeni. Ha van kozvetlen tapasztalata, irjon nekunk a ${huEmail} cimre.`,
-        screenshotSrc: "/app-assets/librelinkup-screenshot.png",
+        screenshotSrc: "/app-assets/librelinkup-hero.png",
         screenshotAlt: "LibreLinkUp kepernyokep",
       },
       {
@@ -273,7 +273,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         note:
           "Az Abbott a LibreView-t felhos adatkezelo rendszerkent mutatja be felhasznalok es egeszsegugyi szakemberek szamara.",
         availabilityNote: `A pontos magyarorszagi elerhetoseget hivatalos forrasbol nem tudtuk egyertelmuen megerositeni. Ha van kozvetlen tapasztalata, irjon nekunk a ${huEmail} cimre.`,
-        screenshotSrc: "/app-assets/libreview-screenshot.png",
+        screenshotSrc: "/app-assets/libreview-reports.png",
         screenshotAlt: "LibreView kepernyokep",
       },
     ],
@@ -312,7 +312,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         ],
         drawbacks: ["bonyolultabb beallitas", "Libre 2 Plus eseten foleg EU-s hasznalati forgatokonyvekhez ajanlott"],
         note: "Aktivan karbantartott kozossegi projekt, gyakori frissitesekkel.",
-        screenshotSrc: "/app-assets/xdrip-screenshot.png",
+        screenshotSrc: "/app-assets/xdrip-wide.png",
         screenshotAlt: "xDrip+ kepernyokep",
       },
       {
@@ -352,7 +352,7 @@ export const libreAppsContent: Record<AppsLocale, AppsPageContent> = {
         ],
         note:
           "Az ertekeket okosoran es Android Auto feluleten is meg tudja jeleniteni.",
-        screenshotSrc: "/app-assets/gdh-screenshot.png",
+        screenshotSrc: "/app-assets/gdh-tablet.png",
         screenshotAlt: "GlucoDataHandler kepernyokep",
       },
     ],
