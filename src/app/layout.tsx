@@ -3,6 +3,7 @@ import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
+import Script from "next/script";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { HeaderContactInline } from "@/components/header-contact-inline";
@@ -73,6 +74,23 @@ export default function RootLayout({
     <html lang={isHu ? "hu" : "ro"}>
       <body className={inter.className}>
         <GoogleAnalytics measurementId={gaId} />
+        {!isHu ? (
+          <>
+            <Script
+              id="google-ads-tag-src-ro"
+              src="https://www.googletagmanager.com/gtag/js?id=AW-18125938204"
+              strategy="afterInteractive"
+            />
+            <Script id="google-ads-tag-init-ro" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', 'AW-18125938204');
+              `}
+            </Script>
+          </>
+        ) : null}
         {!isHu ? (
           <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
             <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
