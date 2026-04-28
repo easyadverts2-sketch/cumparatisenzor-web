@@ -29,7 +29,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const isPublicTestOrder = String(order.additionalNotes || "").toUpperCase().includes("TEST_PRODUCT_CARD_");
     let intent;
     try {
       intent = await createStripePaymentIntent(order);
@@ -45,7 +44,6 @@ export async function POST(request: Request) {
         {
           ok: false,
           message: "Plata cu cardul nu poate fi initializata momentan.",
-          ...(isPublicTestOrder ? { debug: detail } : {}),
         },
         { status: 500 }
       );

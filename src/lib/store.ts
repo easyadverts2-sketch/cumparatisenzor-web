@@ -52,7 +52,7 @@ const defaultsByMarket: Record<Market, { inventory: number; sku: string; price: 
   RO: {
     inventory: 98,
     sku: "5021791006694",
-    price: 350,
+    price: 329.9,
     shipping: 40,
   },
   HU: {
@@ -1128,6 +1128,13 @@ async function ensureSchema(sql: SqlClient) {
       ('hu_price', ${String(defaultsByMarket.HU.price)}),
       ('hu_shipping', ${String(defaultsByMarket.HU.shipping)})
     on conflict (key) do nothing
+  `;
+  // One-time price update requested for RO market.
+  // Keep manual admin overrides intact by only migrating previous default value.
+  await sql`
+    update app_settings
+    set value = '329.9'
+    where key = 'price' and value in ('350', '350.0', '350.00')
   `;
 
   await migrateOrderNumber(sql);

@@ -8,7 +8,7 @@ import { getPublicSiteUrl } from "@/lib/site-url";
 export const metadata: Metadata = {
   title: "Comanda online",
   description:
-    "Comanda senzor FreeStyle Libre 2 Plus: pret 350 RON, livrare in Romania, plata ramburs, transfer sau card.",
+    "Comanda senzor FreeStyle Libre 2 Plus: pret 329.9 RON, livrare in Romania, plata ramburs, transfer sau card.",
   alternates: { canonical: "/comanda" },
   openGraph: {
     url: `${getPublicSiteUrl()}/comanda`,
@@ -59,7 +59,7 @@ export default function ComandaPage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">Comanda FreeStyle Libre 2 Plus</h1>
         <p className="mt-2 max-w-2xl text-[#1a4d47]">
-          Pret: <strong className="text-[#0a2624]">350 RON</strong> / pachet · SKU{" "}
+          Pret: <strong className="text-[#0a2624]">329.9 RON</strong> / pachet · SKU{" "}
           <strong className="text-[#0a2624]">5021791006694</strong> · Livrare PPL/DPD{" "}
           <strong className="text-[#0a2624]">40 RON</strong> (gratuita de la 5 bucati) · Fineship{" "}
           <strong className="text-[#0a2624]">200 RON</strong> (de la 6 bucati).

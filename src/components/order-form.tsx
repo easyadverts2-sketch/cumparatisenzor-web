@@ -30,7 +30,7 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
 
 export function OrderForm() {
   const PRODUCT_NAME = "FreeStyle Libre 2 Plus";
-  const UNIT_PRICE = 350;
+  const UNIT_PRICE = 329.9;
   const STANDARD_SHIPPING = 40;
   const FINESHIP_SHIPPING = 200;
 
