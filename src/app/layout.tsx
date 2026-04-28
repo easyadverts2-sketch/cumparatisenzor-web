@@ -4,6 +4,7 @@ import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { HeaderContactInline } from "@/components/header-contact-inline";
 import { HeaderNav } from "@/components/header-nav";
 import { SiteContactBar } from "@/components/site-contact-bar";
@@ -64,7 +65,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "G-8BSHQKLV03";
+  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
   const siteVariant = headers().get("x-site-variant") || "ro";
   const isHu = siteVariant === "hu";
 
@@ -88,6 +89,7 @@ export default function RootLayout({
           </header>
         ) : null}
         {children}
+        <CookieConsentBanner locale={isHu ? "hu" : "ro"} />
         {!isHu ? (
           <>
             <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">

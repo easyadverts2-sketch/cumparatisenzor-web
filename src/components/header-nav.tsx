@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/despre-libre", label: "Despre Libre 2 Plus" },
   { href: "/despre-noi", label: "Despre noi" },
+  { href: "/ro/aplicatii-libre-2-plus", label: "Aplicatii" },
   { href: "/instalare-librelink", label: "Instalare app" },
   { href: "/comanda", label: "Comanda" },
 ] as const;

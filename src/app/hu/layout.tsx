@@ -57,9 +57,8 @@ export default function HuLayout({ children }: { children: ReactNode }) {
           <nav className="flex flex-1 flex-wrap gap-2 text-[15px] font-semibold lg:justify-center">
             {[
               ["/hu/rolunk", "Rolunk"],
+              ["/hu/libre-2-plus-alkalmazasok", "Alkalmazasok"],
               ["/hu/comanda", "Rendeles"],
-              ["/hu/aszf", "ASZF"],
-              ["/hu/adatkezeles", "Adatkezeles"],
             ].map(([href, label]) => (
               <Link
                 key={href}

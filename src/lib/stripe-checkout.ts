@@ -12,7 +12,7 @@ export function getStripe(): Stripe | null {
 function marketMinimumTotal(order: Order): number {
   // Keep a safety buffer because Stripe also enforces minimums after
   // conversion to the account settlement currency (CZK in this setup).
-  return order.market === "HU" ? 300 : 4;
+  return order.market === "HU" ? 500 : 4;
 }
 
 export async function createStripePaymentIntent(
