@@ -75,20 +75,7 @@ export function CookieConsentBanner({ locale }: Props) {
     };
   }, [locale]);
 
-  if (!visible) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setVisible(true);
-          setCustomizing(true);
-        }}
-        className="fixed bottom-4 left-4 z-40 rounded-full border border-[#0d4f4a]/20 bg-white px-3 py-2 text-xs font-semibold text-[#0a2624] shadow-md hover:bg-[#f0faf8]"
-      >
-        {t.manage}
-      </button>
-    );
-  }
+  if (!visible) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#0d4f4a]/15 bg-white/98 p-4 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] backdrop-blur">

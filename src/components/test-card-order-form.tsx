@@ -39,7 +39,7 @@ export function TestCardOrderForm({ market }: Props) {
     return market === "HU"
       ? {
           title: "Testovaci produkt - pouze platba kartou",
-          subtitle: "Cena produktu: 15 HUF (test transakce Stripe: 500 HUF).",
+          subtitle: "Cena produktu: 15 HUF (test transakce Stripe: 700 HUF).",
           submit: "Vytvorit test objednavku",
           cardOnly: "Pouze karta (Stripe)",
           name: "Jmeno a prijmeni",
