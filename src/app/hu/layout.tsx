@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import Script from "next/script";
 import { HeaderNavHu } from "@/components/header-nav-hu";
 
 function FacebookIcon({ className }: { className?: string }) {
@@ -49,6 +50,19 @@ export const metadata: Metadata = {
 export default function HuLayout({ children }: { children: ReactNode }) {
   return (
     <>
+      <Script
+        id="google-ads-tag-src-hu"
+        src="https://www.googletagmanager.com/gtag/js?id=AW-18125938204"
+        strategy="afterInteractive"
+      />
+      <Script id="google-ads-tag-init-hu" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'AW-18125938204');
+        `}
+      </Script>
       <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
           <Link href="/hu" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-white no-underline">
