@@ -977,11 +977,48 @@ export async function createDpdPickup(
   });
   if (!res.ok) return res;
   const raw = res.data as Record<string, unknown>;
-  const pickupId = String(raw.pickupId || raw.id || raw.orderId || "").trim();
-  if (!pickupId) return { ok: false, reason: "dpd_pickup_missing_id", raw: sanitizeBodySafe(raw) };
+  const pickupIdCandidate = collectPathCandidates(
+    raw,
+    (value, path) => {
+      const p = path.toLowerCase();
+      if (!/^[a-z0-9-]{4,}$/i.test(value)) return false;
+      // Prefer explicit pickup id fields in any wrapper shape.
+      // DPD docs for cancel endpoint reference `/pickup/cancel/{id}` where
+      // `{id}` is the identifier returned by pickup creation.
+      const looksLikeIdField =
+        p.endsWith(".pickupid") ||
+        p.endsWith(".pickup_id") ||
+        p.endsWith(".id");
+      if (!looksLikeIdField) return false;
+      // Avoid unrelated ids from headers/diagnostics blocks if present.
+      if (p.includes("transaction") || p.includes("correlation") || p.includes("customerid")) return false;
+      if (p.includes("order")) return false;
+      return true;
+    }
+  )[0];
+  const pickupId = String(pickupIdCandidate?.value || raw.pickupId || raw.id || "").trim();
+  if (!pickupId) {
+    return {
+      ok: false,
+      reason: "dpd_pickup_missing_id",
+      raw: sanitizeBodySafe({
+        response: raw,
+        availableTopLevelKeys: Object.keys(raw || {}),
+      }),
+    };
+  }
+  const pickupDateCandidate = collectPathCandidates(
+    raw,
+    (value, path) => /pickupdate$/i.test(path) && /^\d{8}$/.test(value)
+  )[0];
   return {
     ok: true,
-    data: { pickupId, pickupDate: String(raw.pickupDate || body.pickupOrder.pickupDate || "") || null, raw: sanitizeBodySafe(raw), request: sanitizeBodySafe(body) },
+    data: {
+      pickupId,
+      pickupDate: String(pickupDateCandidate?.value || raw.pickupDate || body.pickupOrder.pickupDate || "") || null,
+      raw: sanitizeBodySafe(raw),
+      request: sanitizeBodySafe(body),
+    },
   };
 }
 
