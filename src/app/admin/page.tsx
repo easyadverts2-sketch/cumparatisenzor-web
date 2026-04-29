@@ -124,6 +124,10 @@ async function deleteDpdShipmentAction(formData: FormData) {
 
 async function orderDpdPickupAction(formData: FormData) {
   "use server";
+  const shipmentIds = String(formData.get("shipmentIds") || "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => /^\d+$/.test(v));
   const result = await orderDpdPickup("RO", {
     pickupDate: String(formData.get("pickupDate") || "").trim(),
     fromTime: String(formData.get("fromTime") || "").trim(),
@@ -134,6 +138,7 @@ async function orderDpdPickupAction(formData: FormData) {
     contactEmail: String(formData.get("contactEmail") || "").trim(),
     parcelCount: Number(formData.get("parcelCount") || 1),
     totalWeight: Number(formData.get("totalWeight") || 1),
+    shipmentIds,
   });
   revalidatePath("/admin");
   redirect(`/admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
@@ -361,6 +366,14 @@ export default async function AdminPage({
         <label className="min-w-[260px] flex-1 text-sm">
           <span className="mb-1 block text-[#1a4d47]">Poznámka pro řidiče</span>
           <input name="note" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Volitelně" />
+        </label>
+        <label className="min-w-[260px] flex-1 text-sm">
+          <span className="mb-1 block text-[#1a4d47]">Shipment IDs (volitelně)</span>
+          <input
+            name="shipmentIds"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="napr. 58259823,58259824"
+          />
         </label>
         <button className="rounded-lg bg-[#6f2147] px-4 py-2 text-white">Objednat DPD svoz</button>
       </form>

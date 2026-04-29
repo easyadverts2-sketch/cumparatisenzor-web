@@ -2919,6 +2919,7 @@ export async function orderDpdPickup(
     contactEmail?: string;
     parcelCount: number;
     totalWeight: number;
+    shipmentIds?: Array<string | number>;
   }
 ) {
   const sql = getSql();
@@ -2971,7 +2972,9 @@ export async function cancelDpdPickupOrder(pickupId: string, market: Market = "R
   const sql = getSql();
   await ensureSchema(sql);
   const cleanId = String(pickupId || "").trim();
-  if (!cleanId) return { ok: false, message: "Chybi pickupId" };
+  if (!cleanId) {
+    return { ok: false, message: "Cannot cancel pickup remotely because no DPD pickup id is stored." };
+  }
   const res = await cancelDpdPickup(cleanId);
   if (!res.ok) {
     return { ok: false, message: shipmentErrorStatus(res.reason, res.raw) };

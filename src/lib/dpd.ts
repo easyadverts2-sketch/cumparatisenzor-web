@@ -13,7 +13,9 @@ type DpdResult =
     }
   | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null; createRequest?: unknown };
 
-type DpdGenericResult<T> = { ok: true; data: T } | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null };
+type DpdGenericResult<T> =
+  | { ok: true; data: T; raw?: unknown; httpStatus?: number | null }
+  | { ok: false; reason: string; raw?: unknown; httpStatus?: number | null };
 
 export type DpdAuthDiagnostics = {
   operation?:
@@ -46,8 +48,11 @@ export type DpdAuthDiagnostics = {
   finalUrl: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
   actualHttpBodySentToDpd?: unknown;
+  requestBodySafe?: unknown;
   responseStatus: number | null;
   responseBodySafe?: unknown;
+  responseTextSafe?: string | null;
+  responseJsonSafe?: unknown;
   correlationId?: string | null;
   transactionId?: string | null;
   timestamp: string;
@@ -80,6 +85,7 @@ export type DpdPickupInput = {
   note?: string;
   parcelCount: number;
   totalWeight: number;
+  shipmentIds?: Array<string | number>;
 };
 
 type DpdLabelFetchInput = {
@@ -169,6 +175,8 @@ export function buildDpdAuthDiagnostics(params: {
   method: "GET" | "POST" | "PUT" | "DELETE";
   requestBodySafe?: unknown;
   responseStatus?: number | null;
+  responseTextSafe?: string | null;
+  responseJsonSafe?: unknown;
   responseBodySafe?: unknown;
   correlationId?: string | null;
   transactionId?: string | null;
@@ -203,7 +211,10 @@ export function buildDpdAuthDiagnostics(params: {
     finalUrl: endpoint.finalUrl,
     method: params.method,
     actualHttpBodySentToDpd: sanitizeBodySafe(params.requestBodySafe),
+    requestBodySafe: sanitizeBodySafe(params.requestBodySafe),
     responseStatus: params.responseStatus ?? null,
+    responseTextSafe: params.responseTextSafe ? String(params.responseTextSafe).slice(0, 10000) : null,
+    responseJsonSafe: sanitizeBodySafe(params.responseJsonSafe),
     responseBodySafe: sanitizeBodySafe(params.responseBodySafe),
     correlationId: params.correlationId || null,
     transactionId: params.transactionId || null,
@@ -495,12 +506,14 @@ async function dpdRequest<T>(params: {
     method: params.method,
     requestBodySafe: params.body || null,
     responseStatus: res.status,
+    responseTextSafe: rawText ? rawText.slice(0, 10000) : null,
+    responseJsonSafe: sanitizeBodySafe(raw),
     responseBodySafe: raw,
     correlationId: res.headers.get("x-correlation-id"),
     transactionId: res.headers.get("transactionid"),
   });
   if (!res.ok) return { ok: false, reason: `dpd_api_http_${res.status}`, raw: { diagnostics, body: sanitizeBodySafe(raw) }, httpStatus: res.status };
-  return { ok: true, data: raw as T };
+  return { ok: true, data: raw as T, raw: sanitizeBodySafe(raw), httpStatus: res.status };
 }
 
 export async function createDpdShipment(order: Order, market: Market): Promise<DpdResult> {
@@ -964,19 +977,30 @@ export async function createDpdPickup(
     };
   }
   const senderAddressIdNum = Number(cfg.senderAddressId);
+  const shipmentIds = (input.shipmentIds || [])
+    .map((x) => Number(String(x || "").trim()))
+    .filter((x) => Number.isFinite(x) && x > 0)
+    .map((x) => Math.trunc(x));
+  const hasShipmentIds = shipmentIds.length > 0;
+  const pickupOrder: Record<string, unknown> = {
+    additionalInfo: String(input.note || "Svoz zasilek z e-shopu").slice(0, 300),
+    contactName: input.contactName,
+    contactPhone: splitPhone(input.phone).number,
+    contactEmail,
+    parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
+    pickupDate: pickupDateNorm.value,
+    shipmentIds,
+    totalWeight: Math.max(0.1, Number(input.totalWeight || 1)),
+  };
+  if (!hasShipmentIds) {
+    pickupOrder.internalPickupAddressId = Number.isFinite(senderAddressIdNum)
+      ? senderAddressIdNum
+      : cfg.senderAddressId;
+  }
   const body = {
     buCode: cfg.buCode,
     customerId: cfg.customerId,
-    pickupOrder: {
-      contactName: input.contactName,
-      contactPhone: splitPhone(input.phone).number,
-      contactEmail,
-      internalPickupAddressId: Number.isFinite(senderAddressIdNum) ? senderAddressIdNum : cfg.senderAddressId,
-      pickupDate: pickupDateNorm.value,
-      parcelCount: Math.max(1, Math.floor(input.parcelCount || 1)),
-      totalWeight: Math.max(0.1, Number(input.totalWeight || 1)),
-      additionalInfo: String(input.note || "").slice(0, 300) || undefined,
-    },
+    pickupOrder,
   };
   const res = await dpdRequest<Record<string, unknown>>({
     operation: "createPickup",
@@ -988,6 +1012,9 @@ export async function createDpdPickup(
   if (!res.ok) return res;
   const rawAny = res.data as unknown;
   const raw = (rawAny && typeof rawAny === "object" && !Array.isArray(rawAny) ? rawAny : {}) as Record<string, unknown>;
+  const responseStatus = res.httpStatus ?? 200;
+  const responseTextSafe = typeof rawAny === "string" ? rawAny.slice(0, 10000) : JSON.stringify(sanitizeBodySafe(rawAny)).slice(0, 10000);
+  const responseJsonSafe = sanitizeBodySafe(rawAny);
   const rawPrimitiveId =
     typeof rawAny === "string" || typeof rawAny === "number" ? String(rawAny).trim() : "";
   const meta = (raw.__dpdMeta && typeof raw.__dpdMeta === "object"
@@ -1015,17 +1042,35 @@ export async function createDpdPickup(
       return true;
     }
   )[0];
+  const pickupIdFromJson =
+    raw.id ??
+    raw.pickupId ??
+    raw.pickupOrderId ??
+    ((raw.data && typeof raw.data === "object" ? (raw.data as Record<string, unknown>).id : undefined) as unknown) ??
+    ((raw.data && typeof raw.data === "object" ? (raw.data as Record<string, unknown>).pickupId : undefined) as unknown) ??
+    ((raw.data && typeof raw.data === "object" ? (raw.data as Record<string, unknown>).pickupOrderId : undefined) as unknown);
   const pickupId = String(
-    pickupIdCandidate?.value || raw.pickupId || raw.id || pickupIdHeader || locationId || rawPrimitiveId || ""
+    pickupIdFromJson || pickupIdCandidate?.value || pickupIdHeader || locationId || rawPrimitiveId || ""
   ).trim();
   if (!pickupId) {
     return {
       ok: false,
-      reason: "dpd_pickup_missing_id",
+      reason: "dpd_pickup_response_missing_id_mapping",
       raw: sanitizeBodySafe({
+        operation: "createPickup",
+        method: "POST",
+        url: dpdUrl("v1.1", "/pickup", cfg.baseUrlRaw),
+        requestBodySafe: body,
+        responseStatus,
+        responseTextSafe,
+        responseJsonSafe,
+        parsedPickupId: null,
+        message:
+          "DPD pickup was created or accepted, but app could not find pickup id in response. Check rawPickupResponse mapping.",
         response: rawAny,
         responseMeta: meta,
         availableTopLevelKeys: Object.keys(raw || {}),
+        rawPickupResponse: rawAny,
       }),
     };
   }
@@ -1038,7 +1083,17 @@ export async function createDpdPickup(
     data: {
       pickupId,
       pickupDate: String(pickupDateCandidate?.value || raw.pickupDate || body.pickupOrder.pickupDate || "") || null,
-      raw: sanitizeBodySafe(raw),
+      raw: sanitizeBodySafe({
+        operation: "createPickup",
+        method: "POST",
+        url: dpdUrl("v1.1", "/pickup", cfg.baseUrlRaw),
+        requestBodySafe: body,
+        responseStatus,
+        responseTextSafe,
+        responseJsonSafe,
+        parsedPickupId: pickupId,
+        rawPickupResponse: rawAny,
+      }),
       request: sanitizeBodySafe(body),
     },
   };
@@ -1049,14 +1104,41 @@ export async function cancelDpdPickup(pickupId: string): Promise<DpdGenericResul
   if (!cfg.customerId) return { ok: false, reason: "dpd_api_not_configured" };
   const cleanPickupId = String(pickupId || "").trim();
   if (!cleanPickupId) return { ok: false, reason: "dpd_pickup_cancel_missing_id" };
-  return dpdRequest<Record<string, unknown>>({
+  const body = {
+    buCode: cfg.buCode,
+    customerId: cfg.customerId,
+  };
+  const res = await dpdRequest<Record<string, unknown>>({
     operation: "cancelPickup",
     method: "PUT",
     endpointPath: `/pickup/cancel/${encodeURIComponent(cleanPickupId)}`,
-    body: {
-      buCode: cfg.buCode,
-      customerId: cfg.customerId,
-    },
+    body,
     apiVersion: "v1.1",
   });
+  if (!res.ok) {
+    return {
+      ...res,
+      raw: sanitizeBodySafe({
+        operation: "cancelPickup",
+        method: "PUT",
+        url: dpdUrl("v1.1", `/pickup/cancel/${encodeURIComponent(cleanPickupId)}`, cfg.baseUrlRaw),
+        requestBodySafe: body,
+        responseStatus: res.httpStatus ?? null,
+        responseTextSafe: JSON.stringify(sanitizeBodySafe(res.raw)).slice(0, 10000),
+        responseJsonSafe: sanitizeBodySafe(res.raw),
+      }),
+    };
+  }
+  return {
+    ...res,
+    raw: sanitizeBodySafe({
+      operation: "cancelPickup",
+      method: "PUT",
+      url: dpdUrl("v1.1", `/pickup/cancel/${encodeURIComponent(cleanPickupId)}`, cfg.baseUrlRaw),
+      requestBodySafe: body,
+      responseStatus: res.httpStatus ?? null,
+      responseTextSafe: JSON.stringify(sanitizeBodySafe(res.data)).slice(0, 10000),
+      responseJsonSafe: sanitizeBodySafe(res.data),
+    }),
+  };
 }
