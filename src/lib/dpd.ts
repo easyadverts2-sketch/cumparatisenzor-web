@@ -478,6 +478,16 @@ async function dpdRequest<T>(params: {
       raw = rawText.slice(0, 10000);
     }
   }
+  const responseMeta = {
+    location: res.headers.get("location"),
+    pickupIdHeader: res.headers.get("pickupid"),
+    correlationId: res.headers.get("x-correlation-id"),
+    transactionId: res.headers.get("transactionid"),
+    contentType: res.headers.get("content-type"),
+  };
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    (raw as Record<string, unknown>).__dpdMeta = sanitizeBodySafe(responseMeta);
+  }
   const diagnostics = buildDpdAuthDiagnostics({
     operation: params.operation,
     endpointPath: params.endpointPath,
@@ -976,7 +986,16 @@ export async function createDpdPickup(
     apiVersion: "v1.1",
   });
   if (!res.ok) return res;
-  const raw = res.data as Record<string, unknown>;
+  const rawAny = res.data as unknown;
+  const raw = (rawAny && typeof rawAny === "object" && !Array.isArray(rawAny) ? rawAny : {}) as Record<string, unknown>;
+  const rawPrimitiveId =
+    typeof rawAny === "string" || typeof rawAny === "number" ? String(rawAny).trim() : "";
+  const meta = (raw.__dpdMeta && typeof raw.__dpdMeta === "object"
+    ? (raw.__dpdMeta as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const locationHeader = String(meta.location || "").trim();
+  const locationId = locationHeader ? locationHeader.split("/").filter(Boolean).pop() || "" : "";
+  const pickupIdHeader = String(meta.pickupIdHeader || "").trim();
   const pickupIdCandidate = collectPathCandidates(
     raw,
     (value, path) => {
@@ -996,13 +1015,16 @@ export async function createDpdPickup(
       return true;
     }
   )[0];
-  const pickupId = String(pickupIdCandidate?.value || raw.pickupId || raw.id || "").trim();
+  const pickupId = String(
+    pickupIdCandidate?.value || raw.pickupId || raw.id || pickupIdHeader || locationId || rawPrimitiveId || ""
+  ).trim();
   if (!pickupId) {
     return {
       ok: false,
       reason: "dpd_pickup_missing_id",
       raw: sanitizeBodySafe({
-        response: raw,
+        response: rawAny,
+        responseMeta: meta,
         availableTopLevelKeys: Object.keys(raw || {}),
       }),
     };
