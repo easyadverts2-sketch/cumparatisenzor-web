@@ -4,6 +4,7 @@ import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
+import { GoogleAnalyticsPageViews } from "@/components/google-analytics-page-views";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { HeaderContactInline } from "@/components/header-contact-inline";
@@ -74,6 +75,7 @@ export default function RootLayout({
     <html lang={isHu ? "hu" : "ro"}>
       <body className={inter.className}>
         <GoogleAnalytics measurementId={gaId} />
+        <GoogleAnalyticsPageViews measurementId={gaId} />
         {!isHu ? (
           <>
             <Script
