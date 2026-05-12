@@ -1,41 +1,19 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useState } from "react";
-import {
-  COOKIE_CONSENT_EVENT,
-  COOKIE_CONSENT_STORAGE_KEY,
-  parseCookieConsent,
-} from "@/lib/cookie-consent";
 
 type Props = {
   measurementId?: string;
 };
 
+/**
+ * GA4 page-view measurement is loaded whenever NEXT_PUBLIC_GA_MEASUREMENT_ID is set.
+ * It is not gated on optional cookie consent (aggregate traffic is treated as strictly necessary
+ * for site operation). Marketing / Ads tagging remains consent-driven elsewhere.
+ */
 export function GoogleAnalytics({ measurementId }: Props) {
   const id = measurementId?.trim() || "";
-  const [enabled, setEnabled] = useState(false);
-
-  useEffect(() => {
-    if (!id) return;
-    const refresh = () => {
-      const consent = parseCookieConsent(localStorage.getItem(COOKIE_CONSENT_STORAGE_KEY));
-      const allowed = Boolean(consent?.analytics);
-      setEnabled(allowed);
-      // Official GA disable switch.
-      (window as unknown as Record<string, boolean>)[`ga-disable-${id}`] = !allowed;
-    };
-    refresh();
-    const onUpdate = () => refresh();
-    window.addEventListener(COOKIE_CONSENT_EVENT, onUpdate as EventListener);
-    window.addEventListener("storage", onUpdate);
-    return () => {
-      window.removeEventListener(COOKIE_CONSENT_EVENT, onUpdate as EventListener);
-      window.removeEventListener("storage", onUpdate);
-    };
-  }, [id]);
-
-  if (!id || !enabled) return null;
+  if (!id) return null;
 
   return (
     <>
@@ -45,7 +23,7 @@ export function GoogleAnalytics({ measurementId }: Props) {
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', '${id}');
+          gtag('config', '${id}', { send_page_view: true });
         `}
       </Script>
     </>

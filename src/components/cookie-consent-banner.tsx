@@ -16,7 +16,6 @@ type Props = {
 };
 
 type Draft = {
-  analytics: boolean;
   marketing: boolean;
 };
 
@@ -30,7 +29,7 @@ function persistConsent(consent: CookieConsent) {
 export function CookieConsentBanner({ locale }: Props) {
   const [visible, setVisible] = useState(false);
   const [customizing, setCustomizing] = useState(false);
-  const [draft, setDraft] = useState<Draft>({ analytics: false, marketing: false });
+  const [draft, setDraft] = useState<Draft>({ marketing: false });
 
   useEffect(() => {
     const existing = parseCookieConsent(localStorage.getItem(COOKIE_CONSENT_STORAGE_KEY));
@@ -38,7 +37,7 @@ export function CookieConsentBanner({ locale }: Props) {
       setVisible(true);
       return;
     }
-    setDraft({ analytics: existing.analytics, marketing: existing.marketing });
+    setDraft({ marketing: existing.marketing });
     setVisible(false);
   }, []);
 
@@ -47,13 +46,12 @@ export function CookieConsentBanner({ locale }: Props) {
       return {
         title: "Cookie-beallitasok",
         text:
-          "A weboldal mukodesehez szukseges cookie-kat mindig hasznaljuk. Az analitikai es marketing cookie-kat csak az on hozzajarulasaval aktiváljuk.",
+          "A weboldal mukodesehez szukseges cookie-kat es az osszesitett latogatottsag mereset (Google Analytics) mindig hasznaljuk. A marketing cookie-kat csak az on hozzajarulasaval aktiváljuk.",
         reject: "Osszes elutasitasa",
         accept: "Osszes elfogadasa",
         customize: "Beallitasok",
         save: "Kivalasztottak mentese",
-        necessary: "Szukseges cookie-k (mindig aktiv)",
-        analytics: "Analitikai cookie-k",
+        necessary: "Szukseges cookie-k es osszesitett latogatottsag-meres (Google Analytics, mindig aktiv)",
         marketing: "Marketing cookie-k",
         policy: "Adatkezelesi tajekoztato",
         manage: "Cookie-beallitasok",
@@ -62,13 +60,12 @@ export function CookieConsentBanner({ locale }: Props) {
     return {
       title: "Setari cookies",
       text:
-        "Folosim cookie-uri strict necesare pentru functionarea site-ului. Cookie-urile analitice si de marketing sunt activate doar cu acordul dumneavoastra.",
+        "Folosim cookie-uri strict necesare pentru functionarea site-ului si pentru statistici agregate de trafic (Google Analytics). Cookie-urile de marketing sunt activate doar cu acordul dumneavoastra.",
       reject: "Refuza tot",
       accept: "Accepta tot",
       customize: "Personalizeaza",
       save: "Salveaza selectia",
-      necessary: "Cookie-uri necesare (mereu active)",
-      analytics: "Cookie-uri analitice",
+      necessary: "Cookie-uri necesare si statistici agregate de vizitare (Google Analytics, mereu active)",
       marketing: "Cookie-uri de marketing",
       policy: "Politica de confidentialitate",
       manage: "Setari cookies",
@@ -92,14 +89,6 @@ export function CookieConsentBanner({ locale }: Props) {
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={draft.analytics}
-                onChange={(e) => setDraft((prev) => ({ ...prev, analytics: e.target.checked }))}
-              />
-              <span>{t.analytics}</span>
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
                 checked={draft.marketing}
                 onChange={(e) => setDraft((prev) => ({ ...prev, marketing: e.target.checked }))}
               />
@@ -114,7 +103,7 @@ export function CookieConsentBanner({ locale }: Props) {
             onClick={() => {
               persistConsent({
                 necessary: true,
-                analytics: false,
+                analytics: true,
                 marketing: false,
                 updatedAt: new Date().toISOString(),
               });
@@ -127,7 +116,6 @@ export function CookieConsentBanner({ locale }: Props) {
             className="rounded-lg bg-[#0d9488] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f766e]"
             onClick={() => {
               const consent = defaultCookieConsent();
-              consent.analytics = true;
               consent.marketing = true;
               persistConsent(consent);
               setVisible(false);
@@ -148,7 +136,7 @@ export function CookieConsentBanner({ locale }: Props) {
               onClick={() => {
                 persistConsent({
                   necessary: true,
-                  analytics: draft.analytics,
+                  analytics: true,
                   marketing: draft.marketing,
                   updatedAt: new Date().toISOString(),
                 });

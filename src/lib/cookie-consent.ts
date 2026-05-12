@@ -12,7 +12,7 @@ export type CookieConsent = {
 export function defaultCookieConsent(): CookieConsent {
   return {
     necessary: true,
-    analytics: false,
+    analytics: true,
     marketing: false,
     updatedAt: new Date().toISOString(),
   };
@@ -24,7 +24,7 @@ export function parseCookieConsent(raw: string | null | undefined): CookieConsen
     const parsed = JSON.parse(raw) as Partial<CookieConsent>;
     return {
       necessary: true,
-      analytics: Boolean(parsed.analytics),
+      analytics: true,
       marketing: Boolean(parsed.marketing),
       updatedAt: String(parsed.updatedAt || new Date().toISOString()),
     };
