@@ -28,11 +28,14 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
   return "PPL";
 }
 
-export function OrderForm() {
+type OrderFormProps = {
+  unitPrice: number;
+  standardShipping: number;
+  fineshipShipping: number;
+};
+
+export function OrderForm({ unitPrice, standardShipping, fineshipShipping }: OrderFormProps) {
   const PRODUCT_NAME = "FreeStyle Libre 2 Plus";
-  const UNIT_PRICE = 329.9;
-  const STANDARD_SHIPPING = 40;
-  const FINESHIP_SHIPPING = 200;
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -73,8 +76,8 @@ export function OrderForm() {
   }, [carrier, paymentMethod]);
 
   const shippingPrice =
-    carrier === "FINESHIP" ? FINESHIP_SHIPPING : quantity >= 5 ? 0 : STANDARD_SHIPPING;
-  const productsTotal = quantity * UNIT_PRICE;
+    carrier === "FINESHIP" ? fineshipShipping : quantity >= 5 ? 0 : standardShipping;
+  const productsTotal = quantity * unitPrice;
   const orderTotal = productsTotal + shippingPrice;
   const postalRegex = /^\d{6}$/;
   async function onSubmit(formData: FormData) {
@@ -326,11 +329,11 @@ export function OrderForm() {
 
                 {c === "FINESHIP" ? (
                   <span className="mt-2 inline-flex rounded-full bg-[#f8d9c4] px-2.5 py-1 text-xs font-medium text-[#7a3f54]">
-                    Min. 6 bucati • 200 RON
+                    Min. 6 bucati • {fineshipShipping} RON
                   </span>
                 ) : (
                   <span className="mt-2 inline-flex rounded-full bg-[#e9f7f4] px-2.5 py-1 text-xs font-medium text-[#155e57]">
-                    40 RON • Gratuit de la 5 bucati
+                    {standardShipping} RON • Gratuit de la 5 bucati
                   </span>
                 )}
               </span>
@@ -477,7 +480,7 @@ export function OrderForm() {
         <dl className="mt-3 space-y-2 text-sm text-[#5c3046]">
           <div className="flex items-center justify-between">
             <dt>
-              {PRODUCT_NAME} ({quantity} x {UNIT_PRICE} RON)
+              {PRODUCT_NAME} ({quantity} x {unitPrice} RON)
             </dt>
             <dd className="font-medium">{productsTotal} RON</dd>
           </div>

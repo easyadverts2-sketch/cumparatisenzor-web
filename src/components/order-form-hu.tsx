@@ -28,11 +28,14 @@ function parseShippingCarrier(raw: string): ShippingCarrier {
   return "PPL";
 }
 
-export function OrderFormHu() {
+type OrderFormHuProps = {
+  unitPrice: number;
+  standardShipping: number;
+  fineshipShipping: number;
+};
+
+export function OrderFormHu({ unitPrice, standardShipping, fineshipShipping }: OrderFormHuProps) {
   const PRODUCT_NAME = "FreeStyle Libre 2 Plus";
-  const UNIT_PRICE = 25339;
-  const STANDARD_SHIPPING = 3199;
-  const FINESHIP_SHIPPING = 16000;
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -73,8 +76,8 @@ export function OrderFormHu() {
   }, [carrier, paymentMethod]);
 
   const shippingPrice =
-    carrier === "FINESHIP" ? FINESHIP_SHIPPING : quantity >= 5 ? 0 : STANDARD_SHIPPING;
-  const productsTotal = quantity * UNIT_PRICE;
+    carrier === "FINESHIP" ? fineshipShipping : quantity >= 5 ? 0 : standardShipping;
+  const productsTotal = quantity * unitPrice;
   const orderTotal = productsTotal + shippingPrice;
   const postalRegex = /^\d{4}$/;
 
@@ -304,11 +307,11 @@ export function OrderFormHu() {
 
                 {c === "FINESHIP" ? (
                   <span className="mt-2 inline-flex rounded-full bg-[#f8d9c4] px-2.5 py-1 text-xs font-medium text-[#7a3f54]">
-                    Min. 6 db • 16000 HUF
+                    Min. 6 db • {fineshipShipping} HUF
                   </span>
                 ) : (
                   <span className="mt-2 inline-flex rounded-full bg-[#e9f7f4] px-2.5 py-1 text-xs font-medium text-[#155e57]">
-                    3199 HUF • 5 db-tol ingyenes
+                    {standardShipping} HUF • 5 db-tol ingyenes
                   </span>
                 )}
               </span>
@@ -449,7 +452,7 @@ export function OrderFormHu() {
         <dl className="mt-3 space-y-2 text-sm text-[#5c3046]">
           <div className="flex items-center justify-between">
             <dt>
-              {PRODUCT_NAME} ({quantity} x {UNIT_PRICE} HUF)
+              {PRODUCT_NAME} ({quantity} x {unitPrice} HUF)
             </dt>
             <dd className="font-medium">{productsTotal} HUF</dd>
           </div>

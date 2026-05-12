@@ -1509,6 +1509,21 @@ async function getSettingString(sql: SqlClient, key: string, fallback: string) {
   return rows.length === 0 ? fallback : String(rows[0].value);
 }
 
+/** Checkout UI must use the same unit price and shipping rules as createOrder(). */
+export async function getStorePricingForCheckout(market: Market): Promise<{
+  unitPrice: number;
+  standardShipping: number;
+  fineshipShipping: number;
+}> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const defaults = defaultsByMarket[market];
+  const unitPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+  const standardShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping);
+  const fineshipShipping = market === "HU" ? 16000 : 200;
+  return { unitPrice, standardShipping, fineshipShipping };
+}
+
 export async function readStore(market: Market = "RO"): Promise<Store> {
   const sql = getSql();
   await ensureSchema(sql);
@@ -1542,8 +1557,49 @@ export async function readStore(market: Market = "RO"): Promise<Store> {
 export async function writeStore(store: Store, market: Market = "RO"): Promise<void> {
   const sql = getSql();
   await ensureSchema(sql);
-  await sql`insert into app_settings (key, value) values (${settingKey(market, "inventory")}, ${String(store.inventory)})
-            on conflict (key) do update set value = excluded.value`;
+  const rows: [string, string][] = [
+    [settingKey(market, "inventory"), String(store.inventory)],
+    [settingKey(market, "price"), String(store.price)],
+    [settingKey(market, "shipping"), String(store.shipping)],
+    [settingKey(market, "sku"), store.sku],
+  ];
+  for (const [key, value] of rows) {
+    await sql`
+      insert into app_settings (key, value) values (${key}, ${value})
+      on conflict (key) do update set value = excluded.value
+    `;
+  }
+}
+
+export async function updateMarketStoreSettings(
+  market: Market,
+  input: { inventory: number; price: number; shipping: number }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const inv = Math.floor(Number(input.inventory));
+  if (!Number.isFinite(inv) || inv < 0 || inv > 1_000_000) {
+    return { ok: false, message: "Neplatny pocet kusu na skladu." };
+  }
+  let price = Number(input.price);
+  let shipping = Number(input.shipping);
+  if (!Number.isFinite(price) || price <= 0 || price > 2_000_000) {
+    return { ok: false, message: "Neplatna jednotkova cena." };
+  }
+  if (!Number.isFinite(shipping) || shipping < 0 || shipping > 500_000) {
+    return { ok: false, message: "Neplatna cena standardni dopravy (PPL/DPD pod prah zdarma)." };
+  }
+  if (market === "HU") {
+    price = Math.round(price);
+    shipping = Math.round(shipping);
+  } else {
+    price = Math.round(price * 100) / 100;
+    shipping = Math.round(shipping * 100) / 100;
+  }
+  const store = await readStore(market);
+  store.inventory = inv;
+  store.price = price;
+  store.shipping = shipping;
+  await writeStore(store, market);
+  return { ok: true };
 }
 
 export async function createOrder(input: {
@@ -1583,6 +1639,7 @@ export async function createOrder(input: {
     const defaults = defaultsByMarket[market];
     const inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
     const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+    const configuredShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping);
     const price = Number.isFinite(options?.fixedItemPrice)
       ? Math.max(0, Number(options?.fixedItemPrice))
       : configuredPrice;
@@ -1619,12 +1676,12 @@ export async function createOrder(input: {
             ? 16000
             : input.quantity >= 5
               ? 0
-              : 3199
+              : configuredShipping
           : input.shippingCarrier === "FINESHIP"
             ? 200
             : input.quantity >= 5
               ? 0
-              : 40;
+              : configuredShipping;
     const totalPrice = input.quantity * price + shippingPrice;
 
     const carrierOther = null;

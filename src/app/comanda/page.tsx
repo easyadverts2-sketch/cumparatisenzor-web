@@ -3,6 +3,7 @@ import { OrderForm } from "@/components/order-form";
 import Image from "next/image";
 import Link from "next/link";
 import { SITE_NAME } from "@/lib/seo-config";
+import { getStorePricingForCheckout } from "@/lib/store";
 import { getPublicSiteUrl } from "@/lib/site-url";
 
 export const metadata: Metadata = {
@@ -17,7 +18,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ComandaPage() {
+export default async function ComandaPage() {
+  const pricing = await getStorePricingForCheckout("RO");
   const motifPieces = [
     { top: "2%", left: "-14%", w: 215, r: -20, o: 0.27 },
     { top: "8%", left: "2%", w: 155, r: 16, o: 0.21 },
@@ -59,10 +61,10 @@ export default function ComandaPage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">Comanda FreeStyle Libre 2 Plus</h1>
         <p className="mt-2 max-w-2xl text-[#1a4d47]">
-          Pret: <strong className="text-[#0a2624]">329.9 RON</strong> / pachet · SKU{" "}
+          Pret: <strong className="text-[#0a2624]">{pricing.unitPrice} RON</strong> / pachet · SKU{" "}
           <strong className="text-[#0a2624]">5021791006694</strong> · Livrare PPL/DPD{" "}
-          <strong className="text-[#0a2624]">40 RON</strong> (gratuita de la 5 bucati) · Fineship{" "}
-          <strong className="text-[#0a2624]">200 RON</strong> (de la 6 bucati).
+          <strong className="text-[#0a2624]">{pricing.standardShipping} RON</strong> (gratuita de la 5 bucati) · Fineship{" "}
+          <strong className="text-[#0a2624]">{pricing.fineshipShipping} RON</strong> (de la 6 bucati).
         </p>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
@@ -87,7 +89,11 @@ export default function ComandaPage() {
         </div>
 
         <div className="mt-8">
-          <OrderForm />
+          <OrderForm
+            unitPrice={pricing.unitPrice}
+            standardShipping={pricing.standardShipping}
+            fineshipShipping={pricing.fineshipShipping}
+          />
         </div>
       </div>
     </main>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { OrderFormHu } from "@/components/order-form-hu";
+import { getStorePricingForCheckout } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Online rendeles",
@@ -9,7 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/hu/comanda" },
 };
 
-export default function HuComandaPage() {
+export default async function HuComandaPage() {
+  const pricing = await getStorePricingForCheckout("HU");
   const motifPieces = [
     { top: "2%", left: "-14%", w: 215, r: -20, o: 0.27 },
     { top: "8%", left: "2%", w: 155, r: 16, o: 0.21 },
@@ -51,10 +53,10 @@ export default function HuComandaPage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">FreeStyle Libre 2 Plus rendeles</h1>
         <p className="mt-2 max-w-2xl text-[#1a4d47]">
-          Ar: <strong className="text-[#0a2624]">25339 HUF</strong> / csomag · SKU{" "}
+          Ar: <strong className="text-[#0a2624]">{pricing.unitPrice} HUF</strong> / csomag · SKU{" "}
           <strong className="text-[#0a2624]">5021791006694</strong> · PPL/DPD szallitas{" "}
-          <strong className="text-[#0a2624]">3199 HUF</strong> (5 db-tol ingyenes) · Fineship{" "}
-          <strong className="text-[#0a2624]">16000 HUF</strong> (6 db-tol).
+          <strong className="text-[#0a2624]">{pricing.standardShipping} HUF</strong> (5 db-tol ingyenes) · Fineship{" "}
+          <strong className="text-[#0a2624]">{pricing.fineshipShipping} HUF</strong> (6 db-tol).
         </p>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-12 lg:items-start">
@@ -73,7 +75,11 @@ export default function HuComandaPage() {
         </div>
 
         <div className="mt-8">
-          <OrderFormHu />
+          <OrderFormHu
+            unitPrice={pricing.unitPrice}
+            standardShipping={pricing.standardShipping}
+            fineshipShipping={pricing.fineshipShipping}
+          />
         </div>
       </div>
     </main>

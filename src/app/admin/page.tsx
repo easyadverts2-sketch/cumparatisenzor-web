@@ -16,8 +16,8 @@ import {
   resetDpdShipmentForOrder,
   resetPplShipmentForOrder,
   readStore,
+  updateMarketStoreSettings,
   updateOrderStatus,
-  writeStore,
 } from "@/lib/store";
 import { ORDER_STATUSES } from "@/lib/types";
 import { revalidatePath } from "next/cache";
@@ -45,15 +45,17 @@ async function updateStatus(formData: FormData) {
   }
 }
 
-async function updateInventory(formData: FormData) {
+async function updateStoreSettingsAction(formData: FormData) {
   "use server";
-  const inventory = Number(formData.get("inventory") || 0);
-  if (inventory >= 0) {
-    const store = await readStore();
-    store.inventory = inventory;
-    await writeStore(store);
-  }
+  const inventory = Number(formData.get("inventory"));
+  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
+  const shipping = Number(String(formData.get("shipping") ?? "").replace(",", "."));
+  const res = await updateMarketStoreSettings("RO", { inventory, price, shipping });
   revalidatePath("/admin");
+  if (!res.ok) {
+    redirect(`/admin?ok=0&msg=${encodeURIComponent(res.message)}`);
+  }
+  redirect(`/admin?ok=1&msg=${encodeURIComponent("Nastaveni obchodu (RO) ulozeno.")}`);
 }
 
 async function logoutAction() {
@@ -202,7 +204,9 @@ export default async function AdminPage({
           {decodeURIComponent(searchParams.msg)}
         </p>
       ) : null}
-      <p className="mt-4 font-medium text-[#0a2624]">Aktuální sklad: {store.inventory} ks</p>
+      <p className="mt-4 font-medium text-[#0a2624]">
+        Aktuálně: sklad {store.inventory} ks · cena {store.price} RON · standardní doprava {store.shipping} RON
+      </p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Nezaplacené</p>
@@ -222,15 +226,46 @@ export default async function AdminPage({
         </div>
       </div>
 
-      <form action={updateInventory} className="mt-4 flex max-w-sm flex-wrap gap-2">
-        <input
-          type="number"
-          name="inventory"
-          defaultValue={store.inventory}
-          className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2 text-[#0a2624] sm:w-40"
-        />
+      <form action={updateStoreSettingsAction} className="mt-4 max-w-xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-[#0a2624]">Sklad a ceny (RO)</h2>
+        <p className="text-sm text-[#1a4d47]">
+          Tyto hodnoty se pouzivaji na webu i pri vytvareni objednavky. Fineship zustava{" "}
+          <strong>200 RON</strong> (od 6 ks), zdarma od 5 ks u PPL/DPD jako dosud.
+        </p>
+        <label className="block text-sm font-medium text-[#0a2624]">
+          <span className="mb-1 block text-[#1a4d47]">Sklad (ks)</span>
+          <input
+            name="inventory"
+            type="number"
+            min={0}
+            defaultValue={store.inventory}
+            className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2 text-[#0a2624]"
+          />
+        </label>
+        <label className="block text-sm font-medium text-[#0a2624]">
+          <span className="mb-1 block text-[#1a4d47]">Cena za kus (RON)</span>
+          <input
+            name="price"
+            type="number"
+            min={0.01}
+            step={0.01}
+            defaultValue={store.price}
+            className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2 text-[#0a2624]"
+          />
+        </label>
+        <label className="block text-sm font-medium text-[#0a2624]">
+          <span className="mb-1 block text-[#1a4d47]">Standardni doprava PPL/DPD pod 5 ks (RON)</span>
+          <input
+            name="shipping"
+            type="number"
+            min={0}
+            step={0.01}
+            defaultValue={store.shipping}
+            className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2 text-[#0a2624]"
+          />
+        </label>
         <button type="submit" className="rounded-lg bg-[#0f766e] px-4 py-2 text-white">
-          Uložit sklad
+          Ulozit nastaveni
         </button>
       </form>
 
