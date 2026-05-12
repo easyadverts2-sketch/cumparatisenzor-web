@@ -139,6 +139,46 @@ export default function HuHomePage() {
         </div>
       </section>
 
+      <section className="mx-auto mt-14 max-w-6xl px-6">
+        <div className="relative overflow-hidden rounded-3xl border-2 border-[#be3f6f]/25 bg-gradient-to-br from-[#fff5f8] via-white to-[#eefaf7] p-8 shadow-xl md:p-10">
+          <div
+            className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#be3f6f]/10 blur-2xl"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-[#0d9488]/10 blur-2xl"
+            aria-hidden
+          />
+          <div className="relative">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#8f2c53]">Közösség</p>
+            <h2 className="mt-2 text-2xl font-bold leading-tight text-[#042f2c] md:text-3xl">
+              Ingyen szenzort szeretnél? Írj nekünk!
+            </h2>
+            <p className="mt-5 max-w-3xl text-lg leading-relaxed text-[#14534d]">
+              Ha nyitott vagy rá, hogy megoszd a történetedet (például a diabéttel járó mindennapokról) a közösségi
+              médiában vagy a weboldalainkon is, kiválasztott esetekben ingyen elküldhetjük neked a szenzort. Írj
+              nekünk a webshop e-mail-címére, röviden mutatkozz el, és írd meg, milyen formájú együttműködés illik
+              hozzád.
+            </p>
+            <p className="mt-4 max-w-3xl text-lg leading-relaxed text-[#14534d]">
+              Gyakorlatban sokat segít, ha tudsz készíteni egy{" "}
+              <strong className="text-[#042f2c]">rövid videót</strong>, és hagyod, hogy a kommunikációnkban
+              felhasználjuk (például a Facebook-oldalunkon megosztva, vagy a te beleegyezéseddel továbbközvetítve). Ha
+              ez nem megoldható, egy <strong className="text-[#042f2c]">fotó</strong> is szóba jöhet, a közzétételhez
+              szükséges engedéllyel. Minden jelentkezést egyenként értékelünk; a választ és az esetleges részleteket
+              levelezve egyeztetjük.
+            </p>
+            <a
+              href="mailto:info@szenzorvasarlas.hu?subject=Ingyen%20szenzor%20-%20t%C3%B6rt%C3%A9netem"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6f2147] to-[#be3f6f] px-6 py-3.5 text-base font-semibold text-white shadow-lg no-underline transition hover:brightness-110"
+            >
+              Írj nekünk: info@szenzorvasarlas.hu
+              <span aria-hidden>→</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
     </main>
   );
 }

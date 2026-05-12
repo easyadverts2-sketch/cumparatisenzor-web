@@ -66,7 +66,7 @@ export function SiteContactBar() {
           </a>
         </div>
         <p className="max-w-xs text-xs text-[#ffd8be]/80">
-          Link-urile vor fi actualizate cand paginile sunt gata.
+          Pagina oficiala pe Facebook — noutati si comunitate.
         </p>
       </div>
     </div>

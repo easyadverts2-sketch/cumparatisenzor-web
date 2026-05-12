@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import Image from "next/image";
@@ -75,7 +76,9 @@ export default function RootLayout({
     <html lang={isHu ? "hu" : "ro"}>
       <body className={inter.className}>
         <GoogleAnalytics measurementId={gaId} />
-        <GoogleAnalyticsPageViews measurementId={gaId} />
+        <Suspense fallback={null}>
+          <GoogleAnalyticsPageViews measurementId={gaId} />
+        </Suspense>
         {!isHu ? (
           <>
             <Script

@@ -100,13 +100,16 @@ export default function HuLayout({ children }: { children: ReactNode }) {
           <div className="mt-6">
             <span className="text-xs font-medium uppercase tracking-wide text-[#ffd2af]/90">Kovess minket</span>
             <div className="mt-2">
-              <span
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white"
-                aria-label="Facebook"
+              <a
+                href="https://www.facebook.com/profile.php?id=61589065660499"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/30"
+                aria-label="Facebook — Szenzorvasarlas.hu"
                 title="Facebook"
               >
                 <FacebookIcon className="h-5 w-5" />
-              </span>
+              </a>
             </div>
           </div>
         </div>

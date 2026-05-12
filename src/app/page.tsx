@@ -198,6 +198,46 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="mx-auto mt-14 max-w-6xl px-6">
+        <div className="relative overflow-hidden rounded-3xl border-2 border-[#be3f6f]/25 bg-gradient-to-br from-[#fff5f8] via-white to-[#eefaf7] p-8 shadow-xl md:p-10">
+          <div
+            className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#be3f6f]/10 blur-2xl"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-[#0d9488]/10 blur-2xl"
+            aria-hidden
+          />
+          <div className="relative">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#8f2c53]">Comunitate</p>
+            <h2 className="mt-2 text-2xl font-bold leading-tight text-[#042f2c] md:text-3xl">
+              Vrei un senzor gratuit? Scrie-ne!
+            </h2>
+            <p className="mt-5 max-w-3xl text-lg leading-relaxed text-[#14534d]">
+              Daca esti dispus(a) sa impartasesti povestea ta (de exemplu despre viata cu diabet) pe retelele sociale
+              sau si pe paginile noastre, in cazuri selectate iti putem trimite un senzor gratuit prin curier. Este
+              suficient sa ne scrii pe e-mailul magazinului si sa ne spui cateva cuvinte despre tine si ce forma de
+              colaborare ti se potriveste.
+            </p>
+            <p className="mt-4 max-w-3xl text-lg leading-relaxed text-[#14534d]">
+              Ca regula practica, ne ajuta foarte mult daca poti filma un{" "}
+              <strong className="text-[#042f2c]">scurt video</strong> si ne permiti sa il folosim in comunicarea
+              noastra (de exemplu publicat pe Facebook-ul nostru sau redistribuit cu acordul tau). Daca nu e posibil,
+              ne poate ajuta si o <strong className="text-[#042f2c]">fotografie</strong> clara, impreuna cu permisiunea
+              de a o publica. Fiecare propunere este evaluata individual; raspunsul si eventualele detalii le stabilim
+              in corespondenta directa cu tine.
+            </p>
+            <a
+              href="mailto:info@cumparatisenzor.ro?subject=Senzor%20gratuit%20-%20povestea%20mea"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#6f2147] to-[#be3f6f] px-6 py-3.5 text-base font-semibold text-white shadow-lg no-underline transition hover:brightness-110"
+            >
+              Scrie-ne la info@cumparatisenzor.ro
+              <span aria-hidden>→</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
     </main>
   );
 }
