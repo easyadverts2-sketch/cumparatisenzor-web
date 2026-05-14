@@ -63,6 +63,22 @@ export default function HuLayout({ children }: { children: ReactNode }) {
           gtag('config', 'AW-18125938204');
         `}
       </Script>
+      <Script id="facebook-pixel-hu" strategy="afterInteractive">
+        {`
+          !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+          fbq('init', '2033026314224824');
+          fbq('track', 'PageView');
+        `}
+      </Script>
+      <noscript>
+        <img
+          height="1"
+          width="1"
+          style={{ display: "none" }}
+          src="https://www.facebook.com/tr?id=2033026314224824&ev=PageView&noscript=1"
+          alt=""
+        />
+      </noscript>
       <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
           <Link href="/hu" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-white no-underline">

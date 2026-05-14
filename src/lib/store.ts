@@ -1,3 +1,4 @@
+import type Stripe from "stripe";
 import { Market, Order, OrderStatus, ShippingCarrier, Store } from "./types";
 import { sendEmail } from "./email";
 import { getSql } from "./db";
@@ -5,7 +6,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { TransactionSql } from "postgres";
 import { formatOrderNumber } from "./order-format";
-import { getStripe } from "./stripe-checkout";
+import { createStripePaymentIntentForPending, getStripe, stripeMinorAmountForTotal } from "./stripe-checkout";
 import { PDFDocument } from "pdf-lib";
 import {
   marketCurrency,
@@ -1142,6 +1143,30 @@ async function ensureSchema(sql: SqlClient) {
   await migrateOrderMarket(sql);
   await migrateOrderShippingIntegration(sql);
   await migrateOrderAdditionalNotes(sql);
+  await migratePendingCardCheckouts(sql);
+}
+
+async function migratePendingCardCheckouts(sql: SqlClient) {
+  await sql`
+    create table if not exists pending_card_checkouts (
+      id uuid primary key,
+      created_at timestamptz not null default now(),
+      market text not null,
+      payload jsonb not null,
+      total_price numeric not null,
+      stripe_payment_intent_id text,
+      consumed_at timestamptz,
+      order_id uuid references orders (id) on delete set null
+    )
+  `;
+  await sql`
+    create index if not exists pending_card_checkouts_stripe_pi_idx
+    on pending_card_checkouts (stripe_payment_intent_id)
+  `;
+  await sql`
+    create index if not exists pending_card_checkouts_created_idx
+    on pending_card_checkouts (created_at desc)
+  `;
 }
 
 async function insertAuditLog(
@@ -1600,6 +1625,448 @@ export async function updateMarketStoreSettings(
   store.shipping = shipping;
   await writeStore(store, market);
   return { ok: true };
+}
+
+export type CardCheckoutPrepareInput = {
+  customerName: string;
+  email: string;
+  phone: string;
+  billingAddress: string;
+  deliveryAddress: string;
+  quantity: number;
+  paymentMethod: Order["paymentMethod"];
+  shippingCarrier: ShippingCarrier;
+  shippingCarrierOther?: string | null;
+  additionalNotes?: string | null;
+};
+
+function parseCardCheckoutPayloadFromJson(payload: unknown): CardCheckoutPrepareInput | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  if (p.paymentMethod !== "CARD_STRIPE") return null;
+  const shippingCarrier = p.shippingCarrier;
+  if (shippingCarrier !== "PPL" && shippingCarrier !== "DPD" && shippingCarrier !== "FINESHIP") {
+    return null;
+  }
+  const quantity = Number(p.quantity);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return null;
+  return {
+    customerName: String(p.customerName || "").trim(),
+    email: String(p.email || "").trim(),
+    phone: String(p.phone || "").trim(),
+    billingAddress: String(p.billingAddress || "").trim(),
+    deliveryAddress: String(p.deliveryAddress || "").trim(),
+    quantity,
+    paymentMethod: "CARD_STRIPE",
+    shippingCarrier,
+    shippingCarrierOther: p.shippingCarrierOther != null ? String(p.shippingCarrierOther) : null,
+    additionalNotes: p.additionalNotes != null ? String(p.additionalNotes).trim().slice(0, 1000) : null,
+  };
+}
+
+export async function prepareCardCheckout(
+  input: CardCheckoutPrepareInput,
+  market: Market = "RO"
+): Promise<
+  | { ok: true; pendingId: string; clientSecret: string; paymentIntentId: string }
+  | { ok: false; message: string }
+> {
+  try {
+    if (input.paymentMethod !== "CARD_STRIPE") {
+      return { ok: false, message: "Metoda de plata nu este valida pentru checkout card." };
+    }
+    const sql = getSql();
+    await ensureSchema(sql);
+    if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100) {
+      return {
+        ok: false,
+        message: "Neplatny pocet kusu. Zadejte prosim cele cislo od 1 do 100.",
+      };
+    }
+    if (!getStripe()) {
+      return {
+        ok: false,
+        message:
+          "Plata cu cardul nu este activata pe server. Alegeti alta metoda sau incercati mai tarziu.",
+      };
+    }
+
+    const defaults = defaultsByMarket[market];
+    const inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
+    const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+    const configuredShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping);
+    const price = configuredPrice;
+    if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
+      return {
+        ok: false,
+        message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
+      };
+    }
+    const addressValidation = validateDeliveryAddressForMarket(input.deliveryAddress, market);
+    if (!addressValidation.ok) {
+      return {
+        ok: false,
+        message: addressValidation.message,
+      };
+    }
+    const shippingPrice =
+      market === "HU"
+        ? input.shippingCarrier === "FINESHIP"
+          ? 16000
+          : input.quantity >= 5
+            ? 0
+            : configuredShipping
+        : input.shippingCarrier === "FINESHIP"
+          ? 200
+          : input.quantity >= 5
+            ? 0
+            : configuredShipping;
+    const totalPrice = input.quantity * price + shippingPrice;
+
+    const dupPending = await sql`
+      select id, stripe_payment_intent_id, total_price
+      from pending_card_checkouts
+      where market = ${market}
+        and consumed_at is null
+        and payload->>'email' = ${input.email}
+        and payload->>'phone' = ${input.phone}
+        and payload->>'deliveryAddress' = ${input.deliveryAddress}
+        and (payload->>'quantity')::int = ${input.quantity}
+        and (payload->>'paymentMethod') = 'CARD_STRIPE'
+        and (payload->>'shippingCarrier') = ${input.shippingCarrier}
+        and created_at > now() - interval '5 minutes'
+      order by created_at desc
+      limit 1
+    `;
+    if (dupPending.length > 0) {
+      const prev = dupPending[0] as {
+        id: string;
+        stripe_payment_intent_id: string | null;
+        total_price: unknown;
+      };
+      if (
+        prev.stripe_payment_intent_id &&
+        Math.abs(Number(prev.total_price) - totalPrice) < (market === "HU" ? 1 : 0.01)
+      ) {
+        const stripe = getStripe();
+        if (stripe) {
+          try {
+            const intent = await stripe.paymentIntents.retrieve(prev.stripe_payment_intent_id);
+            if (
+              (intent.status === "requires_payment_method" ||
+                intent.status === "requires_confirmation" ||
+                intent.status === "requires_action" ||
+                intent.status === "processing") &&
+              intent.client_secret
+            ) {
+              return {
+                ok: true,
+                pendingId: prev.id,
+                clientSecret: intent.client_secret,
+                paymentIntentId: intent.id,
+              };
+            }
+          } catch {
+            // fall through to create a fresh pending checkout
+          }
+        }
+      }
+    }
+
+    const duplicateOrderRows = await sql`
+      select * from orders
+      where market = ${market}
+        and email = ${input.email}
+        and phone = ${input.phone}
+        and delivery_address = ${input.deliveryAddress}
+        and quantity = ${input.quantity}
+        and payment_method = 'CARD_STRIPE'
+        and shipping_carrier = ${input.shippingCarrier}
+        and created_at > now() - interval '5 minutes'
+      order by created_at desc
+      limit 1
+    `;
+    if (duplicateOrderRows.length > 0) {
+      return {
+        ok: false,
+        message:
+          market === "HU"
+            ? "Mar van egy folyamatban levo kartyas rendeles ugyanezekkel az adatokkal. Kerjuk frissitse az oldalt vagy irjon nekunk."
+            : "Există deja o comandă cu card înregistrată recent pentru aceste date. Reîmprospătați pagina sau contactați-ne.",
+      };
+    }
+
+    if (input.quantity > inventory) {
+      const subject = "Stoc indisponibil momentan";
+      const body =
+        "Momentan nu avem stoc suficient. Va vom contacta imediat ce produsul este disponibil din nou.";
+      await sql`
+        insert into notifications (id, type, recipient, subject, body)
+        values (${crypto.randomUUID()}, 'OUT_OF_STOCK', ${input.email}, ${subject}, ${body})
+      `;
+      const senderFrom = senderEmailForMarket(market);
+      await sendEmail({ to: input.email, subject, text: body, from: senderFrom }).catch(() => undefined);
+      return { ok: false, message: "Stoc insuficient. V-am trimis o informare." };
+    }
+
+    const pendingId = crypto.randomUUID();
+    const payloadJson = {
+      customerName: input.customerName,
+      email: input.email,
+      phone: input.phone,
+      billingAddress: input.billingAddress,
+      deliveryAddress: input.deliveryAddress,
+      quantity: input.quantity,
+      paymentMethod: "CARD_STRIPE" as const,
+      shippingCarrier: input.shippingCarrier,
+      shippingCarrierOther: input.shippingCarrierOther ?? null,
+      additionalNotes: input.additionalNotes ?? null,
+    };
+
+    await sql`
+      insert into pending_card_checkouts (id, market, payload, total_price)
+      values (${pendingId}, ${market}, ${sql.json(payloadJson)}, ${totalPrice})
+    `;
+
+    let intent: { clientSecret: string; paymentIntentId: string } | null = null;
+    try {
+      intent = await createStripePaymentIntentForPending({
+        market,
+        totalPrice,
+        pendingCheckoutId: pendingId,
+        email: input.email,
+      });
+    } catch (error) {
+      await sql`delete from pending_card_checkouts where id = ${pendingId}`;
+      console.error("[prepareCardCheckout] stripe", { market, pendingId, error: String(error) });
+      return {
+        ok: false,
+        message:
+          market === "HU"
+            ? "A kartyas fizetest most nem sikerult elinditani. Probald ujra."
+            : "Plata cu cardul nu a putut fi pornita momentan. Incercati din nou.",
+      };
+    }
+    if (!intent) {
+      await sql`delete from pending_card_checkouts where id = ${pendingId}`;
+      return {
+        ok: false,
+        message:
+          market === "HU"
+            ? "A kartyas fizetes nincs konfiguralva a szerveren."
+            : "Plata cu cardul nu este configurata pe server.",
+      };
+    }
+
+    await sql`
+      update pending_card_checkouts
+      set stripe_payment_intent_id = ${intent.paymentIntentId}
+      where id = ${pendingId}
+    `;
+
+    return {
+      ok: true,
+      pendingId,
+      clientSecret: intent.clientSecret,
+      paymentIntentId: intent.paymentIntentId,
+    };
+  } catch (error) {
+    console.error("[prepareCardCheckout] failed", { market, error: String(error) });
+    return {
+      ok: false,
+      message:
+        market === "HU"
+          ? "A rendeles nem dolgozhato fel. Probald ujra."
+          : "Comanda nu a putut fi pregatita. Incercati din nou.",
+    };
+  }
+}
+
+export async function getPendingCardCheckoutIntentSecret(
+  pendingId: string,
+  market: Market
+): Promise<
+  | { ok: true; clientSecret: string; paymentIntentId: string; totalPrice: number }
+  | { ok: false; message: string }
+> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql`
+    select * from pending_card_checkouts
+    where id = ${pendingId} and market = ${market}
+    limit 1
+  `;
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      message:
+        market === "HU"
+          ? "A fizetesi munkamenet nem talalhato."
+          : "Sesiunea de plata nu a fost gasita.",
+    };
+  }
+  const row = rows[0] as {
+    consumed_at: string | null;
+    stripe_payment_intent_id: string | null;
+    total_price: string | number;
+  };
+  if (row.consumed_at) {
+    return {
+      ok: false,
+      message:
+        market === "HU"
+          ? "Ez a fizetesi munkamenet mar lezarult."
+          : "Aceasta sesiune de plata a fost deja finalizata.",
+    };
+  }
+  const piId = row.stripe_payment_intent_id;
+  if (!piId) {
+    return {
+      ok: false,
+      message:
+        market === "HU" ? "A fizetes meg nincs inicializalva." : "Plata nu a fost initializata.",
+    };
+  }
+  const stripe = getStripe();
+  if (!stripe) {
+    return {
+      ok: false,
+      message:
+        market === "HU" ? "A Stripe nincs konfiguralva." : "Plata cu cardul nu este configurata.",
+    };
+  }
+  try {
+    const intent = await stripe.paymentIntents.retrieve(piId);
+    if (!intent.client_secret) {
+      return {
+        ok: false,
+        message:
+          market === "HU"
+            ? "A fizetesi szandek nem erheto el."
+            : "Intentia de plata nu este disponibila.",
+      };
+    }
+    return {
+      ok: true,
+      clientSecret: intent.client_secret,
+      paymentIntentId: intent.id,
+      totalPrice: Number(row.total_price),
+    };
+  } catch (error) {
+    console.error("[getPendingCardCheckoutIntentSecret]", { pendingId, market, error: String(error) });
+    return {
+      ok: false,
+      message:
+        market === "HU"
+          ? "A Stripe nem adta vissza a fizetesi adatokat."
+          : "Nu am putut relua datele de plata de la Stripe.",
+    };
+  }
+}
+
+export async function getCardPaymentIntentOrderNumber(
+  paymentIntentId: string
+): Promise<{ ok: true; orderNumber: number; market: Market } | { ok: false }> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql`
+    select o.order_number, o.market
+    from pending_card_checkouts p
+    join orders o on o.id = p.order_id
+    where p.stripe_payment_intent_id = ${paymentIntentId} and p.order_id is not null
+    limit 1
+  `;
+  if (rows.length === 0) {
+    return { ok: false };
+  }
+  const r = rows[0] as { order_number: number | string; market: string };
+  const m = String(r.market || "").toUpperCase() === "HU" ? "HU" : "RO";
+  return { ok: true, orderNumber: Number(r.order_number), market: m };
+}
+
+export async function finalizePendingCardPaymentFromStripe(
+  intent: Stripe.PaymentIntent
+): Promise<"handled" | "not_pending"> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const metaPending = intent.metadata?.pendingCheckoutId;
+  let pendingId = typeof metaPending === "string" && metaPending.trim() ? metaPending.trim() : "";
+
+  type PendingRow = {
+    id: string;
+    market: string;
+    payload: unknown;
+    total_price: string | number;
+    consumed_at: string | null;
+    order_id: string | null;
+  };
+
+  let row: PendingRow | undefined;
+  if (pendingId) {
+    const found = await sql`
+      select * from pending_card_checkouts where id = ${pendingId} limit 1
+    `;
+    row = found[0] as PendingRow | undefined;
+  }
+  if (!row && intent.id) {
+    const found = await sql`
+      select * from pending_card_checkouts
+      where stripe_payment_intent_id = ${intent.id}
+      limit 1
+    `;
+    row = found[0] as PendingRow | undefined;
+  }
+  if (!row) {
+    return "not_pending";
+  }
+
+  const market = (String(row.market || "").toUpperCase() === "HU" ? "HU" : "RO") as Market;
+
+  if (row.order_id && row.consumed_at) {
+    const existing = await getOrderById(row.order_id, market);
+    if (existing && existing.paymentMethod === "CARD_STRIPE" && existing.status === "ORDERED_NOT_PAID") {
+      await updateOrderStatus(row.order_id, "ORDERED_PAID_NOT_SHIPPED", market);
+    }
+    return "handled";
+  }
+
+  const expectedCurrency = market === "HU" ? "huf" : "ron";
+  const receivedCurrency = String(intent.currency || "").toLowerCase();
+  if (receivedCurrency !== expectedCurrency) {
+    throw new Error(`stripe_currency_mismatch:${receivedCurrency}:${expectedCurrency}`);
+  }
+  const totalPrice = Number(row.total_price);
+  const expectedAmount = stripeMinorAmountForTotal(market, totalPrice);
+  const paidAmount = Number(intent.amount_received || intent.amount || 0);
+  if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) {
+    throw new Error(`stripe_amount_mismatch:${paidAmount}:${expectedAmount}`);
+  }
+
+  const parsed = parseCardCheckoutPayloadFromJson(row.payload);
+  if (!parsed) {
+    throw new Error("invalid_pending_payload");
+  }
+
+  const created = await createOrder(parsed, market);
+  if (!created.ok || !created.order) {
+    throw new Error(`create_order_failed:${created.message}`);
+  }
+
+  const paidOk = await updateOrderStatus(created.order.id, "ORDERED_PAID_NOT_SHIPPED", market);
+  if (!paidOk) {
+    console.error("[finalizePendingCardPaymentFromStripe] updateOrderStatus returned false", {
+      orderId: created.order.id,
+      market,
+    });
+  }
+
+  await sql`
+    update pending_card_checkouts
+    set consumed_at = now(), order_id = ${created.order.id}
+    where id = ${row.id} and order_id is null
+  `;
+
+  return "handled";
 }
 
 export async function createOrder(input: {

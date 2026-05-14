@@ -10,14 +10,15 @@ export const metadata: Metadata = {
 export default function HuCardPaymentResultPage({
   searchParams,
 }: {
-  searchParams: { nr?: string };
+  searchParams: { nr?: string; pendingId?: string };
 }) {
+  const pendingId = String(searchParams.pendingId || "").trim();
   const nrRaw = searchParams.nr || "";
-  const nr = nrRaw ? nrRaw.padStart(7, "0") : "-";
+  const nr = nrRaw ? nrRaw.padStart(7, "0") : "—";
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <StripePaymentResult market="HU" orderNumber={nr} />
+      <StripePaymentResult market="HU" orderNumber={nr} pendingId={pendingId || undefined} />
     </main>
   );
 }

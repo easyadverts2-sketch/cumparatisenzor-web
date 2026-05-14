@@ -175,6 +175,25 @@ export function OrderForm({ unitPrice, standardShipping, fineshipShipping }: Ord
         additionalNotes: String(formData.get("additionalNotes") || "").trim(),
       };
 
+      if (paymentMethodInput === "CARD_STRIPE") {
+        const res = await fetch("/api/orders/card-prepare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("invalid_response");
+        }
+        const data = (await res.json()) as { ok: true; pendingId: string } | { ok: false; message?: string };
+        if (!data.ok || !("pendingId" in data)) {
+          setError(data.message || "A aparut o eroare.");
+          return;
+        }
+        router.push(`/comanda/plata-card?pendingId=${encodeURIComponent(data.pendingId)}`);
+        return;
+      }
+
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -196,10 +215,6 @@ export function OrderForm({ unitPrice, standardShipping, fineshipShipping }: Ord
 
       if (data.paymentMethod === "BANK_TRANSFER") {
         router.push(`/comanda/plata?nr=${encodeURIComponent(nr)}`);
-      } else if (data.paymentMethod === "CARD_STRIPE") {
-        router.push(
-          `/comanda/plata-card?nr=${encodeURIComponent(nr)}&orderId=${encodeURIComponent(data.orderId)}`
-        );
       } else {
         router.push(`/comanda/multumesc?nr=${encodeURIComponent(nr)}`);
       }

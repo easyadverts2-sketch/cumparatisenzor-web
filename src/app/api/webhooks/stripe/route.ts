@@ -1,7 +1,7 @@
 import { sendEmail } from "@/lib/email";
 import { buildPaymentReceivedEmail } from "@/lib/order-emails";
 import { getSql } from "@/lib/db";
-import { getOrderById, updateOrderStatus } from "@/lib/store";
+import { finalizePendingCardPaymentFromStripe, getOrderById, updateOrderStatus } from "@/lib/store";
 import { getStripe } from "@/lib/stripe-checkout";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
@@ -58,6 +58,18 @@ async function processStripeEvent(event: Stripe.Event) {
   }
 
   const intent = event.data.object as Stripe.PaymentIntent;
+
+  const pendingOutcome = await finalizePendingCardPaymentFromStripe(intent);
+  if (pendingOutcome === "handled") {
+    const sql = getSql();
+    await sql`
+      update stripe_webhook_events
+      set status = 'PROCESSED', processed_at = now()
+      where event_id = ${event.id}
+    `;
+    return;
+  }
+
   const orderId = intent.metadata?.orderId;
   const market = intent.metadata?.market === "HU" ? "HU" : "RO";
   if (!orderId || typeof orderId !== "string") {

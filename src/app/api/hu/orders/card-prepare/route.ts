@@ -1,4 +1,4 @@
-import { createOrder } from "@/lib/store";
+import { prepareCardCheckout } from "@/lib/store";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 import type { Order } from "@/lib/types";
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     try {
       const limited = await enforceRateLimit({
         request,
-        action: "api_orders_create_hu",
+        action: "api_orders_card_prepare_hu",
         limit: 12,
         windowSec: 60,
       });
@@ -78,28 +78,21 @@ export async function POST(request: Request) {
         );
       }
     } catch {
-      // Fail-open: ordering flow must continue even if rate-limit storage is temporarily unavailable.
+      // Fail-open
     }
 
     const body = await request.json();
+    if (parsePaymentMethod(body.paymentMethod) !== "CARD_STRIPE") {
+      return NextResponse.json(
+        { ok: false, message: "Ez a vegpont csak kartyas fizeteshez." },
+        { status: 400 }
+      );
+    }
     const shippingCarrierParsed = parseShippingCarrier(body.shippingCarrier);
     if (!shippingCarrierParsed) {
       return NextResponse.json({ ok: false, message: "Ervenytelen szallitasi mod." }, { status: 400 });
     }
     const shippingCarrier = shippingCarrierParsed;
-    if (!["COD", "BANK_TRANSFER", "CARD_STRIPE"].includes(String(body.paymentMethod || ""))) {
-      return NextResponse.json({ ok: false, message: "Ervenytelen fizetesi mod." }, { status: 400 });
-    }
-    if (parsePaymentMethod(body.paymentMethod) === "CARD_STRIPE") {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-            "A kartyas fizeteshez frissitsd az oldalt (Ctrl+F5), majd valaszd ujra a kartyat.",
-        },
-        { status: 400 }
-      );
-    }
     const customerName = toSafe(body.customerName);
     const email = toSafe(body.email);
     const phone = toSafe(body.phone).replace(/\s+/g, "");
@@ -173,13 +166,7 @@ export async function POST(request: Request) {
         ].join("\n")
       : [`Maganszemely: ${customerName}`, formatAddress(delivery)].join("\n");
 
-    if (shippingCarrier === "DPD" && parsePaymentMethod(body.paymentMethod) === "COD") {
-      return NextResponse.json(
-        { ok: false, message: "DPD + utanvet jelenleg nem elerheto Magyarorszagon." },
-        { status: 400 }
-      );
-    }
-    const result = await createOrder(
+    const result = await prepareCardCheckout(
       {
         customerName,
         email,
@@ -187,7 +174,7 @@ export async function POST(request: Request) {
         billingAddress,
         deliveryAddress,
         quantity,
-        paymentMethod: parsePaymentMethod(body.paymentMethod),
+        paymentMethod: "CARD_STRIPE",
         shippingCarrier,
         shippingCarrierOther: null,
         additionalNotes,
@@ -195,25 +182,17 @@ export async function POST(request: Request) {
       "HU"
     );
 
-    if (result.ok && result.order) {
+    if (result.ok) {
       return NextResponse.json(
         {
           ok: true,
-          message: result.message,
-          orderId: result.order.id,
-          orderNumber: result.order.orderNumber,
-          paymentMethod: result.order.paymentMethod,
+          pendingId: result.pendingId,
+          paymentIntentId: result.paymentIntentId,
         },
         { status: 200 }
       );
     }
-    if (!result.ok) {
-      return NextResponse.json(
-        { ok: false, message: "A rendeles jelenleg nem feldolgozhato. Kerlek probald ujra." },
-        { status: 400 }
-      );
-    }
-    return NextResponse.json(result, { status: 200 });
+    return NextResponse.json({ ok: false, message: result.message }, { status: 400 });
   } catch {
     return NextResponse.json(
       { ok: false, message: "Szerverhiba. Kerlek probald ujra." },

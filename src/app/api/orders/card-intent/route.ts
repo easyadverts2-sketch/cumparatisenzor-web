@@ -1,19 +1,38 @@
 import { createStripePaymentIntent } from "@/lib/stripe-checkout";
-import { getOrderById } from "@/lib/store";
+import { getOrderById, getPendingCardCheckoutIntentSecret } from "@/lib/store";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   let safeOrderId = "";
+  let safePendingId = "";
   let safeMarket: "RO" | "HU" = "RO";
   try {
     const body = await request.json();
-    const orderId = String(body.orderId || "");
     const market = String(body.market || "RO").toUpperCase() === "HU" ? "HU" : "RO";
-    safeOrderId = orderId;
     safeMarket = market;
-    if (!orderId) {
-      return NextResponse.json({ ok: false, message: "Lipseste orderId." }, { status: 400 });
+    const pendingId = String(body.pendingId || "").trim();
+    const orderId = String(body.orderId || "").trim();
+
+    if (pendingId) {
+      safePendingId = pendingId;
+      const pending = await getPendingCardCheckoutIntentSecret(pendingId, market);
+      if (!pending.ok) {
+        return NextResponse.json({ ok: false, message: pending.message }, { status: 400 });
+      }
+      return NextResponse.json({
+        ok: true,
+        clientSecret: pending.clientSecret,
+        paymentIntentId: pending.paymentIntentId,
+        orderNumber: 0,
+        totalPrice: pending.totalPrice,
+        pendingCheckout: true,
+      });
     }
+
+    if (!orderId) {
+      return NextResponse.json({ ok: false, message: "Lipseste orderId sau pendingId." }, { status: 400 });
+    }
+    safeOrderId = orderId;
 
     const order = await getOrderById(orderId, market);
     if (!order) {
@@ -58,10 +77,16 @@ export async function POST(request: Request) {
       paymentIntentId: intent.paymentIntentId,
       orderNumber: order.orderNumber,
       totalPrice: order.totalPrice,
+      pendingCheckout: false,
     });
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error).slice(0, 500);
-    console.error("[card-intent]", { market: safeMarket, orderId: safeOrderId, detail });
+    console.error("[card-intent]", {
+      market: safeMarket,
+      orderId: safeOrderId,
+      pendingId: safePendingId,
+      detail,
+    });
     return NextResponse.json(
       { ok: false, message: "Plata cu cardul nu poate fi initializata momentan." },
       { status: 500 }

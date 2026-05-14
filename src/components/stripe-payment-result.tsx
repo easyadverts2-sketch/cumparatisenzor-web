@@ -1,5 +1,6 @@
 "use client";
 
+import { formatOrderNumber } from "@/lib/order-format";
 import { loadStripe } from "@stripe/stripe-js";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -12,18 +13,43 @@ type IntentState = "loading" | "succeeded" | "processing" | "requires_payment_me
 type Props = {
   market: Market;
   orderNumber: string;
+  /** When set, retry and return_url include this pending checkout id */
+  pendingId?: string;
 };
 
-export function StripePaymentResult({ market, orderNumber }: Props) {
+export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
   const [intentState, setIntentState] = useState<IntentState>("loading");
   const [message, setMessage] = useState("");
+  const [displayOrderRef, setDisplayOrderRef] = useState(orderNumber);
 
   useEffect(() => {
     let active = true;
+
+    async function pollOrderNumber(piId: string) {
+      for (let i = 0; i < 45 && active; i += 1) {
+        try {
+          const res = await fetch(`/api/orders/card-order-status?pi=${encodeURIComponent(piId)}`);
+          const data = (await res.json()) as {
+            ok?: boolean;
+            ready?: boolean;
+            orderNumber?: number;
+          };
+          if (data.ok && data.ready && data.orderNumber != null) {
+            if (active) setDisplayOrderRef(formatOrderNumber(data.orderNumber));
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
     async function run() {
       try {
         const params = new URLSearchParams(window.location.search);
         const clientSecret = params.get("payment_intent_client_secret");
+        const piFromUrl = params.get("payment_intent");
         if (!clientSecret) {
           if (active) {
             setIntentState("unknown");
@@ -44,9 +70,11 @@ export function StripePaymentResult({ market, orderNumber }: Props) {
         switch (paymentIntent?.status) {
           case "succeeded":
             setIntentState("succeeded");
+            if (piFromUrl) void pollOrderNumber(piFromUrl);
             break;
           case "processing":
             setIntentState("processing");
+            if (piFromUrl) void pollOrderNumber(piFromUrl);
             break;
           case "requires_payment_method":
             setIntentState("requires_payment_method");
@@ -80,9 +108,10 @@ export function StripePaymentResult({ market, orderNumber }: Props) {
         titleFailed: "Fizetes sikertelen",
         titleUnknown: "Fizetes allapota nem egyertelmu",
         orderLabel: "Rendelesszam",
+        pendingRef: "A rendeles szama hamarosan megjelenik.",
         success: "A kartyas fizetes sikeresen megtortent. A rendeles feldolgozasat hamarosan megkezdjuk.",
         pending: "A fizetes folyamatban van. Par percen belul frissul a rendeles allapota.",
-        failed: "A fizetes nem sikerult. Probald ujra ugyanahhoz a rendeleshez.",
+        failed: "A fizetes nem sikerult. Probald ujra ugyanahhoz a fizetesi munkamenethez.",
         unknown: "A fizetes oldala visszatoltott, de a pontos allapotot most nem tudtuk ellenorizni.",
         retry: "Vissza a kartyas fizeteshez",
         home: "Vissza a fooldalra",
@@ -95,9 +124,10 @@ export function StripePaymentResult({ market, orderNumber }: Props) {
       titleFailed: "Plata nu a reusit",
       titleUnknown: "Statusul platii nu este clar",
       orderLabel: "Comanda nr.",
+      pendingRef: "Numarul comenzii va aparea in cateva momente.",
       success: "Plata cu cardul a fost confirmata cu succes. Vom incepe procesarea comenzii in scurt timp.",
       pending: "Plata este in curs de procesare. Statusul comenzii se va actualiza in cateva minute.",
-      failed: "Plata nu a reusit. Puteti incerca din nou pentru aceeasi comanda.",
+      failed: "Plata nu a reusit. Puteti incerca din nou pentru aceeasi sesiune de plata.",
       unknown: "Pagina de plata s-a inchis corect, dar statusul exact nu a putut fi verificat acum.",
       retry: "Inapoi la plata cu cardul",
       home: "Inapoi la pagina principala",
@@ -125,7 +155,10 @@ export function StripePaymentResult({ market, orderNumber }: Props) {
           ? t.failed
           : t.unknown;
 
-  const retryHref = market === "HU" ? "/hu/comanda/plata-card" : "/comanda/plata-card";
+  const retryBase = market === "HU" ? "/hu/comanda/plata-card" : "/comanda/plata-card";
+  const retryHref = pendingId
+    ? `${retryBase}?pendingId=${encodeURIComponent(pendingId)}`
+    : retryBase;
   const homeHref = market === "HU" ? "/hu" : "/";
   const colorClass =
     intentState === "succeeded"
@@ -134,11 +167,16 @@ export function StripePaymentResult({ market, orderNumber }: Props) {
         ? "border-red-300 from-red-50"
         : "border-[#de6a44]/30 from-[#fff4ec]";
 
+  const showPendingRef =
+    intentState === "succeeded" &&
+    (displayOrderRef === "—" || displayOrderRef === "-" || displayOrderRef === "");
+
   return (
     <div className={`rounded-3xl border-2 bg-gradient-to-b to-white p-8 shadow-lg ${colorClass}`}>
       <h1 className="text-2xl font-bold text-[#0a2624]">{title}</h1>
       <p className="mt-2 font-semibold text-[#0f766e]">
-        {t.orderLabel} {orderNumber}
+        {t.orderLabel}{" "}
+        {showPendingRef ? <span className="font-normal text-[#1a4d47]">{t.pendingRef}</span> : displayOrderRef}
       </p>
       <p className="mt-4 text-[#1a4d47]">{body}</p>
       {message ? <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p> : null}

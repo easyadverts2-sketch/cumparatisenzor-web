@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type Props = {
-  orderId: string;
+  /** Legacy: order already exists in DB before payment */
+  orderId?: string;
+  /** New flow: checkout prepared server-side, order created after Stripe success */
+  pendingId?: string;
   orderNumber: string;
   market?: "RO" | "HU";
   uiLanguage?: "RO" | "HU" | "CS";
@@ -19,10 +22,12 @@ function EmbeddedPaymentForm({
   orderNumber,
   market = "RO",
   uiLanguage = "RO",
+  pendingId,
 }: {
   orderNumber: string;
   market?: "RO" | "HU";
   uiLanguage?: "RO" | "HU" | "CS";
+  pendingId?: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -35,10 +40,17 @@ function EmbeddedPaymentForm({
     if (!stripe || !elements) return;
 
     setLoading(true);
+    const baseResult = market === "HU" ? "/hu/comanda/plata-card/rezultat" : "/comanda/plata-card/rezultat";
+    const qs = new URLSearchParams();
+    if (pendingId) qs.set("pendingId", pendingId);
+    if (orderNumber && orderNumber !== "—" && orderNumber !== "-") {
+      qs.set("nr", orderNumber);
+    }
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
     const { error: confirmError } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}${market === "HU" ? "/hu/comanda/plata-card/rezultat" : "/comanda/plata-card/rezultat"}?nr=${encodeURIComponent(orderNumber)}`,
+        return_url: `${window.location.origin}${baseResult}${suffix}`,
       },
     });
     if (confirmError) {
@@ -82,6 +94,7 @@ function EmbeddedPaymentForm({
 
 export function StripeEmbeddedPayment({
   orderId,
+  pendingId,
   orderNumber,
   market = "RO",
   uiLanguage = "RO",
@@ -95,12 +108,22 @@ export function StripeEmbeddedPayment({
     let active = true;
     async function loadIntent() {
       try {
+        if (!orderId && !pendingId) {
+          if (active) setError("Lipsesc datele pentru plata.");
+          return;
+        }
         const res = await fetch("/api/orders/card-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, market }),
+          body: JSON.stringify(
+            pendingId ? { pendingId, market } : { orderId, market }
+          ),
         });
-        const data = (await res.json()) as { ok: boolean; clientSecret?: string; message?: string };
+        const data = (await res.json()) as {
+          ok: boolean;
+          clientSecret?: string;
+          message?: string;
+        };
         if (!active) return;
         if (!data.ok || !data.clientSecret) {
           setError(
@@ -132,7 +155,7 @@ export function StripeEmbeddedPayment({
     return () => {
       active = false;
     };
-  }, [orderId, market, uiLanguage]);
+  }, [orderId, pendingId, market, uiLanguage]);
 
   const options = useMemo(() => (clientSecret ? { clientSecret } : undefined), [clientSecret]);
 
@@ -179,7 +202,12 @@ export function StripeEmbeddedPayment({
 
   return (
     <Elements stripe={stripePromise} options={options}>
-      <EmbeddedPaymentForm orderNumber={orderNumber} market={market} uiLanguage={uiLanguage} />
+      <EmbeddedPaymentForm
+        orderNumber={orderNumber}
+        market={market}
+        uiLanguage={uiLanguage}
+        pendingId={pendingId}
+      />
     </Elements>
   );
 }

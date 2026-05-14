@@ -1,4 +1,4 @@
-import { createOrder } from "@/lib/store";
+import { prepareCardCheckout } from "@/lib/store";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { SHIPPING_CARRIERS, type ShippingCarrier } from "@/lib/types";
 import type { Order } from "@/lib/types";
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     try {
       const limited = await enforceRateLimit({
         request,
-        action: "api_orders_create_ro",
+        action: "api_orders_card_prepare_ro",
         limit: 12,
         windowSec: 60,
       });
@@ -78,39 +78,21 @@ export async function POST(request: Request) {
         );
       }
     } catch {
-      // Fail-open: ordering flow must continue even if rate-limit storage is temporarily unavailable.
+      // Fail-open
     }
 
     const body = await request.json();
+    if (parsePaymentMethod(body.paymentMethod) !== "CARD_STRIPE") {
+      return NextResponse.json(
+        { ok: false, message: "Acest endpoint este doar pentru plata cu cardul." },
+        { status: 400 }
+      );
+    }
     const shippingCarrierParsed = parseShippingCarrier(body.shippingCarrier);
     if (!shippingCarrierParsed) {
       return NextResponse.json({ ok: false, message: "Transportator invalid." }, { status: 400 });
     }
     const shippingCarrier = shippingCarrierParsed;
-    const paymentMethod = parsePaymentMethod(body.paymentMethod);
-    if (!["COD", "BANK_TRANSFER", "CARD_STRIPE"].includes(String(body.paymentMethod || ""))) {
-      return NextResponse.json({ ok: false, message: "Metoda de plata invalida." }, { status: 400 });
-    }
-    if (paymentMethod === "CARD_STRIPE") {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-            "Plata cu card foloseste un flux dedicat. Reincarcati pagina (Ctrl+F5) si alegeti din nou plata cu cardul.",
-        },
-        { status: 400 }
-      );
-    }
-    if (shippingCarrier === "PPL" && paymentMethod === "COD") {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-            "PPL nu permite ramburs in Romania. Alegeti DPD sau transfer bancar.",
-        },
-        { status: 400 }
-      );
-    }
     const customerName = toSafe(body.customerName);
     const email = toSafe(body.email);
     const phone = toSafe(body.phone).replace(/\s+/g, "");
@@ -193,32 +175,33 @@ export async function POST(request: Request) {
           formatAddress(delivery),
         ].join("\n");
 
-    const result = await createOrder({
-      customerName,
-      email,
-      phone,
-      billingAddress,
-      deliveryAddress,
-      quantity,
-      paymentMethod,
-      shippingCarrier,
-      shippingCarrierOther: null,
-      additionalNotes,
-    });
+    const result = await prepareCardCheckout(
+      {
+        customerName,
+        email,
+        phone,
+        billingAddress,
+        deliveryAddress,
+        quantity,
+        paymentMethod: "CARD_STRIPE",
+        shippingCarrier,
+        shippingCarrierOther: null,
+        additionalNotes,
+      },
+      "RO"
+    );
 
-    if (result.ok && result.order) {
+    if (result.ok) {
       return NextResponse.json(
         {
           ok: true,
-          message: result.message,
-          orderId: result.order.id,
-          orderNumber: result.order.orderNumber,
-          paymentMethod: result.order.paymentMethod,
+          pendingId: result.pendingId,
+          paymentIntentId: result.paymentIntentId,
         },
         { status: 200 }
       );
     }
-    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    return NextResponse.json({ ok: false, message: result.message }, { status: 400 });
   } catch {
     return NextResponse.json(
       { ok: false, message: "Eroare server. Va rugam sa incercati din nou." },

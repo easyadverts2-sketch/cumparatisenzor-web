@@ -171,6 +171,25 @@ export function OrderFormHu({ unitPrice, standardShipping, fineshipShipping }: O
         additionalNotes: String(formData.get("additionalNotes") || "").trim(),
       };
 
+      if (paymentMethodInput === "CARD_STRIPE") {
+        const res = await fetch("/api/hu/orders/card-prepare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("invalid_response");
+        }
+        const data = (await res.json()) as { ok: true; pendingId: string } | { ok: false; message?: string };
+        if (!data.ok || !("pendingId" in data)) {
+          setError(data.message || "Hiba tortent a rendelesnel.");
+          return;
+        }
+        router.push(`/hu/comanda/plata-card?pendingId=${encodeURIComponent(data.pendingId)}`);
+        return;
+      }
+
       const res = await fetch("/api/hu/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -192,10 +211,6 @@ export function OrderFormHu({ unitPrice, standardShipping, fineshipShipping }: O
 
       if (data.paymentMethod === "BANK_TRANSFER") {
         router.push(`/hu/comanda/plata?nr=${encodeURIComponent(nr)}`);
-      } else if (data.paymentMethod === "CARD_STRIPE") {
-        router.push(
-          `/hu/comanda/plata-card?nr=${encodeURIComponent(nr)}&orderId=${encodeURIComponent(data.orderId)}`
-        );
       } else {
         router.push(`/hu/comanda/multumesc?nr=${encodeURIComponent(nr)}`);
       }
