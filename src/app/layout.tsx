@@ -7,6 +7,8 @@ import Link from "next/link";
 import Script from "next/script";
 import { GoogleAnalyticsPageViews } from "@/components/google-analytics-page-views";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { MetaPixel } from "@/components/meta-pixel";
+import { MetaPixelPageViews } from "@/components/meta-pixel-page-views";
 import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 import { HeaderContactInline } from "@/components/header-contact-inline";
 import { HeaderNav } from "@/components/header-nav";
@@ -94,6 +96,10 @@ export default function RootLayout({
                 gtag('config', 'AW-18125938204');
               `}
             </Script>
+            <MetaPixel scriptId="meta-pixel-ro" />
+            <Suspense fallback={null}>
+              <MetaPixelPageViews />
+            </Suspense>
           </>
         ) : null}
         {!isHu ? (
