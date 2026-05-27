@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
-type Market = "RO" | "HU";
+type Market = "RO" | "HU" | "EU";
 type IntentState = "loading" | "succeeded" | "processing" | "requires_payment_method" | "canceled" | "unknown";
 
 type Props = {
@@ -101,6 +101,23 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
   }, []);
 
   const t = useMemo(() => {
+    if (market === "EU") {
+      return {
+        titleSuccess: "Оплата прошла успешно",
+        titlePending: "Оплата обрабатывается",
+        titleFailed: "Оплата не прошла",
+        titleUnknown: "Статус оплаты неясен",
+        orderLabel: "Номер заказа",
+        pendingRef: "Номер заказа появится через несколько секунд.",
+        success: "Оплата картой подтверждена. Мы начнём обработку заказа.",
+        pending: "Оплата в процессе. Статус заказа обновится через несколько минут.",
+        failed: "Оплата не прошла. Попробуйте снова в той же сессии.",
+        unknown: "Страница оплаты загрузилась, но точный статус проверить не удалось.",
+        retry: "Вернуться к оплате картой",
+        home: "На главную",
+        support: "Если ошибка повторяется: info@sensorglukoz.eu",
+      };
+    }
     if (market === "HU") {
       return {
         titleSuccess: "Fizetes sikeres",
@@ -155,11 +172,12 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
           ? t.failed
           : t.unknown;
 
-  const retryBase = market === "HU" ? "/hu/comanda/plata-card" : "/comanda/plata-card";
+  const retryBase =
+    market === "EU" ? "/eu/comanda/plata-card" : market === "HU" ? "/hu/comanda/plata-card" : "/comanda/plata-card";
   const retryHref = pendingId
     ? `${retryBase}?pendingId=${encodeURIComponent(pendingId)}`
     : retryBase;
-  const homeHref = market === "HU" ? "/hu" : "/";
+  const homeHref = market === "EU" ? "/eu" : market === "HU" ? "/hu" : "/";
   const colorClass =
     intentState === "succeeded"
       ? "border-[#0d9488]/30 from-[#e6f7f4]"

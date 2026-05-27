@@ -259,7 +259,7 @@ function productTypeForMarket(market: Market, paymentMethod: Order["paymentMetho
   return process.env.PPL_PRODUCT_TYPE?.trim() || "BUSS";
 }
 
-const SHOP_CURRENCY: Record<Market, string> = { HU: "HUF", RO: "RON" };
+const SHOP_CURRENCY: Record<Market, string> = { HU: "HUF", RO: "RON", EU: "EUR" };
 
 /**
  * COD settlement currency/amount sent to PPL.
@@ -275,7 +275,9 @@ function pplCodSettlementAmount(
       ? process.env.PPL_COD_CURRENCY_HU?.trim()
       : market === "RO"
         ? process.env.PPL_COD_CURRENCY_RO?.trim()
-        : undefined;
+        : market === "EU"
+          ? process.env.PPL_COD_CURRENCY_EU?.trim()
+          : undefined;
   const fromGlobal = process.env.PPL_COD_CURRENCY?.trim();
   const settlement = (
     fromMarketEnv ||

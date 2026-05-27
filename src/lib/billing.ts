@@ -1,7 +1,12 @@
 import type { Market, Order } from "./types";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 export type InvoiceKind = "PROFORMA" | "FINAL";
+
+export type InvoiceCurrency = "RON" | "HUF" | "EUR";
 
 export type InvoiceData = {
   invoiceNo: string;
@@ -9,14 +14,16 @@ export type InvoiceData = {
   variableSymbol: string;
   issueDateIso: string;
   dueDateIso: string;
-  currency: "RON" | "HUF";
+  currency: InvoiceCurrency;
   market: Market;
   kind: InvoiceKind;
   total: number;
 };
 
-export function marketCurrency(market: Market): "RON" | "HUF" {
-  return market === "HU" ? "HUF" : "RON";
+export function marketCurrency(market: Market): InvoiceCurrency {
+  if (market === "HU") return "HUF";
+  if (market === "EU") return "EUR";
+  return "RON";
 }
 
 export function formatVariableSymbol(issueDate: Date, sequenceNo: number): string {
@@ -38,6 +45,13 @@ export function getBankDetails(market: Market) {
       accountName: "Česká maloobchodní s.r.o.",
       iban: "CZ11 0800 0000 0022 1394 5293",
       bic: "GIBACZPX",
+    };
+  }
+  if (market === "EU") {
+    return {
+      accountName: "Česká maloobchodní s.r.o.",
+      iban: process.env.EU_BANK_IBAN || "CZ03 0100 0000 0001 1076 4124",
+      bic: process.env.EU_BANK_BIC || "KOMBCZPP",
     };
   }
   return {
@@ -74,55 +88,185 @@ function humanDate(value: string) {
   return `${dd}.${mm}.${yyyy}`;
 }
 
+type InvoiceLabelSet = {
+  titleProforma: string;
+  titleFinal: string;
+  orderNumber: string;
+  issueDate: string;
+  dueDate: string;
+  variableSymbol: string;
+  client: string;
+  phone: string;
+  billingAddress: string;
+  deliveryAddress: string;
+  product: string;
+  quantity: string;
+  itemsTotal: string;
+  shipping: string;
+  totalToPay: string;
+  paymentDetails: string;
+  beneficiary: string;
+  reference: string;
+  customerAndDelivery: string;
+  orderSummary: string;
+  company: string;
+  address: string;
+};
+
+const INVOICE_LABELS_RO: InvoiceLabelSet = {
+  titleProforma: "Factura proforma",
+  titleFinal: "Factura finala",
+  orderNumber: "Numar comanda",
+  issueDate: "Data emiterii",
+  dueDate: "Data scadentei",
+  variableSymbol: "Numar variabil",
+  client: "Client",
+  phone: "Telefon",
+  billingAddress: "Adresa facturare",
+  deliveryAddress: "Adresa livrare",
+  product: "Produs",
+  quantity: "Cantitate",
+  itemsTotal: "Total produse",
+  shipping: "Transport",
+  totalToPay: "Total plata",
+  paymentDetails: "Date plata",
+  beneficiary: "Beneficiar",
+  reference: "Referinta",
+  customerAndDelivery: "Date client si livrare",
+  orderSummary: "Rezumat comanda",
+  company: "Companie",
+  address: "Adresa",
+};
+
+const INVOICE_LABELS_HU: InvoiceLabelSet = {
+  titleProforma: "Dijbekero (proforma)",
+  titleFinal: "Vegszamla",
+  orderNumber: "Rendelesszam",
+  issueDate: "Kiallitas datuma",
+  dueDate: "Fizetesi hatarido",
+  variableSymbol: "Valtozo szam",
+  client: "Vasarlo",
+  phone: "Telefon",
+  billingAddress: "Szamlazasi cim",
+  deliveryAddress: "Szallitasi cim",
+  product: "Termek",
+  quantity: "Mennyiseg",
+  itemsTotal: "Termek osszesen",
+  shipping: "Szallitas",
+  totalToPay: "Vegosszeg",
+  paymentDetails: "Atutalasi adatok",
+  beneficiary: "Kedvezmenyezett",
+  reference: "Kozlemeny",
+  customerAndDelivery: "Vasarlo es szallitasi adatok",
+  orderSummary: "Rendeles osszesito",
+  company: "Ceg",
+  address: "Cim",
+};
+
+const INVOICE_LABELS_EU_RU: InvoiceLabelSet = {
+  titleProforma: "Счет (проформа)",
+  titleFinal: "Окончательный счет",
+  orderNumber: "Номер заказа",
+  issueDate: "Дата выставления",
+  dueDate: "Срок оплаты",
+  variableSymbol: "Вариабельный символ",
+  client: "Клиент",
+  phone: "Телефон",
+  billingAddress: "Адрес для счета",
+  deliveryAddress: "Адрес доставки",
+  product: "Товар",
+  quantity: "Количество",
+  itemsTotal: "Итого за товар",
+  shipping: "Доставка",
+  totalToPay: "Сумма к оплате",
+  paymentDetails: "Платежные реквизиты",
+  beneficiary: "Получатель",
+  reference: "Назначение платежа",
+  customerAndDelivery: "Данные клиента и доставки",
+  orderSummary: "Сводка заказа",
+  company: "Компания",
+  address: "Адрес",
+};
+
+function invoiceLabels(market: Market): InvoiceLabelSet {
+  if (market === "HU") return INVOICE_LABELS_HU;
+  if (market === "EU") return INVOICE_LABELS_EU_RU;
+  return INVOICE_LABELS_RO;
+}
+
+/**
+ * EU verze (ruština) potřebuje TTF font s podporou azbuky. RO/HU jedou na
+ * vestavěné Helvetice. DejaVu Sans (Latin + Greek + Cyrillic) je nesený
+ * v repu pod `src/lib/fonts/`.
+ */
+type EmbeddedFonts = {
+  regular: Awaited<ReturnType<PDFDocument["embedFont"]>>;
+  bold: Awaited<ReturnType<PDFDocument["embedFont"]>>;
+};
+
+async function loadFontBytes(fileName: string): Promise<Uint8Array> {
+  const filePath = path.join(process.cwd(), "src", "lib", "fonts", fileName);
+  const buf = await readFile(filePath);
+  return new Uint8Array(buf);
+}
+
+async function embedFontsForMarket(doc: PDFDocument, market: Market): Promise<EmbeddedFonts> {
+  if (market === "EU") {
+    doc.registerFontkit(fontkit);
+    const [regularBytes, boldBytes] = await Promise.all([
+      loadFontBytes("DejaVuSans.ttf"),
+      loadFontBytes("DejaVuSans-Bold.ttf"),
+    ]);
+    const regular = await doc.embedFont(regularBytes, { subset: true });
+    const bold = await doc.embedFont(boldBytes, { subset: true });
+    return { regular, bold };
+  }
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  return { regular, bold };
+}
+
+function invoiceTitle(labels: InvoiceLabelSet, kind: InvoiceKind): string {
+  return kind === "PROFORMA" ? labels.titleProforma : labels.titleFinal;
+}
+
 export function renderInvoiceText(order: Order, data: InvoiceData): string {
   const bank = getBankDetails(data.market);
   const issueDate = humanDate(data.issueDateIso);
   const dueDate = humanDate(data.dueDateIso);
-  const isHu = data.market === "HU";
-  const title = isHu
-    ? data.kind === "PROFORMA"
-      ? "Dijbekero (proforma)"
-      : "Vegszamla"
-    : data.kind === "PROFORMA"
-      ? "Factura proforma"
-      : "Factura finala";
+  const L = invoiceLabels(data.market);
+  const title = invoiceTitle(L, data.kind);
   return [
     `${title}: ${data.invoiceNo}`,
-    `${isHu ? "Rendelesszam" : "Numar comanda"}: ${String(order.orderNumber)}`,
-    `${isHu ? "Kiallitas datuma" : "Data emiterii"}: ${issueDate}`,
-    `${isHu ? "Fizetesi hatarido" : "Data scadentei"}: ${dueDate}`,
-    `${isHu ? "Valtozo szam" : "Numar variabil"}: ${data.variableSymbol}`,
-    `${isHu ? "Vasarlo" : "Client"}: ${order.customerName}`,
+    `${L.orderNumber}: ${String(order.orderNumber)}`,
+    `${L.issueDate}: ${issueDate}`,
+    `${L.dueDate}: ${dueDate}`,
+    `${L.variableSymbol}: ${data.variableSymbol}`,
+    `${L.client}: ${order.customerName}`,
     `Email: ${order.email}`,
-    `${isHu ? "Telefon" : "Telefon"}: ${order.phone}`,
-    `${isHu ? "Szamlazasi cim" : "Adresa facturare"}: ${order.billingAddress.replace(/\n/g, ", ")}`,
-    `${isHu ? "Szallitasi cim" : "Adresa livrare"}: ${order.deliveryAddress.replace(/\n/g, ", ")}`,
-    `${isHu ? "Termek" : "Produs"}: FreeStyle Libre 2 Plus`,
-    `${isHu ? "Mennyiseg" : "Cantitate"}: ${order.quantity}`,
-    `${isHu ? "Termek osszesen" : "Total produse"}: ${order.itemPrice * order.quantity} ${data.currency}`,
-    `${isHu ? "Szallitas" : "Transport"}: ${order.shippingPrice} ${data.currency}`,
-    `${isHu ? "Vegosszeg" : "Total plata"}: ${data.total} ${data.currency}`,
+    `${L.phone}: ${order.phone}`,
+    `${L.billingAddress}: ${order.billingAddress.replace(/\n/g, ", ")}`,
+    `${L.deliveryAddress}: ${order.deliveryAddress.replace(/\n/g, ", ")}`,
+    `${L.product}: FreeStyle Libre 2 Plus`,
+    `${L.quantity}: ${order.quantity}`,
+    `${L.itemsTotal}: ${order.itemPrice * order.quantity} ${data.currency}`,
+    `${L.shipping}: ${order.shippingPrice} ${data.currency}`,
+    `${L.totalToPay}: ${data.total} ${data.currency}`,
     "",
-    `${isHu ? "Atutalasi adatok" : "Date plata"}:`,
-    `${isHu ? "Kedvezmenyezett" : "Beneficiar"}: ${bank.accountName}`,
+    `${L.paymentDetails}:`,
+    `${L.beneficiary}: ${bank.accountName}`,
     `IBAN: ${bank.iban}`,
     `BIC/SWIFT: ${bank.bic}`,
-    `${isHu ? "Kozlemeny" : "Referinta"}: ${data.variableSymbol}`,
+    `${L.reference}: ${data.variableSymbol}`,
   ].join("\n");
 }
 
 export function renderInvoiceHtml(order: Order, data: InvoiceData): string {
-  const isHu = data.market === "HU";
+  const L = invoiceLabels(data.market);
   const issueDate = humanDate(data.issueDateIso);
   const dueDate = humanDate(data.dueDateIso);
   const bank = getBankDetails(data.market);
-  const title = isHu
-    ? data.kind === "PROFORMA"
-      ? "Dijbekero / proforma"
-      : "Vegszamla"
-    : data.kind === "PROFORMA"
-      ? "Factura proforma"
-      : "Factura finala";
+  const title = invoiceTitle(L, data.kind);
 
   return `
   <div style="font-family:Arial,sans-serif;background:#f8f4f7;padding:20px;color:#0f172a;">
@@ -133,17 +277,17 @@ export function renderInvoiceHtml(order: Order, data: InvoiceData): string {
       </div>
       <div style="padding:18px;">
         <table style="width:100%;border-collapse:collapse;font-size:14px;">
-          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Rendelesszam" : "Numar comanda"}</td><td>${String(order.orderNumber)}</td></tr>
-          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Kiallitas" : "Emitere"}</td><td>${issueDate}</td></tr>
-          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Hatarido" : "Scadenta"}</td><td>${dueDate}</td></tr>
-          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Valtozo szam" : "Numar variabil"}</td><td>${data.variableSymbol}</td></tr>
-          <tr><td style="padding:7px 0;font-weight:700;">${isHu ? "Fizetendo osszeg" : "Suma de plata"}</td><td><strong>${data.total} ${data.currency}</strong></td></tr>
+          <tr><td style="padding:7px 0;font-weight:700;">${L.orderNumber}</td><td>${String(order.orderNumber)}</td></tr>
+          <tr><td style="padding:7px 0;font-weight:700;">${L.issueDate}</td><td>${issueDate}</td></tr>
+          <tr><td style="padding:7px 0;font-weight:700;">${L.dueDate}</td><td>${dueDate}</td></tr>
+          <tr><td style="padding:7px 0;font-weight:700;">${L.variableSymbol}</td><td>${data.variableSymbol}</td></tr>
+          <tr><td style="padding:7px 0;font-weight:700;">${L.totalToPay}</td><td><strong>${data.total} ${data.currency}</strong></td></tr>
         </table>
         <hr style="border:none;border-top:1px solid #f1e2ea;margin:14px 0;" />
-        <p style="margin:6px 0;"><strong>${isHu ? "Kedvezmenyezett" : "Beneficiar"}:</strong> ${bank.accountName}</p>
+        <p style="margin:6px 0;"><strong>${L.beneficiary}:</strong> ${bank.accountName}</p>
         <p style="margin:6px 0;"><strong>IBAN:</strong> ${bank.iban}</p>
         <p style="margin:6px 0;"><strong>BIC/SWIFT:</strong> ${bank.bic}</p>
-        <p style="margin:6px 0;"><strong>${isHu ? "Kozlemeny" : "Referinta"}:</strong> ${data.variableSymbol}</p>
+        <p style="margin:6px 0;"><strong>${L.reference}:</strong> ${data.variableSymbol}</p>
       </div>
     </div>
   </div>`;
@@ -154,20 +298,13 @@ export async function renderInvoicePdf(order: Order, data: InvoiceData): Promise
   const page = doc.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
   const margin = 40;
-  const fontRegular = await doc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const { regular: fontRegular, bold: fontBold } = await embedFontsForMarket(doc, data.market);
   const bank = getBankDetails(data.market);
   const company = getCompanyDetails();
-  const isHu = data.market === "HU";
+  const L = invoiceLabels(data.market);
   const issueDate = humanDate(data.issueDateIso);
   const dueDate = humanDate(data.dueDateIso);
-  const title = isHu
-    ? data.kind === "PROFORMA"
-      ? "Dijbekero (proforma)"
-      : "Vegszamla"
-    : data.kind === "PROFORMA"
-      ? "Factura proforma"
-      : "Factura finala";
+  const title = invoiceTitle(L, data.kind);
 
   let y = height - margin;
   page.drawRectangle({
@@ -200,10 +337,10 @@ export async function renderInvoicePdf(order: Order, data: InvoiceData): Promise
   const rightX = margin + 275;
 
   const leftRows = [
-    [isHu ? "Rendelesszam" : "Numar comanda", String(order.orderNumber)],
-    [isHu ? "Kiallitas datuma" : "Data emiterii", issueDate],
-    [isHu ? "Fizetesi hatarido" : "Data scadentei", dueDate],
-    [isHu ? "Valtozo szam" : "Numar variabil", data.variableSymbol],
+    [L.orderNumber, String(order.orderNumber)],
+    [L.issueDate, issueDate],
+    [L.dueDate, dueDate],
+    [L.variableSymbol, data.variableSymbol],
   ];
   for (const [label, value] of leftRows) {
     page.drawText(`${label}:`, { x: leftX, y, font: fontBold, size: labelSize, color: rgb(0.35, 0.1, 0.24) });
@@ -213,8 +350,8 @@ export async function renderInvoicePdf(order: Order, data: InvoiceData): Promise
 
   let yRight = height - margin - 98;
   const rightRows = [
-    ["Companie", company.name],
-    ["Adresa", company.address],
+    [L.company, company.name],
+    [L.address, company.address],
     [company.companyIdLabel, company.companyId],
   ];
   for (const [label, value] of rightRows) {
@@ -249,27 +386,27 @@ export async function renderInvoicePdf(order: Order, data: InvoiceData): Promise
     y -= lineGap;
   };
 
-  sectionTitle(isHu ? "Vasarlo es szallitasi adatok" : "Date client si livrare");
-  row(isHu ? "Vasarlo" : "Client", order.customerName);
+  sectionTitle(L.customerAndDelivery);
+  row(L.client, order.customerName);
   row("Email", order.email);
-  row(isHu ? "Telefon" : "Telefon", order.phone);
-  row(isHu ? "Szamlazasi cim" : "Adresa facturare", order.billingAddress.replace(/\n/g, ", "));
-  row(isHu ? "Szallitasi cim" : "Adresa livrare", order.deliveryAddress.replace(/\n/g, ", "));
+  row(L.phone, order.phone);
+  row(L.billingAddress, order.billingAddress.replace(/\n/g, ", "));
+  row(L.deliveryAddress, order.deliveryAddress.replace(/\n/g, ", "));
 
   y -= 6;
-  sectionTitle(isHu ? "Rendeles osszesito" : "Rezumat comanda");
-  row(isHu ? "Termek" : "Produs", "FreeStyle Libre 2 Plus");
-  row(isHu ? "Mennyiseg" : "Cantitate", String(order.quantity));
-  row(isHu ? "Termek osszesen" : "Total produse", `${order.itemPrice * order.quantity} ${data.currency}`);
-  row(isHu ? "Szallitas" : "Transport", `${order.shippingPrice} ${data.currency}`);
-  row(isHu ? "Fizetendo osszeg" : "Total plata", `${data.total} ${data.currency}`);
+  sectionTitle(L.orderSummary);
+  row(L.product, "FreeStyle Libre 2 Plus");
+  row(L.quantity, String(order.quantity));
+  row(L.itemsTotal, `${order.itemPrice * order.quantity} ${data.currency}`);
+  row(L.shipping, `${order.shippingPrice} ${data.currency}`);
+  row(L.totalToPay, `${data.total} ${data.currency}`);
 
   y -= 6;
-  sectionTitle(isHu ? "Atutalasi adatok" : "Date plata");
-  row(isHu ? "Kedvezmenyezett" : "Beneficiar", bank.accountName);
+  sectionTitle(L.paymentDetails);
+  row(L.beneficiary, bank.accountName);
   row("IBAN", bank.iban);
   row("BIC/SWIFT", bank.bic);
-  row(isHu ? "Valtozo szam" : "Simbol variabil", data.variableSymbol);
+  row(L.variableSymbol, data.variableSymbol);
 
   const bytes = await doc.save();
   return Buffer.from(bytes);

@@ -1,14 +1,16 @@
 import { createStripePaymentIntent } from "@/lib/stripe-checkout";
 import { getOrderById, getPendingCardCheckoutIntentSecret } from "@/lib/store";
+import { parseMarketCode } from "@/lib/market-utils";
+import type { Market } from "@/lib/types";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   let safeOrderId = "";
   let safePendingId = "";
-  let safeMarket: "RO" | "HU" = "RO";
+  let safeMarket: Market = "RO";
   try {
     const body = await request.json();
-    const market = String(body.market || "RO").toUpperCase() === "HU" ? "HU" : "RO";
+    const market = parseMarketCode(String(body.market || "RO"));
     safeMarket = market;
     const pendingId = String(body.pendingId || "").trim();
     const orderId = String(body.orderId || "").trim();

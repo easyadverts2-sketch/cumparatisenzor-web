@@ -1,4 +1,4 @@
-import { updateOrderStatus } from "@/lib/store";
+import { updateOrderStatus, getOrderByIdAnyMarket } from "@/lib/store";
 import { ORDER_STATUSES } from "@/lib/types";
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin-guard";
@@ -12,7 +12,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Status invalid" }, { status: 400 });
   }
 
-  const ok = await updateOrderStatus(String(body.orderId), body.status);
+  const orderId = String(body.orderId);
+  const order = await getOrderByIdAnyMarket(orderId);
+  const market = order?.market || "RO";
+  const ok = await updateOrderStatus(orderId, body.status, market);
   if (!ok) {
     return NextResponse.json({ ok: false, message: "Comanda nu exista" }, { status: 404 });
   }

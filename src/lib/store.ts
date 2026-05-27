@@ -7,6 +7,12 @@ import path from "node:path";
 import type { TransactionSql } from "postgres";
 import { formatOrderNumber } from "./order-format";
 import { createStripePaymentIntentForPending, getStripe, stripeMinorAmountForTotal } from "./stripe-checkout";
+import {
+  computeShippingPrice,
+  EU_FINESHIP_SHIPPING_EUR,
+  parseMarketCode,
+  priceToleranceForMarket,
+} from "./market-utils";
 import { PDFDocument } from "pdf-lib";
 import {
   marketCurrency,
@@ -62,11 +68,20 @@ const defaultsByMarket: Record<Market, { inventory: number; sku: string; price: 
     price: 25339,
     shipping: 3199,
   },
+  EU: {
+    inventory: 98,
+    sku: "5021791006694",
+    price: 60,
+    shipping: 7,
+  },
 };
 
 function senderEmailForMarket(market: Market) {
   if (market === "HU") {
     return process.env.SMTP_FROM_HU || "info@szenzorvasarlas.hu";
+  }
+  if (market === "EU") {
+    return process.env.SMTP_FROM_EU || "info@sensorglukoz.eu";
   }
   return process.env.SMTP_FROM || "info@cumparatisenzor.ro";
 }
@@ -79,6 +94,13 @@ function internalOrderEmailForMarket(market: Market) {
       "info@szenzorvasarlas.hu"
     );
   }
+  if (market === "EU") {
+    return (
+      process.env.INTERNAL_ORDER_EMAIL_EU ||
+      process.env.INTERNAL_ORDER_EMAIL ||
+      "info@sensorglukoz.eu"
+    );
+  }
   return (
     process.env.INTERNAL_ORDER_EMAIL_RO ||
     process.env.INTERNAL_ORDER_EMAIL ||
@@ -87,7 +109,9 @@ function internalOrderEmailForMarket(market: Market) {
 }
 
 function settingKey(market: Market, key: "inventory" | "sku" | "price" | "shipping") {
-  return market === "RO" ? key : `hu_${key}`;
+  if (market === "HU") return `hu_${key}`;
+  if (market === "EU") return `eu_${key}`;
+  return key;
 }
 
 type Row = Record<string, unknown>;
@@ -1127,7 +1151,11 @@ async function ensureSchema(sql: SqlClient) {
       ('hu_inventory', ${String(defaultsByMarket.HU.inventory)}),
       ('hu_sku', ${defaultsByMarket.HU.sku}),
       ('hu_price', ${String(defaultsByMarket.HU.price)}),
-      ('hu_shipping', ${String(defaultsByMarket.HU.shipping)})
+      ('hu_shipping', ${String(defaultsByMarket.HU.shipping)}),
+      ('eu_inventory', ${String(defaultsByMarket.EU.inventory)}),
+      ('eu_sku', ${defaultsByMarket.EU.sku}),
+      ('eu_price', ${String(defaultsByMarket.EU.price)}),
+      ('eu_shipping', ${String(defaultsByMarket.EU.shipping)})
     on conflict (key) do nothing
   `;
   // One-time price update requested for RO market.
@@ -1545,7 +1573,8 @@ export async function getStorePricingForCheckout(market: Market): Promise<{
   const defaults = defaultsByMarket[market];
   const unitPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
   const standardShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping);
-  const fineshipShipping = market === "HU" ? 16000 : 200;
+  const fineshipShipping =
+    market === "HU" ? 16000 : market === "EU" ? EU_FINESHIP_SHIPPING_EUR : 200;
   return { unitPrice, standardShipping, fineshipShipping };
 }
 
@@ -1709,18 +1738,12 @@ export async function prepareCardCheckout(
         message: addressValidation.message,
       };
     }
-    const shippingPrice =
-      market === "HU"
-        ? input.shippingCarrier === "FINESHIP"
-          ? 16000
-          : input.quantity >= 5
-            ? 0
-            : configuredShipping
-        : input.shippingCarrier === "FINESHIP"
-          ? 200
-          : input.quantity >= 5
-            ? 0
-            : configuredShipping;
+    const shippingPrice = computeShippingPrice(
+      market,
+      input.shippingCarrier,
+      input.quantity,
+      configuredShipping
+    );
     const totalPrice = input.quantity * price + shippingPrice;
 
     const dupPending = await sql`
@@ -1746,7 +1769,7 @@ export async function prepareCardCheckout(
       };
       if (
         prev.stripe_payment_intent_id &&
-        Math.abs(Number(prev.total_price) - totalPrice) < (market === "HU" ? 1 : 0.01)
+        Math.abs(Number(prev.total_price) - totalPrice) < priceToleranceForMarket(market)
       ) {
         const stripe = getStripe();
         if (stripe) {
@@ -1980,7 +2003,7 @@ export async function getCardPaymentIntentOrderNumber(
     return { ok: false };
   }
   const r = rows[0] as { order_number: number | string; market: string };
-  const m = String(r.market || "").toUpperCase() === "HU" ? "HU" : "RO";
+  const m = parseMarketCode(String(r.market || ""));
   return { ok: true, orderNumber: Number(r.order_number), market: m };
 }
 
@@ -2020,7 +2043,7 @@ export async function finalizePendingCardPaymentFromStripe(
     return "not_pending";
   }
 
-  const market = (String(row.market || "").toUpperCase() === "HU" ? "HU" : "RO") as Market;
+  const market = parseMarketCode(String(row.market || ""));
 
   if (row.order_id && row.consumed_at) {
     const existing = await getOrderById(row.order_id, market);
@@ -2030,7 +2053,7 @@ export async function finalizePendingCardPaymentFromStripe(
     return "handled";
   }
 
-  const expectedCurrency = market === "HU" ? "huf" : "ron";
+  const expectedCurrency = market === "HU" ? "huf" : market === "EU" ? "eur" : "ron";
   const receivedCurrency = String(intent.currency || "").toLowerCase();
   if (receivedCurrency !== expectedCurrency) {
     throw new Error(`stripe_currency_mismatch:${receivedCurrency}:${expectedCurrency}`);
@@ -2138,17 +2161,7 @@ export async function createOrder(input: {
     }
     const shippingPrice = Number.isFinite(options?.fixedShippingPrice)
       ? Math.max(0, Number(options?.fixedShippingPrice))
-      : market === "HU"
-          ? input.shippingCarrier === "FINESHIP"
-            ? 16000
-            : input.quantity >= 5
-              ? 0
-              : configuredShipping
-          : input.shippingCarrier === "FINESHIP"
-            ? 200
-            : input.quantity >= 5
-              ? 0
-              : configuredShipping;
+      : computeShippingPrice(market, input.shippingCarrier, input.quantity, configuredShipping);
     const totalPrice = input.quantity * price + shippingPrice;
 
     const carrierOther = null;
@@ -2363,6 +2376,16 @@ export async function getOrderById(orderId: string, market: Market = "RO"): Prom
   const sql = getSql();
   await ensureSchema(sql);
   const rows = await sql`select * from orders where id = ${orderId} and market = ${market} limit 1`;
+  if (rows.length === 0) {
+    return null;
+  }
+  return toOrder(rows[0] as unknown as Row);
+}
+
+export async function getOrderByIdAnyMarket(orderId: string): Promise<Order | null> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql`select * from orders where id = ${orderId} limit 1`;
   if (rows.length === 0) {
     return null;
   }

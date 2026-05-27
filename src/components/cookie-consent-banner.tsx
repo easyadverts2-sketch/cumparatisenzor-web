@@ -12,7 +12,7 @@ import {
 } from "@/lib/cookie-consent";
 
 type Props = {
-  locale: "ro" | "hu";
+  locale: "ro" | "hu" | "ru";
 };
 
 type Draft = {
@@ -55,6 +55,21 @@ export function CookieConsentBanner({ locale }: Props) {
         marketing: "Marketing cookie-k",
         policy: "Adatkezelesi tajekoztato",
         manage: "Cookie-beallitasok",
+      };
+    }
+    if (locale === "ru") {
+      return {
+        title: "Настройки cookie",
+        text:
+          "Мы используем необходимые cookie для работы сайта и агрегированную статистику посещений (Google Analytics). Маркетинговые cookie включаются только с вашего согласия.",
+        reject: "Отклонить все",
+        accept: "Принять все",
+        customize: "Настроить",
+        save: "Сохранить выбор",
+        necessary: "Необходимые cookie и аналитика (Google Analytics, всегда активны)",
+        marketing: "Маркетинговые cookie",
+        policy: "Политика конфиденциальности",
+        manage: "Настройки cookie",
       };
     }
     return {
@@ -147,7 +162,7 @@ export function CookieConsentBanner({ locale }: Props) {
             </button>
           )}
           <Link
-            href={locale === "hu" ? "/hu/adatkezeles" : "/gdpr"}
+            href={locale === "hu" ? "/hu/adatkezeles" : locale === "ru" ? "/eu/konfidencialnost" : "/gdpr"}
             className="ml-auto text-sm text-[#8f2c53] underline"
           >
             {t.policy}

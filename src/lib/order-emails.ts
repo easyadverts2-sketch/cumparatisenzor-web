@@ -4,19 +4,34 @@ import type { Market, Order } from "./types";
 
 const PRODUCT_NAME = "FreeStyle Libre 2 Plus";
 
+function tMarket(market: Market, ru: string, hu: string, ro: string) {
+  return market === "EU" ? ru : market === "HU" ? hu : ro;
+}
+
 function siteName(market: Market) {
-  return market === "HU" ? "szenzorvasarlas.hu" : "cumparatisenzor.ro";
+  if (market === "HU") return "szenzorvasarlas.hu";
+  if (market === "EU") return "sensorglukoz.eu";
+  return "cumparatisenzor.ro";
 }
 
 function siteUrl(market: Market) {
-  return market === "HU" ? "https://szenzorvasarlas.hu" : "https://cumparatisenzor.ro";
+  if (market === "HU") return "https://szenzorvasarlas.hu";
+  if (market === "EU") return "https://sensorglukoz.eu";
+  return "https://cumparatisenzor.ro";
 }
 
 function supportEmail(market: Market) {
-  return market === "HU" ? "info@szenzorvasarlas.hu" : "info@cumparatisenzor.ro";
+  if (market === "HU") return "info@szenzorvasarlas.hu";
+  if (market === "EU") return "info@sensorglukoz.eu";
+  return "info@cumparatisenzor.ro";
 }
 
 function paymentLabel(paymentMethod: Order["paymentMethod"], market: Market) {
+  if (market === "EU") {
+    if (paymentMethod === "BANK_TRANSFER") return "Банковский перевод";
+    if (paymentMethod === "COD") return "Наложенный платёж";
+    return "Банковская карта";
+  }
   if (market === "HU") {
     if (paymentMethod === "BANK_TRANSFER") return "Banki atutalas";
     if (paymentMethod === "COD") return "Utanvet";
@@ -60,6 +75,13 @@ function htmlShell(content: string, market: Market) {
 
 function footer(market: Market) {
   const email = supportEmail(market);
+  if (market === "EU") {
+    return `<p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
+         Если нужна помощь, напишите нам:<br/>
+         Email: <a href="mailto:${email}">${email}</a><br/>
+         Телефон/WhatsApp: <a href="tel:+420777577352">+420 777 577 352</a>
+       </p>`;
+  }
   return market === "HU"
     ? `<p style="margin:18px 0 0 0;font-size:14px;line-height:1.6;">
          Kerdes eseten barmikor irjon nekunk:<br/>
@@ -78,8 +100,10 @@ function normalizeAddress(value: string) {
 }
 
 function addressSummary(order: Order, market: Market) {
-  const deliveryTitle = market === "HU" ? "Szallitasi cim" : "Adresa de livrare";
-  const billingTitle = market === "HU" ? "Szamlazasi cim" : "Adresa de facturare";
+  const deliveryTitle =
+    market === "EU" ? "Адрес доставки" : market === "HU" ? "Szallitasi cim" : "Adresa de livrare";
+  const billingTitle =
+    market === "EU" ? "Адрес для счёта" : market === "HU" ? "Szamlazasi cim" : "Adresa de facturare";
   const showBilling = normalizeAddress(order.billingAddress) !== normalizeAddress(order.deliveryAddress);
 
   const billingHtml = showBilling
@@ -112,13 +136,24 @@ function summaryRow(label: string, value: string, icon: string) {
 }
 
 export function buildOrderCreatedEmail(order: Order, market: Market, variableSymbol?: string | null) {
-  const subject = market === "HU" ? "Koszonjuk a rendeleset" : "Va multumim pentru comanda";
+  const subject =
+    market === "EU" ? "Спасибо за заказ" : market === "HU" ? "Koszonjuk a rendeleset" : "Va multumim pentru comanda";
   const currency = marketCurrency(market);
   const nr = formatOrderNumber(order.orderNumber);
   const bank = getBankDetails(market);
   const transferBlock =
     order.paymentMethod === "BANK_TRANSFER"
-      ? market === "HU"
+      ? market === "EU"
+        ? `<div style="margin-top:14px;padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;">
+             <strong>Реквизиты для оплаты</strong>
+             <div style="margin-top:8px;font-size:14px;line-height:1.6;">
+               Получатель: ${bank.accountName}<br/>
+               IBAN: ${bank.iban}<br/>
+               BIC/SWIFT: ${bank.bic}<br/>
+               Назначение (переменный символ): ${variableSymbol || "-"}
+             </div>
+           </div>`
+        : market === "HU"
         ? `<div style="margin-top:14px;padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;">
              <strong>Fizetesi adatok</strong>
              <div style="margin-top:8px;font-size:14px;line-height:1.6;">

@@ -73,15 +73,17 @@ export default function RootLayout({
   const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
   const siteVariant = headers().get("x-site-variant") || "ro";
   const isHu = siteVariant === "hu";
+  const isEu = siteVariant === "eu";
+  const isRoShell = !isHu && !isEu;
 
   return (
-    <html lang={isHu ? "hu" : "ro"}>
+    <html lang={isHu ? "hu" : isEu ? "ru" : "ro"}>
       <body className={inter.className}>
         <GoogleAnalytics measurementId={gaId} />
         <Suspense fallback={null}>
           <GoogleAnalyticsPageViews measurementId={gaId} />
         </Suspense>
-        {!isHu ? (
+        {!isHu && !isEu ? (
           <>
             <Script
               id="google-ads-tag-src-ro"
@@ -102,7 +104,7 @@ export default function RootLayout({
             </Suspense>
           </>
         ) : null}
-        {!isHu ? (
+        {!isHu && !isEu ? (
           <header className="border-b border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white shadow-md">
             <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3.5">
               <Link
@@ -118,8 +120,8 @@ export default function RootLayout({
           </header>
         ) : null}
         {children}
-        <CookieConsentBanner locale={isHu ? "hu" : "ro"} />
-        {!isHu ? (
+        <CookieConsentBanner locale={isHu ? "hu" : isEu ? "ru" : "ro"} />
+        {!isHu && !isEu ? (
           <>
             <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
               <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[#ffe7d6]">

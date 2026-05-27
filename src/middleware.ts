@@ -39,7 +39,6 @@ async function isValidSessionToken(token?: string): Promise<boolean> {
   );
   const expected = toHex(expectedBuf);
   if (expected.length !== signature.length) return false;
-  // Constant-time compare style for equal-length hex strings.
   let diff = 0;
   for (let i = 0; i < expected.length; i += 1) {
     diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
@@ -61,25 +60,48 @@ function applySecurityHeaders(response: NextResponse) {
   return response;
 }
 
+function isStaticAssetPath(pathname: string) {
+  return (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/icon") ||
+    pathname.startsWith("/app-assets") ||
+    pathname.startsWith("/sensor-motif") ||
+    pathname.startsWith("/brand-logo") ||
+    pathname.startsWith("/libre-")
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, hostname } = request.nextUrl;
   const headers = new Headers(request.headers);
 
   const isHuHost =
     hostname === "szenzorvasarlas.hu" || hostname === "www.szenzorvasarlas.hu";
-  headers.set("x-site-variant", isHuHost ? "hu" : "ro");
+  const isEuHost =
+    hostname === "sensorglukoz.eu" || hostname === "www.sensorglukoz.eu";
+  headers.set("x-site-variant", isEuHost ? "eu" : isHuHost ? "hu" : "ro");
+
+  if (isEuHost) {
+    if (!isStaticAssetPath(pathname)) {
+      const url = request.nextUrl.clone();
+      if (
+        !pathname.startsWith("/eu") &&
+        !pathname.startsWith("/api") &&
+        !pathname.startsWith("/admin")
+      ) {
+        url.pathname = pathname === "/" ? "/eu" : `/eu${pathname}`;
+        return applySecurityHeaders(NextResponse.rewrite(url, { request: { headers } }));
+      }
+    }
+  } else if (pathname === "/eu" || pathname.startsWith("/eu/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return applySecurityHeaders(NextResponse.redirect(url));
+  }
 
   if (isHuHost) {
-    const isStatic =
-      pathname.startsWith("/_next") ||
-      pathname.startsWith("/favicon") ||
-      pathname.startsWith("/icon") ||
-      pathname.startsWith("/app-assets") ||
-      pathname.startsWith("/sensor-motif") ||
-      pathname.startsWith("/brand-logo") ||
-      pathname.startsWith("/libre-");
-
-    if (!isStatic) {
+    if (!isStaticAssetPath(pathname)) {
       const url = request.nextUrl.clone();
       if (pathname === "/admin" || pathname.startsWith("/admin/")) {
         url.pathname = pathname.replace(/^\/admin/, "/hu-admin");

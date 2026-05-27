@@ -9,10 +9,22 @@ export function getStripe(): Stripe | null {
   return new Stripe(key, { apiVersion: "2025-02-24.acacia" });
 }
 
-function marketMinimumTotal(order: Order): number {
-  // Keep a safety buffer because Stripe also enforces minimums after
-  // conversion to the account settlement currency (CZK in this setup).
-  return order.market === "HU" ? 250 : 4;
+function stripeCurrencyForMarket(market: Market): "ron" | "huf" | "eur" {
+  if (market === "HU") return "huf";
+  if (market === "EU") return "eur";
+  return "ron";
+}
+
+function marketMinimumTotal(market: Market, totalPrice?: number): number {
+  if (market === "HU") return 250;
+  if (market === "EU") return 0.5;
+  return 4;
+}
+
+function minimumChargeErrorMessage(market: Market, minimum: number): string {
+  if (market === "HU") return `Stripe minimum charge for HUF is ${minimum}.`;
+  if (market === "EU") return `Stripe minimum charge for EUR is ${minimum}.`;
+  return `Stripe minimum charge for RON is ${minimum}.`;
 }
 
 export async function createStripePaymentIntent(
@@ -23,30 +35,19 @@ export async function createStripePaymentIntent(
   if (!stripe) {
     return null;
   }
-  const minimum = marketMinimumTotal(order);
+  const market = order.market || "RO";
+  const minimum = marketMinimumTotal(market);
   if (Number(order.totalPrice) < minimum) {
-    throw new Error(
-      order.market === "HU"
-        ? `Stripe minimum charge for HUF is ${minimum}.`
-        : `Stripe minimum charge for RON is ${minimum}.`
-    );
+    throw new Error(minimumChargeErrorMessage(market, minimum));
   }
-  // This Stripe account expects HUF in minor units (fillér-like cents),
-  // i.e. 250 HUF must be sent as 25000.
-  const amount =
-    order.market === "HU"
-      ? Math.round(Number(order.totalPrice) * 100)
-      : Math.round(Number(order.totalPrice) * 100); // RON uses cents (bani)
-  const currency = order.market === "HU" ? "huf" : "ron";
+  const amount = stripeMinorAmountForTotal(market, Number(order.totalPrice));
+  const currency = stripeCurrencyForMarket(market);
   let intent: Stripe.PaymentIntent;
   try {
     intent = await stripe.paymentIntents.create({
       amount,
       currency,
       receipt_email: order.email,
-      // Keep the checkout deterministic for both markets.
-      // `automatic_payment_methods` can fail for some account/currency combinations
-      // before the Payment Element is even rendered (most visible on HU/HUF flows).
       payment_method_types: ["card"],
       metadata: {
         orderId: order.id,
@@ -58,7 +59,7 @@ export async function createStripePaymentIntent(
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error).slice(0, 400);
     throw new Error(
-      `Stripe PI create failed (market=${order.market}, currency=${currency}, amount=${amount}, orderId=${order.id}): ${detail}`
+      `Stripe PI create failed (market=${market}, currency=${currency}, amount=${amount}, orderId=${order.id}): ${detail}`
     );
   }
   if (!intent.client_secret) {
@@ -68,9 +69,7 @@ export async function createStripePaymentIntent(
 }
 
 export function stripeMinorAmountForTotal(market: Market, totalPrice: number): number {
-  return market === "HU"
-    ? Math.round(Number(totalPrice) * 100)
-    : Math.round(Number(totalPrice) * 100);
+  return Math.round(Number(totalPrice) * 100);
 }
 
 export async function createStripePaymentIntentForPending(input: {
@@ -83,16 +82,12 @@ export async function createStripePaymentIntentForPending(input: {
   if (!stripe) {
     return null;
   }
-  const minimum = input.market === "HU" ? 250 : 4;
+  const minimum = marketMinimumTotal(input.market);
   if (Number(input.totalPrice) < minimum) {
-    throw new Error(
-      input.market === "HU"
-        ? `Stripe minimum charge for HUF is ${minimum}.`
-        : `Stripe minimum charge for RON is ${minimum}.`
-    );
+    throw new Error(minimumChargeErrorMessage(input.market, minimum));
   }
   const amount = stripeMinorAmountForTotal(input.market, input.totalPrice);
-  const currency = input.market === "HU" ? "huf" : "ron";
+  const currency = stripeCurrencyForMarket(input.market);
   let intent: Stripe.PaymentIntent;
   try {
     intent = await stripe.paymentIntents.create({
@@ -108,7 +103,9 @@ export async function createStripePaymentIntentForPending(input: {
       description:
         input.market === "HU"
           ? "Kartyas fizetes - Szenzorvasarlas (varakozo)"
-          : "Plata card - Comanda (in asteptare)",
+          : input.market === "EU"
+            ? "Оплата картой — sensorglukoz.eu (ожидание)"
+            : "Plata card - Comanda (in asteptare)",
     });
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error).slice(0, 400);

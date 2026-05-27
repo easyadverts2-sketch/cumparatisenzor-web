@@ -8,14 +8,16 @@ import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 
-function expectedStripeCurrency(market: "RO" | "HU"): "ron" | "huf" {
-  return market === "HU" ? "huf" : "ron";
+function expectedStripeCurrency(market: "RO" | "HU" | "EU"): "ron" | "huf" | "eur" {
+  if (market === "HU") return "huf";
+  if (market === "EU") return "eur";
+  return "ron";
 }
 
-function expectedStripeAmount(order: { market?: "RO" | "HU"; totalPrice: number }): number {
-  return order.market === "HU"
-    ? Math.round(Number(order.totalPrice) * 100)
-    : Math.round(Number(order.totalPrice) * 100);
+function expectedStripeAmount(order: { market?: "RO" | "HU" | "EU"; totalPrice: number }): number {
+  // All currently used currencies are charged by Stripe in their minor units
+  // (cents/bani/fillér). HUF on this account is configured to expect *100 as well.
+  return Math.round(Number(order.totalPrice) * 100);
 }
 
 async function ensureWebhookEventTable() {
@@ -71,7 +73,9 @@ async function processStripeEvent(event: Stripe.Event) {
   }
 
   const orderId = intent.metadata?.orderId;
-  const market = intent.metadata?.market === "HU" ? "HU" : "RO";
+  const rawMarket = intent.metadata?.market;
+  const market: "RO" | "HU" | "EU" =
+    rawMarket === "HU" ? "HU" : rawMarket === "EU" ? "EU" : "RO";
   if (!orderId || typeof orderId !== "string") {
     const sql = getSql();
     await sql`

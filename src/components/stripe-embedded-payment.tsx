@@ -11,8 +11,8 @@ type Props = {
   /** New flow: checkout prepared server-side, order created after Stripe success */
   pendingId?: string;
   orderNumber: string;
-  market?: "RO" | "HU";
-  uiLanguage?: "RO" | "HU" | "CS";
+  market?: "RO" | "HU" | "EU";
+  uiLanguage?: "RO" | "HU" | "CS" | "RU";
   backHref?: string;
 };
 
@@ -25,8 +25,8 @@ function EmbeddedPaymentForm({
   pendingId,
 }: {
   orderNumber: string;
-  market?: "RO" | "HU";
-  uiLanguage?: "RO" | "HU" | "CS";
+  market?: "RO" | "HU" | "EU";
+  uiLanguage?: "RO" | "HU" | "CS" | "RU";
   pendingId?: string;
 }) {
   const stripe = useStripe();
@@ -40,7 +40,12 @@ function EmbeddedPaymentForm({
     if (!stripe || !elements) return;
 
     setLoading(true);
-    const baseResult = market === "HU" ? "/hu/comanda/plata-card/rezultat" : "/comanda/plata-card/rezultat";
+    const baseResult =
+      market === "EU"
+        ? "/eu/comanda/plata-card/rezultat"
+        : market === "HU"
+          ? "/hu/comanda/plata-card/rezultat"
+          : "/comanda/plata-card/rezultat";
     const qs = new URLSearchParams();
     if (pendingId) qs.set("pendingId", pendingId);
     if (orderNumber && orderNumber !== "—" && orderNumber !== "-") {

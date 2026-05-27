@@ -45,6 +45,19 @@ async function updateStatus(formData: FormData) {
   }
 }
 
+async function updateEuStoreSettingsAction(formData: FormData) {
+  "use server";
+  const inventory = Number(formData.get("inventory"));
+  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
+  const shipping = Number(String(formData.get("shipping") ?? "").replace(",", "."));
+  const res = await updateMarketStoreSettings("EU", { inventory, price, shipping });
+  revalidatePath("/admin");
+  if (!res.ok) {
+    redirect(`/admin?ok=0&msg=${encodeURIComponent(res.message)}`);
+  }
+  redirect(`/admin?ok=1&msg=${encodeURIComponent("Nastaveni obchodu (EU) ulozeno.")}`);
+}
+
 async function updateStoreSettingsAction(formData: FormData) {
   "use server";
   const inventory = Number(formData.get("inventory"));
@@ -172,8 +185,9 @@ export default async function AdminPage({
   searchParams?: { ok?: string; msg?: string };
 }) {
   await autoCancelExpiredOrders();
-  const [store, pplShipments, pickups, dpdShipments, dpdPickups] = await Promise.all([
+  const [store, euStore, pplShipments, pickups, dpdShipments, dpdPickups] = await Promise.all([
     readStore(),
+    readStore("EU"),
     getPplShipmentsAdmin("RO", 100),
     getPplPickups("RO", 20),
     getDpdShipmentsAdmin("RO", 100),
@@ -283,6 +297,30 @@ export default async function AdminPage({
           statusApiPath="/api/admin/status"
           docxExportApiPath="/api/admin/export/docx"
         />
+      </div>
+
+      <h2 className="mt-16 text-2xl font-semibold text-[#0a2624]">Trh EU (sensorglukoz.eu)</h2>
+      <p className="mt-1 text-sm text-[#1a4d47]">
+        Sklad {euStore.inventory} ks · cena {euStore.price} EUR · doprava {euStore.shipping} EUR · Fineship 30 EUR (od 6 ks)
+      </p>
+      <form action={updateEuStoreSettingsAction} className="mt-4 max-w-xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h3 className="text-lg font-semibold text-[#0a2624]">Sklad a ceny (EU)</h3>
+        <label className="block text-sm font-medium text-[#0a2624]">
+          <span className="mb-1 block text-[#1a4d47]">Sklad (ks)</span>
+          <input name="inventory" type="number" min={0} defaultValue={euStore.inventory} className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2" />
+        </label>
+        <label className="block text-sm font-medium text-[#0a2624]">
+          <span className="mb-1 block text-[#1a4d47]">Cena za kus (EUR)</span>
+          <input name="price" type="number" min={0.01} step={0.01} defaultValue={euStore.price} className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2" />
+        </label>
+        <label className="block text-sm font-medium text-[#0a2624]">
+          <span className="mb-1 block text-[#1a4d47]">Standardni doprava PPL/DPD pod 5 ks (EUR)</span>
+          <input name="shipping" type="number" min={0} step={0.01} defaultValue={euStore.shipping} className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2" />
+        </label>
+        <button type="submit" className="rounded-lg bg-[#0f766e] px-4 py-2 text-white">Ulozit nastaveni EU</button>
+      </form>
+      <div className="mt-6">
+        <AdminOrdersList orders={euStore.orders} locale="de-DE" currency="EUR" />
       </div>
 
       <h2 className="mt-12 text-2xl font-semibold">PPL zásilky a svozy</h2>

@@ -15,7 +15,11 @@ export const SHIPPING_CARRIERS = ["PPL", "DPD", "FINESHIP"] as const;
 export type ShippingCarrier = (typeof SHIPPING_CARRIERS)[number];
 
 export type PaymentMethod = "COD" | "BANK_TRANSFER" | "CARD_STRIPE";
-export type Market = "RO" | "HU";
+export type Market = "RO" | "HU" | "EU";
+
+/** Země doručení podporované na EU verzi webu (sensorglukoz.eu). */
+export const EU_DELIVERY_COUNTRIES = ["DE", "PL", "AT"] as const;
+export type EuDeliveryCountry = (typeof EU_DELIVERY_COUNTRIES)[number];
 
 export type Order = {
   id: string;
