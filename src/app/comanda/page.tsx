@@ -9,7 +9,7 @@ import { getPublicSiteUrl } from "@/lib/site-url";
 export const metadata: Metadata = {
   title: "Comanda online",
   description:
-    "Comanda senzor FreeStyle Libre 2 Plus: pret 329.9 RON, livrare in Romania, plata ramburs, transfer sau card.",
+    "Comanda senzor FreeStyle Libre 2 Plus: pret 385 RON, livrare in Romania, plata ramburs, transfer sau card.",
   alternates: { canonical: "/comanda" },
   openGraph: {
     url: `${getPublicSiteUrl()}/comanda`,

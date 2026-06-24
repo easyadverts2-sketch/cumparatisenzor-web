@@ -42,24 +42,7 @@ export default function HuHomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 pt-10" aria-label="Limitált idejű akció">
-        <Link
-          href="/hu/comanda"
-          className="block overflow-hidden rounded-2xl shadow-lg ring-1 ring-[#de6a44]/20 transition hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#be3f6f]"
-        >
-          <Image
-            src="/hu-limited-offer-banner.png"
-            alt="FreeStyle Libre 2 Plus limitált akció – eredeti ár 25 900 Ft, akciós ár 22 900 Ft"
-            width={1024}
-            height={512}
-            className="h-auto w-full"
-            sizes="(max-width: 768px) 100vw, 1152px"
-            priority
-          />
-        </Link>
-      </section>
-
-      <section className="relative mt-8 mx-auto max-w-6xl px-6">
+      <section className="relative mt-12 mx-auto max-w-6xl px-6">
         <div className="rounded-3xl border-2 border-[#de6a44]/25 bg-white p-8 shadow-xl md:p-10">
           <h2 className="text-2xl font-bold text-[#042f2c] md:text-3xl">Mi a FreeStyle Libre 2 Plus?</h2>
           <p className="mt-4 text-lg leading-relaxed text-[#14534d]">
