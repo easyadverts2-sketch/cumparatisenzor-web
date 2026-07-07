@@ -2097,6 +2097,210 @@ export async function finalizePendingCardPaymentFromStripe(
   return "handled";
 }
 
+export type PendingCardCheckoutRecoveryRow = {
+  id: string;
+  createdAt: string;
+  market: Market;
+  email: string;
+  customerName: string;
+  phone: string;
+  deliveryAddress: string;
+  quantity: number;
+  totalPrice: number;
+  shippingCarrier: string;
+  stripePaymentIntentId: string | null;
+  orderId: string | null;
+  consumedAt: string | null;
+  stripeStatus: string | null;
+  stripeAmountReceived: number | null;
+};
+
+export type FailedStripeWebhookRow = {
+  eventId: string;
+  eventType: string;
+  status: string;
+  createdAt: string;
+  processedAt: string | null;
+  lastError: string | null;
+};
+
+export async function listPendingCardCheckoutsForRecovery(options?: {
+  email?: string;
+  limit?: number;
+}): Promise<PendingCardCheckoutRecoveryRow[]> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const limit = Math.min(100, Math.max(1, options?.limit ?? 50));
+  const emailFilter = options?.email?.trim().toLowerCase();
+
+  const rows = emailFilter
+    ? await sql`
+        select * from pending_card_checkouts
+        where lower(payload->>'email') = ${emailFilter}
+        order by created_at desc
+        limit ${limit}
+      `
+    : await sql`
+        select * from pending_card_checkouts
+        where order_id is null
+        order by created_at desc
+        limit ${limit}
+      `;
+
+  const stripe = getStripe();
+  const out: PendingCardCheckoutRecoveryRow[] = [];
+
+  for (const raw of rows) {
+    const row = raw as {
+      id: string;
+      created_at: string;
+      market: string;
+      payload: unknown;
+      total_price: string | number;
+      stripe_payment_intent_id: string | null;
+      order_id: string | null;
+      consumed_at: string | null;
+    };
+    const parsed = parseCardCheckoutPayloadFromJson(row.payload);
+    let stripeStatus: string | null = null;
+    let stripeAmountReceived: number | null = null;
+    const piId = row.stripe_payment_intent_id?.trim() || "";
+    if (stripe && piId) {
+      try {
+        const intent = await stripe.paymentIntents.retrieve(piId);
+        stripeStatus = intent.status;
+        stripeAmountReceived = Number(intent.amount_received ?? intent.amount ?? 0);
+      } catch {
+        stripeStatus = "retrieve_failed";
+      }
+    }
+    out.push({
+      id: row.id,
+      createdAt: new Date(String(row.created_at)).toISOString(),
+      market: parseMarketCode(String(row.market || "")),
+      email: parsed?.email || String((row.payload as Record<string, unknown>)?.email || ""),
+      customerName: parsed?.customerName || "",
+      phone: parsed?.phone || "",
+      deliveryAddress: parsed?.deliveryAddress || "",
+      quantity: parsed?.quantity ?? 0,
+      totalPrice: Number(row.total_price),
+      shippingCarrier: parsed?.shippingCarrier || "",
+      stripePaymentIntentId: piId || null,
+      orderId: row.order_id,
+      consumedAt: row.consumed_at ? new Date(String(row.consumed_at)).toISOString() : null,
+      stripeStatus,
+      stripeAmountReceived,
+    });
+  }
+  return out;
+}
+
+export async function listFailedStripeWebhookEvents(limit = 30): Promise<FailedStripeWebhookRow[]> {
+  const sql = getSql();
+  await ensureWebhookEventsTableForRecovery(sql);
+  const rows = await sql`
+    select event_id, event_type, status, created_at, processed_at, last_error
+    from stripe_webhook_events
+    where status in ('FAILED', 'PROCESSING')
+    order by created_at desc
+    limit ${Math.min(100, Math.max(1, limit))}
+  `;
+  return rows.map((r) => ({
+    eventId: String(r.event_id),
+    eventType: String(r.event_type),
+    status: String(r.status),
+    createdAt: new Date(String(r.created_at)).toISOString(),
+    processedAt: r.processed_at ? new Date(String(r.processed_at)).toISOString() : null,
+    lastError: r.last_error ? String(r.last_error) : null,
+  }));
+}
+
+async function ensureWebhookEventsTableForRecovery(sql: SqlClient) {
+  await sql`
+    create table if not exists stripe_webhook_events (
+      event_id text unique not null,
+      event_type text not null,
+      status text not null default 'PROCESSING',
+      created_at timestamptz not null default now(),
+      processed_at timestamptz null,
+      last_error text null
+    )
+  `;
+}
+
+export async function recoverPendingCardPayment(input: {
+  pendingId?: string;
+  paymentIntentId?: string;
+}): Promise<
+  | { ok: true; orderId: string; orderNumber: number; market: Market }
+  | { ok: false; message: string }
+> {
+  const stripe = getStripe();
+  if (!stripe) {
+    return { ok: false, message: "Stripe neni nakonfigurovan." };
+  }
+  const sql = getSql();
+  await ensureSchema(sql);
+
+  let piId = String(input.paymentIntentId || "").trim();
+  let pendingId = String(input.pendingId || "").trim();
+
+  if (!piId && pendingId) {
+    const rows = await sql`
+      select stripe_payment_intent_id from pending_card_checkouts where id = ${pendingId} limit 1
+    `;
+    if (rows.length === 0) {
+      return { ok: false, message: "Pending checkout nenalezen." };
+    }
+    piId = String(rows[0].stripe_payment_intent_id || "").trim();
+  }
+
+  if (!piId) {
+    return { ok: false, message: "Chybi payment intent ID." };
+  }
+
+  let intent: Stripe.PaymentIntent;
+  try {
+    intent = await stripe.paymentIntents.retrieve(piId);
+  } catch {
+    return { ok: false, message: "Payment intent ve Stripe nenalezen." };
+  }
+
+  if (intent.status !== "succeeded") {
+    return {
+      ok: false,
+      message: `Platba ve Stripe neni uspesna (status: ${intent.status}).`,
+    };
+  }
+
+  const outcome = await finalizePendingCardPaymentFromStripe(intent);
+  if (outcome !== "handled") {
+    return {
+      ok: false,
+      message:
+        "Pending checkout nenalezen v DB nebo jiz nema data pro vytvoreni objednavky. Zkontrolujte legacy metadata orderId.",
+    };
+  }
+
+  const linked = await sql`
+    select o.id, o.order_number, o.market
+    from pending_card_checkouts p
+    join orders o on o.id = p.order_id
+    where p.stripe_payment_intent_id = ${piId}
+    limit 1
+  `;
+  if (linked.length === 0) {
+    return { ok: false, message: "Objednavka se nepodarila dohledat po obnoveni." };
+  }
+  const o = linked[0] as { id: string; order_number: number | string; market: string };
+  return {
+    ok: true,
+    orderId: String(o.id),
+    orderNumber: Number(o.order_number),
+    market: parseMarketCode(String(o.market || "")),
+  };
+}
+
 export async function createOrder(input: {
   customerName: string;
   email: string;

@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function expectedStripeCurrency(market: "RO" | "HU" | "EU"): "ron" | "huf" | "eur" {
   if (market === "HU") return "huf";
@@ -188,22 +189,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true });
   }
 
-  // Fast ACK pattern: return 2xx immediately after durable enqueue/dedupe.
-  queueMicrotask(() => {
-    void processStripeEvent(event).catch(async (err) => {
-      const message = String(err instanceof Error ? err.message : err).slice(0, 2000);
-      try {
-        const sql = getSql();
-        await sql`
-          update stripe_webhook_events
-          set status = 'FAILED', processed_at = now(), last_error = ${message}
-          where event_id = ${event.id}
-        `;
-      } catch {
-        // noop
-      }
-    });
-  });
+  // Process synchronously before returning 2xx. On Vercel/serverless, queueMicrotask
+  // often never runs after the response is sent, so orders were never created.
+  try {
+    await processStripeEvent(event);
+  } catch (err) {
+    const message = String(err instanceof Error ? err.message : err).slice(0, 2000);
+    try {
+      await sql`
+        update stripe_webhook_events
+        set status = 'FAILED', processed_at = now(), last_error = ${message}
+        where event_id = ${event.id}
+      `;
+    } catch {
+      // noop
+    }
+    console.error("[stripe-webhook] process failed", { eventId: event.id, message });
+    return NextResponse.json({ ok: false, message: "Processing failed" }, { status: 500 });
+  }
 
   return NextResponse.json({ received: true });
 }

@@ -11,14 +11,18 @@ import {
   getPplPickups,
   getPplBulkLabelForOrders,
   getPplShipmentsAdmin,
+  listFailedStripeWebhookEvents,
+  listPendingCardCheckoutsForRecovery,
   orderDpdPickup,
   orderPplPickup,
+  recoverPendingCardPayment,
   resetDpdShipmentForOrder,
   resetPplShipmentForOrder,
   readStore,
   updateMarketStoreSettings,
   updateOrderStatus,
 } from "@/lib/store";
+import { formatOrderNumber } from "@/lib/order-format";
 import { ORDER_STATUSES } from "@/lib/types";
 import { revalidatePath } from "next/cache";
 import { clearAdminSessionCookie } from "@/lib/auth";
@@ -167,6 +171,21 @@ async function cancelDpdPickupAction(formData: FormData) {
   redirect(`/admin?ok=${result.ok ? "1" : "0"}&msg=${encodeURIComponent(result.message)}`);
 }
 
+async function recoverCardPendingAction(formData: FormData) {
+  "use server";
+  const pendingId = String(formData.get("pendingId") || "").trim();
+  const res = await recoverPendingCardPayment({ pendingId });
+  revalidatePath("/admin");
+  if (!res.ok) {
+    redirect(`/admin?ok=0&msg=${encodeURIComponent(res.message)}`);
+  }
+  redirect(
+    `/admin?ok=1&msg=${encodeURIComponent(
+      `Obnoveno: objednavka #${formatOrderNumber(res.orderNumber)} (${res.market})`
+    )}`
+  );
+}
+
 async function bulkPplLabelsAction(formData: FormData) {
   "use server";
   const orderIds = formData
@@ -182,16 +201,22 @@ async function bulkPplLabelsAction(formData: FormData) {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { ok?: string; msg?: string };
+  searchParams?: { ok?: string; msg?: string; cardEmail?: string };
 }) {
   await autoCancelExpiredOrders();
-  const [store, euStore, pplShipments, pickups, dpdShipments, dpdPickups] = await Promise.all([
+  const cardEmail = String(searchParams?.cardEmail || "").trim();
+  const [store, euStore, pplShipments, pickups, dpdShipments, dpdPickups, pendingCards, failedStripeWebhooks] =
+    await Promise.all([
     readStore(),
     readStore("EU"),
     getPplShipmentsAdmin("RO", 100),
     getPplPickups("RO", 20),
     getDpdShipmentsAdmin("RO", 100),
     getDpdPickups("RO", 20),
+    listPendingCardCheckoutsForRecovery(
+      cardEmail ? { email: cardEmail, limit: 50 } : { limit: 30 }
+    ),
+    listFailedStripeWebhookEvents(15),
   ]);
   const waitingPayment = store.orders.filter((o) => o.status === "ORDERED_NOT_PAID").length;
   const readyToShip = store.orders.filter((o) => o.status === "ORDERED_PAID_NOT_SHIPPED").length;
@@ -289,6 +314,107 @@ export default async function AdminPage({
       >
         Export CSV (Excel / Sheets)
       </a>
+
+      <div className="mt-10 rounded-xl border-2 border-rose-200 bg-rose-50/60 p-5">
+        <h2 className="text-xl font-semibold text-rose-950">Platby kartou bez objednavky (Stripe)</h2>
+        <p className="mt-2 text-sm text-rose-900">
+          Pokud zakaznik zaplatil kartou, ale objednavka v adminu chybi, data jsou casto ulozena v pending checkoutu.
+          U uspesne platby ve Stripe kliknete <strong>Obnovit objednavku</strong>.
+        </p>
+        <form method="get" className="mt-4 flex flex-wrap items-end gap-2">
+          <label className="min-w-[260px] text-sm">
+            <span className="mb-1 block text-rose-900">Hledat podle e-mailu</span>
+            <input
+              name="cardEmail"
+              type="email"
+              defaultValue={cardEmail}
+              placeholder="napr. keripeti@gmail.com"
+              className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2"
+            />
+          </label>
+          <button type="submit" className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white">
+            Hledat
+          </button>
+          {cardEmail ? (
+            <a href="/admin" className="text-sm text-rose-800 underline">
+              Zrusit filtr
+            </a>
+          ) : null}
+        </form>
+
+        {failedStripeWebhooks.length > 0 ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="font-semibold">Selhale Stripe webhooky ({failedStripeWebhooks.length})</p>
+            <ul className="mt-2 space-y-1 font-mono text-xs">
+              {failedStripeWebhooks.slice(0, 5).map((w) => (
+                <li key={w.eventId}>
+                  {w.createdAt.slice(0, 19)} · {w.status} · {w.lastError || w.eventType}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {pendingCards.length === 0 ? (
+          <p className="mt-4 text-sm text-rose-800">
+            {cardEmail
+              ? `Zadny pending checkout pro e-mail ${cardEmail}.`
+              : "Zadne nevyrizene pending checkouty bez objednavky."}
+          </p>
+        ) : (
+          <div className="mt-4 overflow-auto rounded-lg border border-rose-200 bg-white">
+            <table className="w-full min-w-[980px] text-left text-sm">
+              <thead className="bg-rose-100/80">
+                <tr>
+                  <th className="px-3 py-2">Datum</th>
+                  <th className="px-3 py-2">Trh</th>
+                  <th className="px-3 py-2">Zakaznik</th>
+                  <th className="px-3 py-2">Adresa</th>
+                  <th className="px-3 py-2">Ks / castka</th>
+                  <th className="px-3 py-2">Stripe</th>
+                  <th className="px-3 py-2">Akce</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingCards.map((p) => (
+                  <tr key={p.id} className="border-t border-rose-100 align-top">
+                    <td className="px-3 py-2 whitespace-nowrap">{p.createdAt.slice(0, 19).replace("T", " ")}</td>
+                    <td className="px-3 py-2">{p.market}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{p.customerName || "—"}</div>
+                      <div>{p.email}</div>
+                      <div className="text-xs text-slate-600">{p.phone}</div>
+                    </td>
+                    <td className="px-3 py-2 max-w-[320px] whitespace-pre-wrap text-xs">{p.deliveryAddress}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {p.quantity} ks · {p.totalPrice}
+                      <div className="text-xs text-slate-600">{p.shippingCarrier}</div>
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <div>{p.stripeStatus || "—"}</div>
+                      <div className="font-mono">{p.stripePaymentIntentId || "—"}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {p.orderId ? (
+                        <span className="text-emerald-700">Uz ma objednavku</span>
+                      ) : p.stripeStatus === "succeeded" ? (
+                        <form action={recoverCardPendingAction}>
+                          <input type="hidden" name="pendingId" value={p.id} />
+                          <button type="submit" className="rounded border border-rose-300 bg-white px-2 py-1 text-rose-900 hover:bg-rose-50">
+                            Obnovit objednavku
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="text-slate-500">Ceka na platbu</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="mt-10">
         <AdminOrdersList
