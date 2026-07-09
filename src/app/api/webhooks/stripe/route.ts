@@ -1,7 +1,13 @@
 import { sendEmail } from "@/lib/email";
+import { notifyInternalCardOrderIssue } from "@/lib/card-order-alerts";
 import { buildPaymentReceivedEmail } from "@/lib/order-emails";
 import { getSql } from "@/lib/db";
-import { finalizePendingCardPaymentFromStripe, getOrderById, updateOrderStatus } from "@/lib/store";
+import {
+  finalizePendingCardPaymentFromStripe,
+  getOrderById,
+  recoverPendingCardPayment,
+  updateOrderStatus,
+} from "@/lib/store";
 import { getStripe } from "@/lib/stripe-checkout";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
@@ -73,11 +79,33 @@ async function processStripeEvent(event: Stripe.Event) {
     return;
   }
 
+  const backup = await recoverPendingCardPayment({ paymentIntentId: intent.id });
+  if (backup.ok) {
+    const sql = getSql();
+    await sql`
+      update stripe_webhook_events
+      set status = 'PROCESSED', processed_at = now(), last_error = 'recovered_via_backup'
+      where event_id = ${event.id}
+    `;
+    return;
+  }
+
   const orderId = intent.metadata?.orderId;
   const rawMarket = intent.metadata?.market;
   const market: "RO" | "HU" | "EU" =
     rawMarket === "HU" ? "HU" : rawMarket === "EU" ? "EU" : "RO";
   if (!orderId || typeof orderId !== "string") {
+    await notifyInternalCardOrderIssue(
+      "Stripe platba bez objednavky (webhook)",
+      [
+        `Event: ${event.id}`,
+        `PaymentIntent: ${intent.id}`,
+        `Email: ${intent.receipt_email || intent.metadata?.email || "?"}`,
+        `Castka: ${intent.amount_received || intent.amount} ${intent.currency}`,
+        `Metadata: ${JSON.stringify(intent.metadata || {})}`,
+        `Finalize: not_pending, backup recovery failed`,
+      ].join("\n")
+    );
     const sql = getSql();
     await sql`
       update stripe_webhook_events
@@ -205,6 +233,10 @@ export async function POST(request: Request) {
       // noop
     }
     console.error("[stripe-webhook] process failed", { eventId: event.id, message });
+    void notifyInternalCardOrderIssue(
+      "Stripe webhook SELHAL",
+      `Event: ${event.id}\nTyp: ${event.type}\nChyba: ${message}`
+    );
     return NextResponse.json({ ok: false, message: "Processing failed" }, { status: 500 });
   }
 

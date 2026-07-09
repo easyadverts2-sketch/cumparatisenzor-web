@@ -26,6 +26,20 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
     let active = true;
 
     async function pollOrderNumber(piId: string) {
+      // Backup layer: ask server to create the order if webhook was delayed or failed.
+      try {
+        await fetch("/api/orders/card-finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentIntentId: piId,
+            pendingId: pendingId || undefined,
+          }),
+        });
+      } catch {
+        // ignore — polling below will retry
+      }
+
       for (let i = 0; i < 45 && active; i += 1) {
         try {
           const res = await fetch(`/api/orders/card-order-status?pi=${encodeURIComponent(piId)}`);
@@ -40,6 +54,20 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
           }
         } catch {
           // ignore
+        }
+        if (i === 5 || i === 15) {
+          try {
+            await fetch("/api/orders/card-finalize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                paymentIntentId: piId,
+                pendingId: pendingId || undefined,
+              }),
+            });
+          } catch {
+            // ignore
+          }
         }
         await new Promise((r) => setTimeout(r, 1000));
       }

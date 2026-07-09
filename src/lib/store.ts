@@ -54,6 +54,7 @@ import {
   buildPaymentReceivedEmail,
   buildTrackingEmail,
 } from "./order-emails";
+import { internalOrderNotificationEmails } from "./internal-order-notify";
 
 const defaultsByMarket: Record<Market, { inventory: number; sku: string; price: number; shipping: number }> = {
   RO: {
@@ -84,28 +85,6 @@ function senderEmailForMarket(market: Market) {
     return process.env.SMTP_FROM_EU || "info@sensorglukoz.eu";
   }
   return process.env.SMTP_FROM || "info@cumparatisenzor.ro";
-}
-
-function internalOrderEmailForMarket(market: Market) {
-  if (market === "HU") {
-    return (
-      process.env.INTERNAL_ORDER_EMAIL_HU ||
-      process.env.INTERNAL_ORDER_EMAIL ||
-      "info@szenzorvasarlas.hu"
-    );
-  }
-  if (market === "EU") {
-    return (
-      process.env.INTERNAL_ORDER_EMAIL_EU ||
-      process.env.INTERNAL_ORDER_EMAIL ||
-      "info@sensorglukoz.eu"
-    );
-  }
-  return (
-    process.env.INTERNAL_ORDER_EMAIL_RO ||
-    process.env.INTERNAL_ORDER_EMAIL ||
-    "info@cumparatisenzor.ro"
-  );
 }
 
 function settingKey(market: Market, key: "inventory" | "sku" | "price" | "shipping") {
@@ -2301,6 +2280,63 @@ export async function recoverPendingCardPayment(input: {
   };
 }
 
+export async function recoverAllOrphanedCardPayments(): Promise<{
+  recovered: Array<{
+    orderNumber: number;
+    market: Market;
+    email: string;
+    paymentIntentId: string;
+  }>;
+  failed: Array<{
+    id: string;
+    email: string;
+    market: Market;
+    paymentIntentId: string | null;
+    error: string;
+  }>;
+}> {
+  const pending = await listPendingCardCheckoutsForRecovery({ limit: 100 });
+  const recovered: Array<{
+    orderNumber: number;
+    market: Market;
+    email: string;
+    paymentIntentId: string;
+  }> = [];
+  const failed: Array<{
+    id: string;
+    email: string;
+    market: Market;
+    paymentIntentId: string | null;
+    error: string;
+  }> = [];
+
+  for (const p of pending) {
+    if (p.orderId) continue;
+    if (p.stripeStatus !== "succeeded") continue;
+    const res = await recoverPendingCardPayment({
+      pendingId: p.id,
+      paymentIntentId: p.stripePaymentIntentId || undefined,
+    });
+    if (res.ok) {
+      recovered.push({
+        orderNumber: res.orderNumber,
+        market: res.market,
+        email: p.email,
+        paymentIntentId: p.stripePaymentIntentId || "",
+      });
+    } else {
+      failed.push({
+        id: p.id,
+        email: p.email,
+        market: p.market,
+        paymentIntentId: p.stripePaymentIntentId,
+        error: res.message,
+      });
+    }
+  }
+  return { recovered, failed };
+}
+
 export async function createOrder(input: {
   customerName: string;
   email: string;
@@ -2485,16 +2521,20 @@ export async function createOrder(input: {
         proformaPdf = await renderInvoicePdf(order, invoiceData).catch(() => null);
       }
 
-      const internal = internalOrderEmailForMarket(market);
-      if (internal) {
+      const internalRecipients = internalOrderNotificationEmails(market);
+      if (internalRecipients.length > 0) {
         const internalAlert = buildInternalOrderAlertEmail(order, market);
-        await sendEmail({
-          to: internal,
-          subject: internalAlert.subject,
-          text: internalAlert.text,
-          html: internalAlert.html,
-          from: senderFrom,
-        }).catch(() => undefined);
+        await Promise.all(
+          internalRecipients.map((to) =>
+            sendEmail({
+              to,
+              subject: internalAlert.subject,
+              text: internalAlert.text,
+              html: internalAlert.html,
+              from: senderFrom,
+            }).catch(() => undefined)
+          )
+        );
       }
 
       if (shouldCreateShipmentImmediately) {

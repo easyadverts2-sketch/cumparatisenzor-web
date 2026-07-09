@@ -1,4 +1,4 @@
-import { getCardPaymentIntentOrderNumber } from "@/lib/store";
+import { getCardPaymentIntentOrderNumber, recoverPendingCardPayment } from "@/lib/store";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -7,7 +7,13 @@ export async function GET(request: Request) {
     if (!pi.startsWith("pi_")) {
       return NextResponse.json({ ok: false, message: "Parametru pi invalid." }, { status: 400 });
     }
-    const row = await getCardPaymentIntentOrderNumber(pi);
+    let row = await getCardPaymentIntentOrderNumber(pi);
+    if (!row.ok) {
+      const recovered = await recoverPendingCardPayment({ paymentIntentId: pi });
+      if (recovered.ok) {
+        row = { ok: true, orderNumber: recovered.orderNumber, market: recovered.market };
+      }
+    }
     if (!row.ok) {
       return NextResponse.json({ ok: false, ready: false }, { status: 200 });
     }
