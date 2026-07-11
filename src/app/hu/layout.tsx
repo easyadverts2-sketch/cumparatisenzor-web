@@ -23,7 +23,15 @@ export const metadata: Metadata = {
   },
   description:
     "FreeStyle Libre 2 Plus megrendeles Magyarorszagra. Gyors szallitas, magyar nyelvu tamogatas.",
-  alternates: { canonical: "/hu" },
+  alternates: {
+    canonical: "/",
+    languages: {
+      "hu-HU": "https://szenzorvasarlas.hu/",
+      "ro-RO": "https://cumparatisenzor.ro/",
+      ru: "https://sensorglukoz.eu/",
+      "x-default": "https://cumparatisenzor.ro/",
+    },
+  },
   openGraph: {
     type: "website",
     locale: "hu_HU",
@@ -31,7 +39,7 @@ export const metadata: Metadata = {
     title: "Szenzorvasarlas.hu - FreeStyle Libre 2 Plus",
     description:
       "FreeStyle Libre 2 Plus megrendeles Magyarorszagra. Gyors szallitas, magyar nyelvu tamogatas.",
-    url: "https://szenzorvasarlas.hu/hu",
+    url: "https://szenzorvasarlas.hu",
     images: [
       {
         url: "/libre-user.png",

@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "Alkalmazások FreeStyle Libre 2 Plus szenzorokhoz",
   description:
     "Szerkesztosegi attekintes az Abbott hivatalos es harmadik feles alkalmazasokrol FreeStyle Libre 2 Plus-hoz.",
-  alternates: { canonical: "/hu/libre-2-plus-alkalmazasok" },
+  alternates: { canonical: "/libre-2-plus-alkalmazasok" },
 };
 
 export default function LibreAppsHuPage() {

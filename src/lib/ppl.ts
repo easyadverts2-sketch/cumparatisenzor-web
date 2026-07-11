@@ -47,19 +47,24 @@ export function buildPplBatchLabelFallbackUrl(baseUrl: string, batchId: string):
 export function resolvePplLabelEndpoint(baseUrl: string, labelUrl: string): string {
   const raw = String(labelUrl || "").trim();
   if (!raw) return "";
-  const base = new URL(normalizeBaseUrl(baseUrl));
+  const base = normalizeBaseUrl(baseUrl);
+  const baseHost = new URL(base).host;
   if (/^https?:\/\//i.test(raw)) {
     try {
       const absolute = new URL(raw);
-      const sameHost = absolute.protocol === "https:" && absolute.host === base.host;
+      const sameHost = absolute.protocol === "https:" && absolute.host === baseHost;
       return sameHost ? absolute.toString() : "";
     } catch {
       return "";
     }
   }
-  const resolved = new URL(raw.startsWith("/") ? raw : `/${raw}`, base);
-  if (resolved.protocol !== "https:" || resolved.host !== base.host) return "";
-  return resolved.toString();
+  // Relative label paths are relative to the full API base path (which
+  // itself may include a path segment, e.g. /ecs/ppl/myapi2) — append by
+  // string concatenation like every other endpoint builder in this file.
+  // `new URL(path, base)` was used here previously and silently dropped the
+  // base's path segment for any path starting with "/", sending label
+  // downloads to the wrong location on PPL's API host.
+  return `${base}${raw.startsWith("/") ? raw : `/${raw}`}`;
 }
 
 function normalizePplText(input: unknown, maxLen = 250): string {

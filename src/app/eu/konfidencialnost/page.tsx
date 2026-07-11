@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Конфиденциальность",
-  alternates: { canonical: "/eu/konfidencialnost" },
+  alternates: { canonical: "/konfidencialnost" },
 };
 
 export default function EuPrivacyPage() {

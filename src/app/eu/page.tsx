@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { JsonLdSite } from "@/components/json-ld-site";
 
 export const metadata: Metadata = {
   title: "sensorglukoz.eu — FreeStyle Libre 2 Plus",
   description:
     "FreeStyle Libre 2 Plus для русскоязычных клиентов в Германии, Польше и Австрии. Доставка PPL, DPD, Fineship.",
-  alternates: { canonical: "/eu" },
+  alternates: {
+    canonical: "/",
+    languages: {
+      ru: "https://sensorglukoz.eu/",
+      "ro-RO": "https://cumparatisenzor.ro/",
+      "hu-HU": "https://szenzorvasarlas.hu/",
+      "x-default": "https://cumparatisenzor.ro/",
+    },
+  },
 };
 
 export default function EuHomePage() {
   return (
     <main className="pb-20">
+      <JsonLdSite variant="eu" />
       <section className="relative overflow-hidden bg-gradient-to-br from-[#6f2147] via-[#b23962] to-[#ee7a32] text-white">
         <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2 lg:items-center lg:py-20">
           <div>

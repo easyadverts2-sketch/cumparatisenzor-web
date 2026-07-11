@@ -68,7 +68,15 @@ function isStaticAssetPath(pathname: string) {
     pathname.startsWith("/app-assets") ||
     pathname.startsWith("/sensor-motif") ||
     pathname.startsWith("/brand-logo") ||
-    pathname.startsWith("/libre-")
+    pathname.startsWith("/libre-") ||
+    // Next.js metadata-route conventions: these only exist at the app root
+    // (src/app/robots.ts, sitemap.ts, opengraph-image.tsx, ...). Rewriting
+    // them to /hu/* or /eu/* points at routes that don't exist and 404s.
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/opengraph-image" ||
+    pathname === "/twitter-image"
   );
 }
 

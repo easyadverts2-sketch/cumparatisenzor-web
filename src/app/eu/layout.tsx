@@ -15,7 +15,15 @@ export const metadata: Metadata = {
   },
   description:
     "FreeStyle Libre 2 Plus — заказ с доставкой в Германию, Польшу и Австрию. Русскоязычная поддержка.",
-  alternates: { canonical: "/eu" },
+  alternates: {
+    canonical: "/",
+    languages: {
+      ru: "https://sensorglukoz.eu/",
+      "ro-RO": "https://cumparatisenzor.ro/",
+      "hu-HU": "https://szenzorvasarlas.hu/",
+      "x-default": "https://cumparatisenzor.ro/",
+    },
+  },
   openGraph: {
     type: "website",
     locale: "ru_RU",
@@ -23,7 +31,7 @@ export const metadata: Metadata = {
     title: "sensorglukoz.eu — FreeStyle Libre 2 Plus",
     description:
       "FreeStyle Libre 2 Plus — заказ с доставкой в Германию, Польшу и Австрию.",
-    url: "https://sensorglukoz.eu/eu",
+    url: "https://sensorglukoz.eu",
     images: [
       {
         url: "/libre-user.png",

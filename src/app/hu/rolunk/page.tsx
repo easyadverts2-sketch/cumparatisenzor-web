@@ -5,7 +5,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Rolunk",
   description: "Kozossegi alapu csapat, amely FreeStyle Libre 2 Plus szenzorokat szallit Magyarorszagra.",
-  alternates: { canonical: "/hu/rolunk" },
+  alternates: { canonical: "/rolunk" },
 };
 
 export default function HuAboutUsPage() {

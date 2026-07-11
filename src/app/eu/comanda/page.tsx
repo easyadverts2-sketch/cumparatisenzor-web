@@ -7,7 +7,7 @@ import { getStorePricingForCheckout } from "@/lib/store";
 export const metadata: Metadata = {
   title: "Оформление заказа",
   description: "FreeStyle Libre 2 Plus — заказ с доставкой в DE, PL, AT. Цены в EUR.",
-  alternates: { canonical: "/eu/comanda" },
+  alternates: { canonical: "/comanda" },
 };
 
 export default async function EuComandaPage() {

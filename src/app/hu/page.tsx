@@ -1,13 +1,22 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { JsonLdSite } from "@/components/json-ld-site";
 
 const huUrl = "https://szenzorvasarlas.hu";
 
 export const metadata: Metadata = {
   title: "Szenzorvasarlas.hu - FreeStyle Libre 2 Plus",
   description: "FreeStyle Libre 2 Plus online rendeles Magyarorszagon, gyors szallitas, magyar nyelvu tamogatas.",
-  alternates: { canonical: "/hu" },
+  alternates: {
+    canonical: "/",
+    languages: {
+      "hu-HU": "https://szenzorvasarlas.hu/",
+      "ro-RO": "https://cumparatisenzor.ro/",
+      ru: "https://sensorglukoz.eu/",
+      "x-default": "https://cumparatisenzor.ro/",
+    },
+  },
   openGraph: {
     url: `${huUrl}/`,
     title: "Szenzorvasarlas.hu",
@@ -18,6 +27,7 @@ export const metadata: Metadata = {
 export default function HuHomePage() {
   return (
     <main className="pb-20">
+      <JsonLdSite variant="hu" />
       <section className="relative overflow-hidden bg-gradient-to-br from-[#6f2147] via-[#b23962] to-[#ee7a32] text-white">
         <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2 lg:items-center lg:py-20">
           <div>

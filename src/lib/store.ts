@@ -941,7 +941,7 @@ async function migrateOrderAdditionalNotes(sql: SqlClient) {
   }
 }
 
-async function ensureSchema(sql: SqlClient) {
+async function ensureSchemaImpl(sql: SqlClient) {
   await sql`
     create table if not exists app_settings (
       key text primary key,
@@ -1156,6 +1156,24 @@ async function ensureSchema(sql: SqlClient) {
   await migrateOrderShippingIntegration(sql);
   await migrateOrderAdditionalNotes(sql);
   await migratePendingCardCheckouts(sql);
+}
+
+// ensureSchemaImpl issues ~65 sequential information_schema lookups plus any
+// pending ALTER TABLEs. It used to run at the top of nearly every store
+// function (checkout, order lookup, admin list, label generation, ...),
+// paying that cost on every single request against a 5-connection pool.
+// Schema shape can't change within a running server instance, so cache the
+// in-flight/completed check per cold start instead of repeating it.
+let schemaEnsuredPromise: Promise<void> | null = null;
+
+async function ensureSchema(sql: SqlClient): Promise<void> {
+  if (!schemaEnsuredPromise) {
+    schemaEnsuredPromise = ensureSchemaImpl(sql).catch((err) => {
+      schemaEnsuredPromise = null;
+      throw err;
+    });
+  }
+  return schemaEnsuredPromise;
 }
 
 async function migratePendingCardCheckouts(sql: SqlClient) {

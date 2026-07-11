@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "ASZF",
   description: "Altalanos szerzodesi feltetelek a szenzorvasarlas.hu oldalhoz.",
-  alternates: { canonical: "/hu/aszf" },
+  alternates: { canonical: "/aszf" },
 };
 
 export default function HuAszfPage() {

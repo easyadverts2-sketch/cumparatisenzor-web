@@ -1,3 +1,33 @@
+export type SiteVariant = "ro" | "hu" | "eu";
+
+const DOMAIN_BY_VARIANT: Record<SiteVariant, string> = {
+  ro: "https://cumparatisenzor.ro",
+  hu: "https://szenzorvasarlas.hu",
+  eu: "https://sensorglukoz.eu",
+};
+
+/**
+ * Market for the current request, from the `x-site-variant` header the
+ * middleware sets based on hostname. Used only by routes that must serve
+ * different output per custom domain (robots.txt, sitemap.xml) — page
+ * metadata should keep using the per-market constants already in each
+ * locale's layout/page instead of calling this.
+ */
+export function getRequestSiteVariant(requestHeaders: { get(name: string): string | null }): SiteVariant {
+  const variant = requestHeaders.get("x-site-variant");
+  if (variant === "hu" || variant === "eu") return variant;
+  return "ro";
+}
+
+/** Public domain for a given market — mirrors the hostnames in middleware.ts. */
+export function getPublicSiteUrlForVariant(variant: SiteVariant) {
+  if (variant === "ro") {
+    // Preserve existing override/preview behavior for the default market.
+    return getPublicSiteUrl();
+  }
+  return DOMAIN_BY_VARIANT[variant];
+}
+
 /** URL public al site-ului (pentru Stripe redirect, link-uri, SEO). */
 export function getPublicSiteUrl() {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Контакты",
-  alternates: { canonical: "/eu/kontakt" },
+  alternates: { canonical: "/kontakt" },
 };
 
 export default function EuKontaktPage() {

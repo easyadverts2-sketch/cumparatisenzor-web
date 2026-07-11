@@ -10,7 +10,15 @@ const homeUrl = getPublicSiteUrl();
 export const metadata: Metadata = {
   title: { absolute: `${SITE_NAME} — FreeStyle Libre 2 Plus · Livrare in Romania` },
   description: SEO_DEFAULT_DESCRIPTION,
-  alternates: { canonical: "/" },
+  alternates: {
+    canonical: "/",
+    languages: {
+      "ro-RO": "https://cumparatisenzor.ro/",
+      "hu-HU": "https://szenzorvasarlas.hu/",
+      ru: "https://sensorglukoz.eu/",
+      "x-default": "https://cumparatisenzor.ro/",
+    },
+  },
   openGraph: {
     url: homeUrl,
     title: SITE_NAME,

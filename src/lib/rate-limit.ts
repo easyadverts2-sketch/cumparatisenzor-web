@@ -31,42 +31,35 @@ export async function enforceRateLimit(params: {
 
     const now = new Date();
     const key = keyFor(params.request, params.action);
-    const row = await sql`
-      select key, count, window_start
-      from api_rate_limits
-      where key = ${key}
-      limit 1
+    // Single atomic upsert instead of select-then-update: two concurrent
+    // requests in the same window previously could both read the
+    // pre-increment count and both pass, letting bursts exceed the limit.
+    // The CASE expressions run inside Postgres's row lock for the conflicting
+    // key, so the reset-vs-increment decision and the write happen together.
+    const rows = await sql<{ count: number; window_start: string }[]>`
+      insert into api_rate_limits (key, count, window_start)
+      values (${key}, 1, ${now.toISOString()})
+      on conflict (key) do update set
+        count = case
+          when now() - api_rate_limits.window_start >= (${params.windowSec} || ' seconds')::interval
+            then 1
+          else api_rate_limits.count + 1
+        end,
+        window_start = case
+          when now() - api_rate_limits.window_start >= (${params.windowSec} || ' seconds')::interval
+            then excluded.window_start
+          else api_rate_limits.window_start
+        end
+      returning count, window_start
     `;
 
-    if (row.length === 0) {
-      await sql`
-        insert into api_rate_limits (key, count, window_start)
-        values (${key}, 1, ${now.toISOString()})
-      `;
-      return { ok: true };
-    }
-
-    const count = Number(row[0].count || 0);
-    const start = new Date(String(row[0].window_start));
+    const count = Number(rows[0]?.count || 0);
+    const start = new Date(String(rows[0]?.window_start || now.toISOString()));
     const elapsedSec = Math.floor((now.getTime() - start.getTime()) / 1000);
-    if (elapsedSec >= params.windowSec) {
-      await sql`
-        update api_rate_limits
-        set count = 1, window_start = ${now.toISOString()}
-        where key = ${key}
-      `;
-      return { ok: true };
-    }
 
-    if (count >= params.limit) {
+    if (count > params.limit) {
       return { ok: false, retryAfterSec: Math.max(1, params.windowSec - elapsedSec) };
     }
-
-    await sql`
-      update api_rate_limits
-      set count = count + 1
-      where key = ${key}
-    `;
   } catch {
     // Fail-open: never block checkout when rate-limit storage has an issue.
     return { ok: true };

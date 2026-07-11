@@ -7,7 +7,7 @@ import { getStorePricingForCheckout } from "@/lib/store";
 export const metadata: Metadata = {
   title: "Online rendeles",
   description: "FreeStyle Libre 2 Plus rendeles Magyarorszagra, HUF arak, utanvet vagy banki atutalas.",
-  alternates: { canonical: "/hu/comanda" },
+  alternates: { canonical: "/comanda" },
 };
 
 export default async function HuComandaPage() {

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Adatkezeles",
   description: "GDPR kompatibilis adatkezelesi tajekoztato a szenzorvasarlas.hu oldalon.",
-  alternates: { canonical: "/hu/adatkezeles" },
+  alternates: { canonical: "/adatkezeles" },
 };
 
 export default function HuPrivacyPage() {

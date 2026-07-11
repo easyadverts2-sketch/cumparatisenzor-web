@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "FreeStyle Libre 2 Plus - ismerteto",
   description: "Mit erdemes tudni a FreeStyle Libre 2 Plus CGM rendszerrol Magyarorszagon.",
-  alternates: { canonical: "/hu/despre-libre" },
+  alternates: { canonical: "/despre-libre" },
 };
 
 export default function HuAboutLibrePage() {

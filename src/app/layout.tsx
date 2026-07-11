@@ -14,50 +14,57 @@ import { HeaderContactInline } from "@/components/header-contact-inline";
 import { HeaderNav } from "@/components/header-nav";
 import { SiteContactBar } from "@/components/site-contact-bar";
 import { SEO_DEFAULT_DESCRIPTION, SEO_DEFAULT_OG_IMAGE_PATH, SITE_NAME } from "@/lib/seo-config";
-import { getMetadataBase, getPublicSiteUrl } from "@/lib/site-url";
+import { getPublicSiteUrlForVariant, getRequestSiteVariant } from "@/lib/site-url";
 import { headers } from "next/headers";
 
 const inter = Inter({ subsets: ["latin"] });
 const plusJakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["500", "600", "700"] });
 
-const siteUrl = getPublicSiteUrl();
-const ogImageUrl = `${siteUrl}${SEO_DEFAULT_OG_IMAGE_PATH}`;
+// metadataBase must resolve to the domain that actually served the request —
+// szenzorvasarlas.hu and sensorglukoz.eu share this root layout via
+// middleware rewrites, and a hardcoded RO base here previously produced
+// canonical/OG URLs on those domains that pointed back at cumparatisenzor.ro.
+export async function generateMetadata(): Promise<Metadata> {
+  const siteVariant = getRequestSiteVariant(headers());
+  const siteUrl = getPublicSiteUrlForVariant(siteVariant);
+  const ogImageUrl = `${siteUrl}${SEO_DEFAULT_OG_IMAGE_PATH}`;
 
-export const metadata: Metadata = {
-  metadataBase: getMetadataBase(),
-  title: {
-    default: SITE_NAME,
-    template: `%s | ${SITE_NAME}`,
-  },
-  description: SEO_DEFAULT_DESCRIPTION,
-  applicationName: SITE_NAME,
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: { index: true, follow: true },
-  },
-  openGraph: {
-    type: "website",
-    locale: "ro_RO",
-    siteName: SITE_NAME,
-    title: SITE_NAME,
+  return {
+    metadataBase: new URL(siteUrl.endsWith("/") ? siteUrl : `${siteUrl}/`),
+    title: {
+      default: SITE_NAME,
+      template: `%s | ${SITE_NAME}`,
+    },
     description: SEO_DEFAULT_DESCRIPTION,
-    images: [
-      {
-        url: SEO_DEFAULT_OG_IMAGE_PATH,
-        width: 1200,
-        height: 630,
-        alt: `${SITE_NAME} — FreeStyle Libre 2 Plus`,
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: SITE_NAME,
-    description: SEO_DEFAULT_DESCRIPTION,
-    images: [ogImageUrl],
-  },
-};
+    applicationName: SITE_NAME,
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true },
+    },
+    openGraph: {
+      type: "website",
+      locale: "ro_RO",
+      siteName: SITE_NAME,
+      title: SITE_NAME,
+      description: SEO_DEFAULT_DESCRIPTION,
+      images: [
+        {
+          url: SEO_DEFAULT_OG_IMAGE_PATH,
+          width: 1200,
+          height: 630,
+          alt: `${SITE_NAME} — FreeStyle Libre 2 Plus`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: SITE_NAME,
+      description: SEO_DEFAULT_DESCRIPTION,
+      images: [ogImageUrl],
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",

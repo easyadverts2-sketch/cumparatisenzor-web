@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Условия использования",
-  alternates: { canonical: "/eu/usloviya" },
+  alternates: { canonical: "/usloviya" },
 };
 
 export default function EuTermsPage() {
