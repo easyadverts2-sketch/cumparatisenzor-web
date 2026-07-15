@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { JsonLdSite } from "@/components/json-ld-site";
+import { JsonLdEuProduct } from "@/components/json-ld-eu-seo";
 import { euHomeContent, type EuLocale } from "@/lib/eu-market-content";
 import { euPaths } from "@/lib/eu-locale-paths";
 
@@ -8,10 +9,23 @@ export function EuHomePage({ locale }: { locale: EuLocale }) {
   const c = euHomeContent[locale];
   const paths = euPaths(locale);
   const contactEmail = "info@kupitsensor.eu";
+  const seoLinks =
+    locale === "uk"
+      ? {
+          title: "Libre 2 і Libre 2 Plus",
+          compare: "Порівняння Libre 2 vs Libre 2 Plus",
+          faq: "Часті запитання про доставку в DE, PL, AT",
+        }
+      : {
+          title: "Libre 2 и Libre 2 Plus",
+          compare: "Сравнение Libre 2 vs Libre 2 Plus",
+          faq: "Частые вопросы о доставке в DE, PL, AT",
+        };
 
   return (
     <main className="pb-20">
       <JsonLdSite variant="eu" />
+      <JsonLdEuProduct locale={locale} />
       <section className="relative overflow-hidden bg-gradient-to-br from-[#6f2147] via-[#b23962] to-[#ee7a32] text-white">
         <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2 lg:items-center lg:py-20">
           <div>
@@ -70,6 +84,18 @@ export function EuHomePage({ locale }: { locale: EuLocale }) {
                 <p className="mt-2 text-[#14534d]">{item.text}</p>
               </div>
             ))}
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-[#0d4f4a]/12 bg-[#f6fbfa] p-5">
+            <h3 className="font-semibold text-[#042f2c]">{seoLinks.title}</h3>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+              <Link href={paths.compare} className="font-semibold text-[#be3f6f] underline">
+                {seoLinks.compare}
+              </Link>
+              <Link href={paths.faq} className="font-semibold text-[#be3f6f] underline">
+                {seoLinks.faq}
+              </Link>
+            </div>
           </div>
         </div>
       </section>

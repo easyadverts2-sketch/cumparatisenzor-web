@@ -5,9 +5,16 @@ import { OrderFormEu } from "@/components/order-form-eu";
 import { getStorePricingForCheckout } from "@/lib/store";
 
 export const metadata: Metadata = {
-  title: "Оформлення замовлення",
-  description: "FreeStyle Libre 2 Plus — замовлення з доставкою в DE, PL, AT. Ціни в EUR.",
-  alternates: { canonical: "/ua/comanda" },
+  title: "Замовити Libre 2 Plus — доставка DE, PL, AT",
+  description:
+    "Оформити замовлення FreeStyle Libre 2 Plus (заміна Libre 2) з доставкою до Німеччини, Польщі та Австрії. Ціни в EUR.",
+  alternates: {
+    canonical: "/ua/comanda",
+    languages: {
+      uk: "https://kupitsensor.eu/ua/comanda",
+      ru: "https://kupitsensor.eu/comanda",
+    },
+  },
 };
 
 export default async function EuComandaUaPage() {

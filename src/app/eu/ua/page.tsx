@@ -5,16 +5,14 @@ import { euHomeContent } from "@/lib/eu-market-content";
 const c = euHomeContent.uk;
 
 export const metadata: Metadata = {
-  title: c.metaTitle,
+  title: { absolute: `${c.metaTitle} | kupitsensor.eu` },
   description: c.metaDescription,
   alternates: {
     canonical: "/ua",
     languages: {
       uk: "https://kupitsensor.eu/ua",
       ru: "https://kupitsensor.eu/",
-      "ro-RO": "https://cumparatisenzor.ro/",
-      "hu-HU": "https://szenzorvasarlas.hu/",
-      "x-default": "https://cumparatisenzor.ro/",
+      "x-default": "https://kupitsensor.eu/",
     },
   },
   openGraph: {

@@ -8,6 +8,8 @@ export function euPaths(locale: EuLocale) {
     aboutSensor: locale === "uk" ? "/eu/ua/pro-sensor" : "/eu/pro-datchik",
     aboutUs: locale === "uk" ? "/eu/ua/pro-nas" : "/eu/o-nas",
     apps: locale === "uk" ? "/eu/ua/dodatky" : "/eu/prilozheniya",
+    compare: `${base}/libre-2-vs-libre-2-plus`,
+    faq: locale === "uk" ? "/eu/ua/zapytannya-pro-libre" : "/eu/voprosy-o-libre",
     order: `${base}/comanda`,
     contact: `${base}/kontakt`,
     terms: locale === "uk" ? "/eu/ua/umovy" : "/eu/usloviya",

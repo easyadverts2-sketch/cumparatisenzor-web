@@ -69,6 +69,8 @@ function isStaticAssetPath(pathname: string) {
     pathname.startsWith("/sensor-motif") ||
     pathname.startsWith("/brand-logo") ||
     pathname.startsWith("/libre-") ||
+    // Google Search Console site verification HTML at site root
+    /^\/google[a-f0-9]+\.html$/i.test(pathname) ||
     // Next.js metadata-route conventions: these only exist at the app root
     // (src/app/robots.ts, sitemap.ts, opengraph-image.tsx, ...). Rewriting
     // them to /hu/* or /eu/* points at routes that don't exist and 404s.

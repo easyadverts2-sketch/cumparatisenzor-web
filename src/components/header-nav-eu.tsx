@@ -9,14 +9,14 @@ type EuNavLocale = "ru" | "uk";
 const LINKS: Record<EuNavLocale, { href: string; label: string }[]> = {
   ru: [
     { href: "/eu/pro-datchik", label: "О сенсоре" },
-    { href: "/eu/o-nas", label: "О нас" },
-    { href: "/eu/prilozheniya", label: "Приложения" },
+    { href: "/eu/libre-2-vs-libre-2-plus", label: "Libre 2 vs Plus" },
+    { href: "/eu/voprosy-o-libre", label: "Вопросы" },
     { href: "/eu/comanda", label: "Заказ" },
   ],
   uk: [
     { href: "/eu/ua/pro-sensor", label: "Про сенсор" },
-    { href: "/eu/ua/pro-nas", label: "Про нас" },
-    { href: "/eu/ua/dodatky", label: "Додатки" },
+    { href: "/eu/ua/libre-2-vs-libre-2-plus", label: "Libre 2 vs Plus" },
+    { href: "/eu/ua/zapytannya-pro-libre", label: "Запитання" },
     { href: "/eu/ua/comanda", label: "Замовити" },
   ],
 };

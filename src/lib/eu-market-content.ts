@@ -29,13 +29,13 @@ export type EuHomeContent = {
 
 export const euHomeContent: Record<EuLocale, EuHomeContent> = {
   ru: {
-    metaTitle: "kupitsensor.eu — FreeStyle Libre 2 Plus",
+    metaTitle: "Купить Libre 2 Plus — доставка в Германию, Польшу и Австрию",
     metaDescription:
-      "FreeStyle Libre 2 Plus для русскоязычных клиентов в Германии, Польше и Австрии. Новейшее поколение сенсора, доставка PPL, DPD, Fineship.",
+      "Заказать FreeStyle Libre 2 и Libre 2 Plus с доставкой в Германию, Польшу и Австрию. Русская поддержка, цены в EUR, курьеры PPL, DPD и Fineship.",
     heroBadge: "FreeStyle Libre 2 Plus — доставка в Германию, Польшу и Австрию",
-    heroTitle: "Непрерывный мониторинг глюкозы без ежедневных проколов пальца",
+    heroTitle: "Купить FreeStyle Libre 2 Plus с доставкой в DE, PL и AT",
     heroSubtitle:
-      "Заказ на русском языке, сенсоры новейшего поколения Libre 2 Plus и доставка прямо к вам домой в Германии, Польше и Австрии.",
+      "Заказ на русском языке: сенсоры Libre 2 Plus (замена Libre 2) и доставка домой в Германии, Польше и Австрии.",
     ctaOrder: "Оформить заказ",
     ctaLearnMore: "Как это работает",
     whatIsTitle: "Что такое FreeStyle Libre 2 Plus?",
@@ -91,13 +91,13 @@ export const euHomeContent: Record<EuLocale, EuHomeContent> = {
     communityCta: "Написать нам",
   },
   uk: {
-    metaTitle: "kupitsensor.eu — FreeStyle Libre 2 Plus українською",
+    metaTitle: "Купити Libre 2 Plus — доставка до Німеччини, Польщі, Австрії",
     metaDescription:
-      "FreeStyle Libre 2 Plus для україномовних клієнтів у Німеччині, Польщі та Австрії. Найновіше покоління сенсора, доставка PPL, DPD, Fineship.",
+      "Замовити FreeStyle Libre 2 та Libre 2 Plus з доставкою до Німеччини, Польщі та Австрії. Підтримка українською, ціни в EUR, кур'єри PPL, DPD і Fineship.",
     heroBadge: "FreeStyle Libre 2 Plus — доставка до Німеччини, Польщі та Австрії",
-    heroTitle: "Безперервний моніторинг глюкози без щоденних проколів пальця",
+    heroTitle: "Купити FreeStyle Libre 2 Plus з доставкою до DE, PL і AT",
     heroSubtitle:
-      "Замовлення українською мовою, сенсори найновішого покоління Libre 2 Plus і доставка прямо додому в Німеччині, Польщі та Австрії.",
+      "Замовлення українською: сенсори Libre 2 Plus (заміна Libre 2) і доставка додому в Німеччині, Польщі та Австрії.",
     ctaOrder: "Оформити замовлення",
     ctaLearnMore: "Як це працює",
     whatIsTitle: "Що таке FreeStyle Libre 2 Plus?",
@@ -177,10 +177,10 @@ export type EuAboutSensorContent = {
 
 export const euAboutSensorContent: Record<EuLocale, EuAboutSensorContent> = {
   ru: {
-    metaTitle: "О сенсоре FreeStyle Libre 2 Plus",
+    metaTitle: "Libre 2 Plus — чем отличается от Libre 2",
     metaDescription:
-      "Что нового в Libre 2 Plus, насколько точны показания и как носить сенсор с комфортом — практический разбор для kupitsensor.eu.",
-    h1: "О сенсоре FreeStyle Libre 2 Plus",
+      "FreeStyle Libre 2 Plus vs Libre 2: 15 дней ношения, уведомления, витамин C, возраст от 2 лет. Практика для заказа в Германию, Польшу и Австрию.",
+    h1: "FreeStyle Libre 2 Plus — актуальная замена Libre 2",
     intro:
       "Собрали практичную информацию о сенсоре — новом поколении, точности измерений и уходе за кожей — на основе открытых материалов Abbott и опыта пользователей. Это не медицинская консультация: по вопросам лечения диабета обращайтесь к своему врачу.",
     newTitle: "Что нового в Libre 2 Plus",
@@ -218,10 +218,10 @@ export const euAboutSensorContent: Record<EuLocale, EuAboutSensorContent> = {
     backLabel: "← На главную",
   },
   uk: {
-    metaTitle: "Про сенсор FreeStyle Libre 2 Plus",
+    metaTitle: "Libre 2 Plus — чим відрізняється від Libre 2",
     metaDescription:
-      "Що нового в Libre 2 Plus, наскільки точні показники і як носити сенсор з комфортом — практичний розбір для kupitsensor.eu.",
-    h1: "Про сенсор FreeStyle Libre 2 Plus",
+      "FreeStyle Libre 2 Plus vs Libre 2: 15 днів носіння, сповіщення, вітамін C, вік від 2 років. Практика для замовлення до Німеччини, Польщі та Австрії.",
+    h1: "FreeStyle Libre 2 Plus — актуальна заміна Libre 2",
     intro:
       "Зібрали практичну інформацію про сенсор — нове покоління, точність вимірювань і догляд за шкірою — на основі відкритих матеріалів Abbott і досвіду користувачів. Це не медична консультація: з питань лікування діабету звертайтеся до свого лікаря.",
     newTitle: "Що нового в Libre 2 Plus",
