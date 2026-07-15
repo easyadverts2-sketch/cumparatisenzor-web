@@ -12,7 +12,7 @@ import {
 } from "@/lib/cookie-consent";
 
 type Props = {
-  locale: "ro" | "hu" | "ru";
+  locale: "ro" | "hu" | "ru" | "uk";
 };
 
 type Draft = {
@@ -70,6 +70,21 @@ export function CookieConsentBanner({ locale }: Props) {
         marketing: "Маркетинговые cookie",
         policy: "Политика конфиденциальности",
         manage: "Настройки cookie",
+      };
+    }
+    if (locale === "uk") {
+      return {
+        title: "Налаштування cookie",
+        text:
+          "Ми використовуємо необхідні cookie для роботи сайту та агреговану статистику відвідувань (Google Analytics). Маркетингові cookie вмикаються лише за вашою згодою.",
+        reject: "Відхилити всі",
+        accept: "Прийняти всі",
+        customize: "Налаштувати",
+        save: "Зберегти вибір",
+        necessary: "Необхідні cookie та аналітика (Google Analytics, завжди активні)",
+        marketing: "Маркетингові cookie",
+        policy: "Політика конфіденційності",
+        manage: "Налаштування cookie",
       };
     }
     return {
@@ -162,7 +177,15 @@ export function CookieConsentBanner({ locale }: Props) {
             </button>
           )}
           <Link
-            href={locale === "hu" ? "/hu/adatkezeles" : locale === "ru" ? "/eu/konfidencialnost" : "/gdpr"}
+            href={
+              locale === "hu"
+                ? "/hu/adatkezeles"
+                : locale === "uk"
+                  ? "/eu/ua/konfidentsiynist"
+                  : locale === "ru"
+                    ? "/eu/konfidencialnost"
+                    : "/gdpr"
+            }
             className="ml-auto text-sm text-[#8f2c53] underline"
           >
             {t.policy}

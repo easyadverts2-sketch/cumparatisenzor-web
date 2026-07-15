@@ -10,19 +10,19 @@ function tMarket(market: Market, ru: string, hu: string, ro: string) {
 
 function siteName(market: Market) {
   if (market === "HU") return "szenzorvasarlas.hu";
-  if (market === "EU") return "sensorglukoz.eu";
+  if (market === "EU") return "kupitsensor.eu";
   return "cumparatisenzor.ro";
 }
 
 function siteUrl(market: Market) {
   if (market === "HU") return "https://szenzorvasarlas.hu";
-  if (market === "EU") return "https://sensorglukoz.eu";
+  if (market === "EU") return "https://kupitsensor.eu";
   return "https://cumparatisenzor.ro";
 }
 
 function supportEmail(market: Market) {
   if (market === "HU") return "info@szenzorvasarlas.hu";
-  if (market === "EU") return "info@sensorglukoz.eu";
+  if (market === "EU") return "info@kupitsensor.eu";
   return "info@cumparatisenzor.ro";
 }
 

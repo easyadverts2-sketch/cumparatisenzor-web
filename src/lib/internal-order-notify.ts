@@ -15,7 +15,7 @@ function marketInternalEmailFromEnv(market: Market): string {
     return (
       process.env.INTERNAL_ORDER_EMAIL_EU ||
       process.env.INTERNAL_ORDER_EMAIL ||
-      "info@sensorglukoz.eu"
+      "info@kupitsensor.eu"
     );
   }
   return (

@@ -21,7 +21,7 @@ const inter = Inter({ subsets: ["latin"] });
 const plusJakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["500", "600", "700"] });
 
 // metadataBase must resolve to the domain that actually served the request —
-// szenzorvasarlas.hu and sensorglukoz.eu share this root layout via
+// szenzorvasarlas.hu and kupitsensor.eu share this root layout via
 // middleware rewrites, and a hardcoded RO base here previously produced
 // canonical/OG URLs on those domains that pointed back at cumparatisenzor.ro.
 export async function generateMetadata(): Promise<Metadata> {
@@ -79,12 +79,14 @@ export default function RootLayout({
 }>) {
   const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
   const siteVariant = headers().get("x-site-variant") || "ro";
+  const pathname = headers().get("x-pathname") || "";
   const isHu = siteVariant === "hu";
   const isEu = siteVariant === "eu";
+  const isUa = isEu && (pathname === "/eu/ua" || pathname.startsWith("/eu/ua/"));
   const isRoShell = !isHu && !isEu;
 
   return (
-    <html lang={isHu ? "hu" : isEu ? "ru" : "ro"}>
+    <html lang={isHu ? "hu" : isUa ? "uk" : isEu ? "ru" : "ro"}>
       <body className={inter.className}>
         <GoogleAnalytics measurementId={gaId} />
         <Suspense fallback={null}>
@@ -127,7 +129,7 @@ export default function RootLayout({
           </header>
         ) : null}
         {children}
-        <CookieConsentBanner locale={isHu ? "hu" : isEu ? "ru" : "ro"} />
+        <CookieConsentBanner locale={isHu ? "hu" : isUa ? "uk" : isEu ? "ru" : "ro"} />
         {!isHu && !isEu ? (
           <>
             <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">

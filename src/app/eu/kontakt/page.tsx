@@ -16,8 +16,8 @@ export default function EuKontaktPage() {
       <div className="mt-8 space-y-4 rounded-2xl border border-[#de6a44]/25 bg-white p-6 text-[#1a4d47]">
         <p>
           <strong>E-mail:</strong>{" "}
-          <a href="mailto:info@sensorglukoz.eu" className="text-[#0f766e] underline">
-            info@sensorglukoz.eu
+          <a href="mailto:info@kupitsensor.eu" className="text-[#0f766e] underline">
+            info@kupitsensor.eu
           </a>
         </p>
         <p>

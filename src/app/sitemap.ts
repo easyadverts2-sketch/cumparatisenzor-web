@@ -29,13 +29,24 @@ const HU_PATHS: Entry[] = [
   { path: "/adatkezeles", changeFrequency: "yearly", priority: 0.35 },
 ];
 
-/** Public URLs on sensorglukoz.eu (inert until that domain points at this deployment). */
+/** Public URLs on kupitsensor.eu (inert until that domain points at this deployment). */
 const EU_PATHS: Entry[] = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
-  { path: "/comanda", changeFrequency: "weekly", priority: 0.85 },
+  { path: "/pro-datchik", changeFrequency: "monthly", priority: 0.85 },
+  { path: "/o-nas", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/prilozheniya", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/comanda", changeFrequency: "weekly", priority: 0.9 },
   { path: "/kontakt", changeFrequency: "monthly", priority: 0.5 },
   { path: "/usloviya", changeFrequency: "yearly", priority: 0.35 },
   { path: "/konfidencialnost", changeFrequency: "yearly", priority: 0.35 },
+  { path: "/ua", changeFrequency: "weekly", priority: 0.95 },
+  { path: "/ua/pro-sensor", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/ua/pro-nas", changeFrequency: "monthly", priority: 0.65 },
+  { path: "/ua/dodatky", changeFrequency: "monthly", priority: 0.55 },
+  { path: "/ua/comanda", changeFrequency: "weekly", priority: 0.85 },
+  { path: "/ua/kontakt", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/ua/umovy", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/ua/konfidentsiynist", changeFrequency: "yearly", priority: 0.3 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

@@ -14,12 +14,12 @@ export default function EuTermsPage() {
       </Link>
       <h1 className="mt-4 text-3xl font-bold text-[#0a2624]">Условия использования</h1>
       <p className="text-[#1a4d47]">
-        Покупая на sensorglukoz.eu, вы соглашаетесь с условиями доставки и возврата, указанными при оформлении
+        Покупая на kupitsensor.eu, вы соглашаетесь с условиями доставки и возврата, указанными при оформлении
         заказа. Товар — медицинское изделие FreeStyle Libre 2 Plus. Оператор магазина: Česká maloobchodní s.r.o.
       </p>
       <p className="text-[#1a4d47]">
         По вопросам заказа пишите на{" "}
-        <a href="mailto:info@sensorglukoz.eu">info@sensorglukoz.eu</a> или звоните +420 777 577 352.
+        <a href="mailto:info@kupitsensor.eu">info@kupitsensor.eu</a> или звоните +420 777 577 352.
       </p>
     </main>
   );

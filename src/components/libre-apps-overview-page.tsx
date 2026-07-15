@@ -95,12 +95,24 @@ function Card({
   );
 }
 
+const BACK_LINK: Record<AppsLocale, { href: string; label: string }> = {
+  ro: { href: "/", label: "Inapoi la pagina principala" },
+  hu: { href: "/hu", label: "Vissza a fooldalra" },
+  ru: { href: "/eu", label: "← На главную" },
+  uk: { href: "/eu/ua", label: "← На головну" },
+};
+
 export function LibreAppsOverviewPage({ locale }: { locale: AppsLocale }) {
   const c = libreAppsContent[locale];
   const labels =
     locale === "hu"
       ? { advantages: "Erossegek", drawbacks: "Korlatozasok", note: "Megjegyzes" }
-      : { advantages: "Avantaje", drawbacks: "Limitari", note: "Nota" };
+      : locale === "ru"
+        ? { advantages: "Преимущества", drawbacks: "Ограничения", note: "Примечание" }
+        : locale === "uk"
+          ? { advantages: "Переваги", drawbacks: "Обмеження", note: "Примітка" }
+          : { advantages: "Avantaje", drawbacks: "Limitari", note: "Nota" };
+  const back = BACK_LINK[locale];
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
       <section className="rounded-3xl border border-[#0d4f4a]/10 bg-white p-6 shadow-sm sm:p-8">
@@ -134,8 +146,8 @@ export function LibreAppsOverviewPage({ locale }: { locale: AppsLocale }) {
 
       <p className="mt-6 text-sm text-[#14534d]">{c.bottomFootnote}</p>
       <div className="mt-4">
-        <Link href={locale === "hu" ? "/hu" : "/"} className="text-sm text-[#8f2c53] underline">
-          {locale === "hu" ? "Vissza a fooldalra" : "Inapoi la pagina principala"}
+        <Link href={back.href} className="text-sm text-[#8f2c53] underline">
+          {back.label}
         </Link>
       </div>
     </main>

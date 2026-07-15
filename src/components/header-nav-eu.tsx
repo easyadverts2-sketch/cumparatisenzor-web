@@ -3,19 +3,30 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
-  { href: "/eu", label: "Главная" },
-  { href: "/eu/comanda", label: "Заказ" },
-  { href: "/eu/kontakt", label: "Контакты" },
-] as const;
+type EuNavLocale = "ru" | "uk";
+
+const LINKS: Record<EuNavLocale, { href: string; label: string }[]> = {
+  ru: [
+    { href: "/eu/pro-datchik", label: "О сенсоре" },
+    { href: "/eu/o-nas", label: "О нас" },
+    { href: "/eu/prilozheniya", label: "Приложения" },
+    { href: "/eu/comanda", label: "Заказ" },
+  ],
+  uk: [
+    { href: "/eu/ua/pro-sensor", label: "Про сенсор" },
+    { href: "/eu/ua/pro-nas", label: "Про нас" },
+    { href: "/eu/ua/dodatky", label: "Додатки" },
+    { href: "/eu/ua/comanda", label: "Замовити" },
+  ],
+};
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/eu") return pathname === "/eu" || pathname === "/eu/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function HeaderNavEu({ className = "" }: { className?: string }) {
-  const pathname = usePathname() || "/";
+export function HeaderNavEu({ className = "", locale = "ru" }: { className?: string; locale?: EuNavLocale }) {
+  const pathname = usePathname() || "/eu";
+  const links = LINKS[locale];
 
   return (
     <nav className={`flex flex-1 flex-wrap gap-2 text-[15px] font-semibold tracking-[0.01em] lg:justify-center ${className}`}>

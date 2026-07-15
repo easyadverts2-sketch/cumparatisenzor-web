@@ -104,7 +104,7 @@ export async function createStripePaymentIntentForPending(input: {
         input.market === "HU"
           ? "Kartyas fizetes - Szenzorvasarlas (varakozo)"
           : input.market === "EU"
-            ? "Оплата картой — sensorglukoz.eu (ожидание)"
+            ? "Оплата картой — kupitsensor.eu (ожидание)"
             : "Plata card - Comanda (in asteptare)",
     });
   } catch (error) {

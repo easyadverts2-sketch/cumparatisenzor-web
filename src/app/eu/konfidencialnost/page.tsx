@@ -21,8 +21,8 @@ export default function EuPrivacyPage() {
         </p>
         <p>
           Контролёр данных: Česká maloobchodní s.r.o. Запросы по данным:{" "}
-          <a href="mailto:info@sensorglukoz.eu" className="text-[#0f766e] underline">
-            info@sensorglukoz.eu
+          <a href="mailto:info@kupitsensor.eu" className="text-[#0f766e] underline">
+            info@kupitsensor.eu
           </a>
           .
         </p>

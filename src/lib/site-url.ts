@@ -3,7 +3,7 @@ export type SiteVariant = "ro" | "hu" | "eu";
 const DOMAIN_BY_VARIANT: Record<SiteVariant, string> = {
   ro: "https://cumparatisenzor.ro",
   hu: "https://szenzorvasarlas.hu",
-  eu: "https://sensorglukoz.eu",
+  eu: "https://kupitsensor.eu",
 };
 
 /**

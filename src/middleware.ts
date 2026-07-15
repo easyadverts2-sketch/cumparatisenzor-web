@@ -87,8 +87,12 @@ export async function middleware(request: NextRequest) {
   const isHuHost =
     hostname === "szenzorvasarlas.hu" || hostname === "www.szenzorvasarlas.hu";
   const isEuHost =
-    hostname === "sensorglukoz.eu" || hostname === "www.sensorglukoz.eu";
+    hostname === "kupitsensor.eu" || hostname === "www.kupitsensor.eu";
   headers.set("x-site-variant", isEuHost ? "eu" : isHuHost ? "hu" : "ro");
+  // Lets the root layout tell /eu (Russian) apart from /eu/ua (Ukrainian) for
+  // <html lang> and the cookie banner, without forcing every page to inspect
+  // usePathname() itself.
+  headers.set("x-pathname", pathname);
 
   if (isEuHost) {
     if (!isStaticAssetPath(pathname)) {

@@ -15,9 +15,12 @@ type Props = {
   orderNumber: string;
   /** When set, retry and return_url include this pending checkout id */
   pendingId?: string;
+  /** Only meaningful for market="EU": picks Russian vs Ukrainian copy and paths. */
+  uiLanguage?: "RU" | "UK";
 };
 
-export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
+export function StripePaymentResult({ market, orderNumber, pendingId, uiLanguage = "RU" }: Props) {
+  const isUa = market === "EU" && uiLanguage === "UK";
   const [intentState, setIntentState] = useState<IntentState>("loading");
   const [message, setMessage] = useState("");
   const [displayOrderRef, setDisplayOrderRef] = useState(orderNumber);
@@ -129,6 +132,23 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
   }, []);
 
   const t = useMemo(() => {
+    if (isUa) {
+      return {
+        titleSuccess: "Оплату успішно здійснено",
+        titlePending: "Оплата обробляється",
+        titleFailed: "Оплата не пройшла",
+        titleUnknown: "Статус оплати неясний",
+        orderLabel: "Номер замовлення",
+        pendingRef: "Номер замовлення з'явиться за кілька секунд.",
+        success: "Оплату карткою підтверджено. Ми розпочнемо обробку замовлення.",
+        pending: "Оплата в процесі. Статус замовлення оновиться протягом кількох хвилин.",
+        failed: "Оплата не пройшла. Спробуйте ще раз у тій самій сесії.",
+        unknown: "Сторінка оплати завантажилась, але точний статус перевірити не вдалося.",
+        retry: "Повернутися до оплати карткою",
+        home: "На головну",
+        support: "Якщо помилка повторюється: info@kupitsensor.eu",
+      };
+    }
     if (market === "EU") {
       return {
         titleSuccess: "Оплата прошла успешно",
@@ -143,7 +163,7 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
         unknown: "Страница оплаты загрузилась, но точный статус проверить не удалось.",
         retry: "Вернуться к оплате картой",
         home: "На главную",
-        support: "Если ошибка повторяется: info@sensorglukoz.eu",
+        support: "Если ошибка повторяется: info@kupitsensor.eu",
       };
     }
     if (market === "HU") {
@@ -178,7 +198,7 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
       home: "Inapoi la pagina principala",
       support: "Daca eroarea persista, scrieti-ne: info@cumparatisenzor.ro",
     };
-  }, [market]);
+  }, [market, isUa]);
 
   const title =
     intentState === "succeeded"
@@ -200,12 +220,17 @@ export function StripePaymentResult({ market, orderNumber, pendingId }: Props) {
           ? t.failed
           : t.unknown;
 
-  const retryBase =
-    market === "EU" ? "/eu/comanda/plata-card" : market === "HU" ? "/hu/comanda/plata-card" : "/comanda/plata-card";
+  const retryBase = isUa
+    ? "/eu/ua/comanda/plata-card"
+    : market === "EU"
+      ? "/eu/comanda/plata-card"
+      : market === "HU"
+        ? "/hu/comanda/plata-card"
+        : "/comanda/plata-card";
   const retryHref = pendingId
     ? `${retryBase}?pendingId=${encodeURIComponent(pendingId)}`
     : retryBase;
-  const homeHref = market === "EU" ? "/eu" : market === "HU" ? "/hu" : "/";
+  const homeHref = isUa ? "/eu/ua" : market === "EU" ? "/eu" : market === "HU" ? "/hu" : "/";
   const colorClass =
     intentState === "succeeded"
       ? "border-[#0d9488]/30 from-[#e6f7f4]"

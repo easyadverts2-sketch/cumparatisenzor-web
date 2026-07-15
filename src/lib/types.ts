@@ -17,7 +17,7 @@ export type ShippingCarrier = (typeof SHIPPING_CARRIERS)[number];
 export type PaymentMethod = "COD" | "BANK_TRANSFER" | "CARD_STRIPE";
 export type Market = "RO" | "HU" | "EU";
 
-/** Země doručení podporované na EU verzi webu (sensorglukoz.eu). */
+/** Země doručení podporované na EU verzi webu (kupitsensor.eu). */
 export const EU_DELIVERY_COUNTRIES = ["DE", "PL", "AT"] as const;
 export type EuDeliveryCountry = (typeof EU_DELIVERY_COUNTRIES)[number];
 

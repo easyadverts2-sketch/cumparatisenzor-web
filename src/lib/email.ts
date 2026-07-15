@@ -1,10 +1,17 @@
 import nodemailer from "nodemailer";
 
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+// EU (kupitsensor.eu) mail is hosted separately from the shared RO/HU SMTP
+// account, so sending "From: info@kupitsensor.eu" through that account would
+// fail sender-domain checks. Pick the transporter by which domain the `from`
+// address belongs to instead of threading a market param through every
+// sendEmail() call site.
+function getTransporter(fromAddress: string) {
+  const isEu = fromAddress.toLowerCase().includes("@kupitsensor.eu");
+
+  const host = (isEu && process.env.SMTP_HOST_EU) || process.env.SMTP_HOST;
+  const port = Number((isEu && process.env.SMTP_PORT_EU) || process.env.SMTP_PORT || 587);
+  const user = (isEu && process.env.SMTP_USER_EU) || process.env.SMTP_USER;
+  const pass = (isEu && process.env.SMTP_PASS_EU) || process.env.SMTP_PASS;
 
   if (!host || !user || !pass) {
     return null;
@@ -31,7 +38,7 @@ export async function sendEmail(params: {
   }>;
 }) {
   const from = params.from || process.env.SMTP_FROM || "no-reply@cumparatisenzor.ro";
-  const transporter = getTransporter();
+  const transporter = getTransporter(from);
   if (!transporter) {
     return { sent: false, reason: "smtp_not_configured" as const };
   }

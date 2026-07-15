@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     languages: {
       "ro-RO": "https://cumparatisenzor.ro/",
       "hu-HU": "https://szenzorvasarlas.hu/",
-      ru: "https://sensorglukoz.eu/",
+      ru: "https://kupitsensor.eu/",
       "x-default": "https://cumparatisenzor.ro/",
     },
   },

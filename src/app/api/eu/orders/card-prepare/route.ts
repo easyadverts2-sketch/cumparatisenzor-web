@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
     if (!euHostAllowed(host)) {
       return NextResponse.json(
-        { ok: false, message: "Этот API доступен только для sensorglukoz.eu." },
+        { ok: false, message: "Этот API доступен только для kupitsensor.eu." },
         { status: 400 }
       );
     }

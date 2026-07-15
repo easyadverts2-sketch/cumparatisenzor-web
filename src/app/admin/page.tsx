@@ -425,7 +425,7 @@ export default async function AdminPage({
         />
       </div>
 
-      <h2 className="mt-16 text-2xl font-semibold text-[#0a2624]">Trh EU (sensorglukoz.eu)</h2>
+      <h2 className="mt-16 text-2xl font-semibold text-[#0a2624]">Trh EU (kupitsensor.eu)</h2>
       <p className="mt-1 text-sm text-[#1a4d47]">
         Sklad {euStore.inventory} ks · cena {euStore.price} EUR · doprava {euStore.shipping} EUR · Fineship 30 EUR (od 6 ks)
       </p>

@@ -61,7 +61,7 @@ export function formatEuAddress(addr: AddressPayload): string {
 }
 
 export function euHostAllowed(host: string): boolean {
-  return host.includes("sensorglukoz.eu") || host.includes("localhost");
+  return host.includes("kupitsensor.eu") || host.includes("localhost");
 }
 
 export function euCountryNameRu(country: EuDeliveryCountry): string {

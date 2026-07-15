@@ -82,7 +82,7 @@ function senderEmailForMarket(market: Market) {
     return process.env.SMTP_FROM_HU || "info@szenzorvasarlas.hu";
   }
   if (market === "EU") {
-    return process.env.SMTP_FROM_EU || "info@sensorglukoz.eu";
+    return process.env.SMTP_FROM_EU || "info@kupitsensor.eu";
   }
   return process.env.SMTP_FROM || "info@cumparatisenzor.ro";
 }

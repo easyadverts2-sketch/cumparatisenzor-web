@@ -6,7 +6,7 @@ type SiteVariant = "ro" | "hu" | "eu";
 const VARIANT_CONFIG: Record<SiteVariant, { url: string; name: string; email: string }> = {
   ro: { url: "https://cumparatisenzor.ro", name: SITE_NAME, email: "info@cumparatisenzor.ro" },
   hu: { url: "https://szenzorvasarlas.hu", name: "Szenzorvasarlas.hu", email: "info@szenzorvasarlas.hu" },
-  eu: { url: "https://sensorglukoz.eu", name: "sensorglukoz.eu", email: "info@sensorglukoz.eu" },
+  eu: { url: "https://kupitsensor.eu", name: "kupitsensor.eu", email: "info@kupitsensor.eu" },
 };
 
 /**
