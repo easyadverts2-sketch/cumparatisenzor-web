@@ -84,6 +84,15 @@ export async function middleware(request: NextRequest) {
   const { pathname, hostname } = request.nextUrl;
   const headers = new Headers(request.headers);
 
+  // Alternate spelling: funnel to the canonical EU host (www + s-spelling).
+  if (hostname === "kupitsenzor.eu" || hostname === "www.kupitsenzor.eu") {
+    const url = request.nextUrl.clone();
+    url.hostname = "www.kupitsensor.eu";
+    url.protocol = "https:";
+    url.port = "";
+    return applySecurityHeaders(NextResponse.redirect(url, 308));
+  }
+
   const isHuHost =
     hostname === "szenzorvasarlas.hu" || hostname === "www.szenzorvasarlas.hu";
   const isEuHost =
