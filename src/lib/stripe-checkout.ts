@@ -54,7 +54,7 @@ export async function createStripePaymentIntent(
         orderNumber: String(order.orderNumber),
         market: order.market || "RO",
       },
-      description: `Comanda ${order.orderNumber} - FreeStyle Libre 2 Plus`,
+      description: `Comanda ${order.orderNumber}`,
     });
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error).slice(0, 400);

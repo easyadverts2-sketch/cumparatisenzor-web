@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEuLocale } from "@/lib/eu-locale-client";
 
 type EuNavLocale = "ru" | "uk";
 
@@ -24,8 +25,9 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function HeaderNavEu({ className = "", locale = "ru" }: { className?: string; locale?: EuNavLocale }) {
+export function HeaderNavEu({ className = "" }: { className?: string }) {
   const pathname = usePathname() || "/eu";
+  const locale = useEuLocale();
   const links = LINKS[locale];
 
   return (

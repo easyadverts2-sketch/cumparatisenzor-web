@@ -318,6 +318,128 @@ async function consumeInventoryAtomic(
   return updated.length > 0;
 }
 
+export type CartLineItemInput = { productId: string; quantity: number };
+
+export type ResolvedLineItem = {
+  productId: string | null;
+  sku: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+/**
+ * EU-only cart resolution: server-trusted price/inventory lookup per line,
+ * same security property the single-product path already has (client can
+ * never dictate price). Rejects the whole basket if any line is unknown,
+ * inactive, or short on inventory.
+ */
+async function resolveEuCartLineItems(
+  sql: SqlClient,
+  items: CartLineItemInput[]
+): Promise<{ ok: true; lineItems: ResolvedLineItem[] } | { ok: false; message: string }> {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { ok: false, message: "Корзина пуста." };
+  }
+  if (items.length > 20) {
+    return { ok: false, message: "Слишком много позиций в заказе." };
+  }
+  const lineItems: ResolvedLineItem[] = [];
+  for (const raw of items) {
+    const productId = String(raw?.productId || "").trim();
+    const quantity = Math.trunc(Number(raw?.quantity));
+    if (!isUuidLike(productId) || !Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+      return { ok: false, message: "Некорректная позиция в корзине." };
+    }
+    const rows = await sql<
+      { id: string; sku: string; name: string; price: string; inventory: number; listing_active: boolean; product_active: boolean }[]
+    >`
+      select p.id, p.sku, p.name, l.price, l.inventory,
+        l.is_active as listing_active, p.is_active as product_active
+      from product_market_listings l
+      join products p on p.id = l.product_id
+      where l.product_id = ${productId} and l.market = 'EU'
+      limit 1
+    `;
+    const row = rows[0];
+    if (!row || !row.listing_active || !row.product_active) {
+      return { ok: false, message: "Один из товаров сейчас недоступен." };
+    }
+    if (quantity > Number(row.inventory)) {
+      return { ok: false, message: `Недостаточно товара на складе: ${row.name}.` };
+    }
+    const unitPrice = Number(row.price);
+    lineItems.push({
+      productId: row.id,
+      sku: row.sku,
+      name: row.name,
+      quantity,
+      unitPrice,
+      lineTotal: unitPrice * quantity,
+    });
+  }
+  return { ok: true, lineItems };
+}
+
+async function insertOrderItems(sql: SqlClient | TxClient, orderId: string, lineItems: ResolvedLineItem[]) {
+  for (const item of lineItems) {
+    await sql`
+      insert into order_items (id, order_id, product_id, sku, product_name, quantity, unit_price, line_total)
+      values (
+        ${crypto.randomUUID()}, ${orderId}, ${item.productId}, ${item.sku}, ${item.name},
+        ${item.quantity}, ${item.unitPrice}, ${item.lineTotal}
+      )
+    `;
+  }
+}
+
+/** Top-level (non-transaction) variant — opens its own transaction for all-or-nothing basket decrement. */
+async function consumeListingInventoryAtomicMulti(sql: SqlClient, items: CartLineItemInput[]): Promise<boolean> {
+  if (items.length === 0) return true;
+  try {
+    await sql.begin(async (tx) => {
+      for (const item of items) {
+        if (!item.productId) throw new Error("missing_product_id");
+        const qty = Math.max(1, Math.floor(item.quantity || 0));
+        const updated = await tx<{ inventory: number }[]>`
+          update product_market_listings
+          set inventory = inventory - ${qty}, updated_at = now()
+          where product_id = ${item.productId} and market = 'EU' and inventory >= ${qty}
+          returning inventory
+        `;
+        if (updated.length === 0) throw new Error("insufficient_inventory");
+      }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** In-transaction variant — uses a savepoint so a failed basket doesn't roll back the caller's outer transaction. */
+async function consumeListingInventoryAtomicMultiInTx(tx: TxClient, items: CartLineItemInput[]): Promise<boolean> {
+  if (items.length === 0) return true;
+  try {
+    await tx.savepoint(async (sp) => {
+      for (const item of items) {
+        if (!item.productId) throw new Error("missing_product_id");
+        const qty = Math.max(1, Math.floor(item.quantity || 0));
+        const updated = await sp<{ inventory: number }[]>`
+          update product_market_listings
+          set inventory = inventory - ${qty}, updated_at = now()
+          where product_id = ${item.productId} and market = 'EU' and inventory >= ${qty}
+          returning inventory
+        `;
+        if (updated.length === 0) throw new Error("insufficient_inventory");
+      }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isAllowedStatusTransition(current: OrderStatus, next: OrderStatus): boolean {
   if (current === next) return true;
   const cancelled = new Set<OrderStatus>([
@@ -1156,6 +1278,7 @@ async function ensureSchemaImpl(sql: SqlClient) {
   await migrateOrderShippingIntegration(sql);
   await migrateOrderAdditionalNotes(sql);
   await migratePendingCardCheckouts(sql);
+  await migrateProductCatalog(sql);
 }
 
 // ensureSchemaImpl issues ~65 sequential information_schema lookups plus any
@@ -1197,6 +1320,127 @@ async function migratePendingCardCheckouts(sql: SqlClient) {
     create index if not exists pending_card_checkouts_created_idx
     on pending_card_checkouts (created_at desc)
   `;
+}
+
+// Product catalog. RO and HU never read these tables — they keep going
+// through the market-scoped app_settings price/inventory keys exactly as
+// before. Only EU resolves carts against product_market_listings, so RO/HU
+// checkout is structurally unaffected by any of this.
+async function migrateProductCatalog(sql: SqlClient) {
+  await sql`
+    create table if not exists products (
+      id uuid primary key,
+      sku text not null,
+      name text not null,
+      is_active boolean not null default true,
+      created_at timestamptz not null default now()
+    )
+  `;
+  await sql`create unique index if not exists products_sku_unique on products(sku)`;
+
+  await sql`
+    create table if not exists product_market_listings (
+      id uuid primary key,
+      product_id uuid not null references products(id),
+      market text not null,
+      price numeric not null,
+      inventory integer not null default 0,
+      is_active boolean not null default true,
+      sort_order integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `;
+  await sql`
+    create unique index if not exists product_market_listings_product_market_unique
+    on product_market_listings(product_id, market)
+  `;
+  await sql`
+    create index if not exists product_market_listings_market_active_idx
+    on product_market_listings(market, is_active)
+  `;
+
+  await sql`
+    create table if not exists order_items (
+      id uuid primary key,
+      order_id uuid not null references orders(id) on delete cascade,
+      product_id uuid references products(id),
+      sku text not null,
+      product_name text not null,
+      quantity integer not null,
+      unit_price numeric not null,
+      line_total numeric not null,
+      created_at timestamptz not null default now()
+    )
+  `;
+  await sql`create index if not exists order_items_order_id_idx on order_items(order_id)`;
+
+  await seedLibreProductCatalog(sql);
+  await backfillOrderItems(sql);
+}
+
+/** Reuses the existing Libre SKU/name — identical across all three markets today. */
+const LIBRE_SKU = "5021791006694";
+const LIBRE_NAME = "FreeStyle Libre 2 Plus";
+
+async function getLibreProductId(sql: SqlClient): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`select id from products where sku = ${LIBRE_SKU} limit 1`;
+  return rows[0]?.id ?? null;
+}
+
+async function seedLibreProductCatalog(sql: SqlClient) {
+  await sql`
+    insert into products (id, sku, name)
+    values (${crypto.randomUUID()}, ${LIBRE_SKU}, ${LIBRE_NAME})
+    on conflict (sku) do nothing
+  `;
+  const libreProductId = await getLibreProductId(sql);
+  if (!libreProductId) return;
+
+  // Only EU gets a listing — RO/HU never read product_market_listings, so
+  // seeding rows for them would be dead data, not a functional difference.
+  const euPrice = await getSettingNumber(sql, settingKey("EU", "price"), defaultsByMarket.EU.price);
+  const euInventory = await getSettingNumber(sql, settingKey("EU", "inventory"), defaultsByMarket.EU.inventory);
+
+  await sql`
+    insert into product_market_listings (id, product_id, market, price, inventory)
+    values (${crypto.randomUUID()}, ${libreProductId}, 'EU', ${euPrice}, ${euInventory})
+    on conflict (product_id, market) do nothing
+  `;
+}
+
+/**
+ * Every existing order (RO/HU/EU, all pre-dating the product catalog) gets
+ * exactly one synthetic order_items row so admin/export code can read line
+ * items uniformly without special-casing old vs new orders. Idempotent: the
+ * `not exists` filter means only genuinely missing orders are touched, so
+ * this is cheap on every subsequent cold start once the backfill is done.
+ *
+ * product_id is deliberately left NULL here (unlike genuine cart line items,
+ * which always carry a real product_id from resolveEuCartLineItems). That
+ * nullness is the signal updateOrderStatus uses to decide whether an order's
+ * inventory lives in the legacy market-level app_settings key or in
+ * product_market_listings — every backfilled historical order, on any
+ * market, must keep decrementing the old way.
+ */
+async function backfillOrderItems(sql: SqlClient) {
+  const missing = await sql<{ id: string; quantity: number; item_price: string }[]>`
+    select o.id, o.quantity, o.item_price
+    from orders o
+    where not exists (select 1 from order_items oi where oi.order_id = o.id)
+  `;
+  for (const row of missing) {
+    const quantity = Math.max(0, Math.trunc(Number(row.quantity) || 0));
+    const unitPrice = Number(row.item_price) || 0;
+    if (quantity <= 0) continue;
+    await sql`
+      insert into order_items (id, order_id, product_id, sku, product_name, quantity, unit_price, line_total)
+      values (
+        ${crypto.randomUUID()}, ${row.id}, ${null}, ${LIBRE_SKU}, ${LIBRE_NAME},
+        ${quantity}, ${unitPrice}, ${quantity * unitPrice}
+      )
+    `;
+  }
 }
 
 async function insertAuditLog(
@@ -1658,13 +1902,146 @@ export async function updateMarketStoreSettings(
   return { ok: true };
 }
 
+/** EU-only: shipping stays a market-level setting even after price/inventory move to per-product listings. */
+export async function updateMarketShipping(
+  market: Market,
+  shipping: number
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const value = Number(shipping);
+  if (!Number.isFinite(value) || value < 0 || value > 500_000) {
+    return { ok: false, message: "Neplatna cena standardni dopravy." };
+  }
+  const store = await readStore(market);
+  store.shipping = Math.round(value * 100) / 100;
+  await writeStore(store, market);
+  return { ok: true };
+}
+
+export type ProductSummary = { id: string; sku: string; name: string; isActive: boolean };
+
+export type ProductListingSummary = {
+  id: string;
+  productId: string;
+  sku: string;
+  name: string;
+  market: Market;
+  price: number;
+  inventory: number;
+  isActive: boolean;
+};
+
+export async function listAllProducts(): Promise<ProductSummary[]> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql<{ id: string; sku: string; name: string; is_active: boolean }[]>`
+    select id, sku, name, is_active from products order by name asc
+  `;
+  return rows.map((r) => ({ id: r.id, sku: r.sku, name: r.name, isActive: r.is_active }));
+}
+
+/** Listings for a market, joined with product display info. EU-only in practice today. */
+export async function listListingsForMarket(market: Market): Promise<ProductListingSummary[]> {
+  const sql = getSql();
+  await ensureSchema(sql);
+  const rows = await sql<
+    { id: string; product_id: string; sku: string; name: string; price: string; inventory: number; is_active: boolean }[]
+  >`
+    select l.id, l.product_id, p.sku, p.name, l.price, l.inventory, l.is_active
+    from product_market_listings l
+    join products p on p.id = l.product_id
+    where l.market = ${market}
+    order by l.sort_order asc, p.name asc
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    productId: r.product_id,
+    sku: r.sku,
+    name: r.name,
+    market,
+    price: Number(r.price),
+    inventory: Number(r.inventory),
+    isActive: r.is_active,
+  }));
+}
+
+export async function createProduct(input: {
+  sku: string;
+  name: string;
+}): Promise<{ ok: true; productId: string } | { ok: false; message: string }> {
+  const sku = String(input.sku || "").trim();
+  const name = String(input.name || "").trim();
+  if (!sku || !name) {
+    return { ok: false, message: "SKU a nazev jsou povinne." };
+  }
+  const sql = getSql();
+  await ensureSchema(sql);
+  try {
+    const id = crypto.randomUUID();
+    await sql`insert into products (id, sku, name) values (${id}, ${sku}, ${name})`;
+    return { ok: true, productId: id };
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code || "";
+    if (code === "23505") {
+      return { ok: false, message: "Produkt s timto SKU jiz existuje." };
+    }
+    return { ok: false, message: "Produkt se nepodarilo vytvorit." };
+  }
+}
+
+export async function upsertProductListing(
+  market: Market,
+  productId: string,
+  input: { price: number; inventory: number; isActive: boolean }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isUuidLike(productId)) {
+    return { ok: false, message: "Neplatne ID produktu." };
+  }
+  const price = Number(input.price);
+  const inventory = Math.trunc(Number(input.inventory));
+  if (!Number.isFinite(price) || price < 0) {
+    return { ok: false, message: "Neplatna cena." };
+  }
+  if (!Number.isInteger(inventory) || inventory < 0) {
+    return { ok: false, message: "Neplatny pocet kusu na skladu." };
+  }
+  const sql = getSql();
+  await ensureSchema(sql);
+  await sql`
+    insert into product_market_listings (id, product_id, market, price, inventory, is_active)
+    values (${crypto.randomUUID()}, ${productId}, ${market}, ${price}, ${inventory}, ${input.isActive})
+    on conflict (product_id, market) do update set
+      price = excluded.price,
+      inventory = excluded.inventory,
+      is_active = excluded.is_active,
+      updated_at = now()
+  `;
+  return { ok: true };
+}
+
+/** Convenience for the admin "add new product" form: create the product and its first listing in one step. */
+export async function addProductToMarket(
+  market: Market,
+  input: { sku: string; name: string; price: number; inventory: number }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const created = await createProduct({ sku: input.sku, name: input.name });
+  if (!created.ok) return created;
+  return upsertProductListing(market, created.productId, {
+    price: input.price,
+    inventory: input.inventory,
+    isActive: true,
+  });
+}
+
 export type CardCheckoutPrepareInput = {
   customerName: string;
   email: string;
   phone: string;
   billingAddress: string;
   deliveryAddress: string;
-  quantity: number;
+  /** Legacy shape — RO/HU (and single-item EU) always send this. */
+  quantity?: number;
+  /** EU-cart shape. */
+  items?: CartLineItemInput[];
   paymentMethod: Order["paymentMethod"];
   shippingCarrier: ShippingCarrier;
   shippingCarrierOther?: string | null;
@@ -1675,24 +2052,36 @@ function parseCardCheckoutPayloadFromJson(payload: unknown): CardCheckoutPrepare
   if (!payload || typeof payload !== "object") return null;
   const p = payload as Record<string, unknown>;
   if (p.paymentMethod !== "CARD_STRIPE") return null;
-  const shippingCarrier = p.shippingCarrier;
-  if (shippingCarrier !== "PPL" && shippingCarrier !== "DPD" && shippingCarrier !== "FINESHIP") {
+  const rawShippingCarrier = p.shippingCarrier;
+  if (rawShippingCarrier !== "PPL" && rawShippingCarrier !== "DPD" && rawShippingCarrier !== "FINESHIP") {
     return null;
   }
-  const quantity = Number(p.quantity);
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return null;
-  return {
+  const shippingCarrier: ShippingCarrier = rawShippingCarrier;
+  const base = {
     customerName: String(p.customerName || "").trim(),
     email: String(p.email || "").trim(),
     phone: String(p.phone || "").trim(),
     billingAddress: String(p.billingAddress || "").trim(),
     deliveryAddress: String(p.deliveryAddress || "").trim(),
-    quantity,
-    paymentMethod: "CARD_STRIPE",
+    paymentMethod: "CARD_STRIPE" as const,
     shippingCarrier,
     shippingCarrierOther: p.shippingCarrierOther != null ? String(p.shippingCarrierOther) : null,
     additionalNotes: p.additionalNotes != null ? String(p.additionalNotes).trim().slice(0, 1000) : null,
   };
+  if (Array.isArray(p.items) && p.items.length > 0) {
+    const items: CartLineItemInput[] = [];
+    for (const raw of p.items) {
+      const r = raw as Record<string, unknown>;
+      const productId = String(r?.productId || "").trim();
+      const quantity = Number(r?.quantity);
+      if (!productId || !Number.isInteger(quantity) || quantity < 1 || quantity > 100) return null;
+      items.push({ productId, quantity });
+    }
+    return { ...base, items };
+  }
+  const quantity = Number(p.quantity);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return null;
+  return { ...base, quantity };
 }
 
 export async function prepareCardCheckout(
@@ -1708,12 +2097,44 @@ export async function prepareCardCheckout(
     }
     const sql = getSql();
     await ensureSchema(sql);
-    if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100) {
-      return {
-        ok: false,
-        message: "Neplatny pocet kusu. Zadejte prosim cele cislo od 1 do 100.",
-      };
+
+    const isCart = market === "EU" && Array.isArray(input.items) && input.items.length > 0;
+
+    let lineItems: ResolvedLineItem[];
+    let inventory = 0;
+
+    if (isCart) {
+      const resolved = await resolveEuCartLineItems(sql, input.items!);
+      if (!resolved.ok) {
+        return { ok: false, message: resolved.message };
+      }
+      lineItems = resolved.lineItems;
+    } else {
+      const quantity = Number(input.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+        return {
+          ok: false,
+          message: "Neplatny pocet kusu. Zadejte prosim cele cislo od 1 do 100.",
+        };
+      }
+      const defaults = defaultsByMarket[market];
+      inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
+      const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+      lineItems = [
+        {
+          productId: null,
+          sku: defaults.sku,
+          name: "FreeStyle Libre 2 Plus",
+          quantity,
+          unitPrice: configuredPrice,
+          lineTotal: configuredPrice * quantity,
+        },
+      ];
     }
+
+    const totalQuantity = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+    const itemsTotal = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
+
     if (!getStripe()) {
       return {
         ok: false,
@@ -1722,12 +2143,8 @@ export async function prepareCardCheckout(
       };
     }
 
-    const defaults = defaultsByMarket[market];
-    const inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
-    const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
-    const configuredShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping);
-    const price = configuredPrice;
-    if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
+    const configuredShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaultsByMarket[market].shipping);
+    if (input.shippingCarrier === "FINESHIP" && totalQuantity < 6) {
       return {
         ok: false,
         message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
@@ -1743,26 +2160,41 @@ export async function prepareCardCheckout(
     const shippingPrice = computeShippingPrice(
       market,
       input.shippingCarrier,
-      input.quantity,
+      totalQuantity,
       configuredShipping
     );
-    const totalPrice = input.quantity * price + shippingPrice;
+    const totalPrice = itemsTotal + shippingPrice;
 
-    const dupPending = await sql`
-      select id, stripe_payment_intent_id, total_price
-      from pending_card_checkouts
-      where market = ${market}
-        and consumed_at is null
-        and payload->>'email' = ${input.email}
-        and payload->>'phone' = ${input.phone}
-        and payload->>'deliveryAddress' = ${input.deliveryAddress}
-        and (payload->>'quantity')::int = ${input.quantity}
-        and (payload->>'paymentMethod') = 'CARD_STRIPE'
-        and (payload->>'shippingCarrier') = ${input.shippingCarrier}
-        and created_at > now() - interval '5 minutes'
-      order by created_at desc
-      limit 1
-    `;
+    const dupPending = isCart
+      ? await sql`
+          select id, stripe_payment_intent_id, total_price
+          from pending_card_checkouts
+          where market = ${market}
+            and consumed_at is null
+            and payload->>'email' = ${input.email}
+            and payload->>'phone' = ${input.phone}
+            and payload->>'deliveryAddress' = ${input.deliveryAddress}
+            and (payload->>'paymentMethod') = 'CARD_STRIPE'
+            and (payload->>'shippingCarrier') = ${input.shippingCarrier}
+            and created_at > now() - interval '5 minutes'
+          order by created_at desc
+          limit 1
+        `
+      : await sql`
+          select id, stripe_payment_intent_id, total_price
+          from pending_card_checkouts
+          where market = ${market}
+            and consumed_at is null
+            and payload->>'email' = ${input.email}
+            and payload->>'phone' = ${input.phone}
+            and payload->>'deliveryAddress' = ${input.deliveryAddress}
+            and (payload->>'quantity')::int = ${totalQuantity}
+            and (payload->>'paymentMethod') = 'CARD_STRIPE'
+            and (payload->>'shippingCarrier') = ${input.shippingCarrier}
+            and created_at > now() - interval '5 minutes'
+          order by created_at desc
+          limit 1
+        `;
     if (dupPending.length > 0) {
       const prev = dupPending[0] as {
         id: string;
@@ -1804,7 +2236,7 @@ export async function prepareCardCheckout(
         and email = ${input.email}
         and phone = ${input.phone}
         and delivery_address = ${input.deliveryAddress}
-        and quantity = ${input.quantity}
+        and quantity = ${totalQuantity}
         and payment_method = 'CARD_STRIPE'
         and shipping_carrier = ${input.shippingCarrier}
         and created_at > now() - interval '5 minutes'
@@ -1821,7 +2253,7 @@ export async function prepareCardCheckout(
       };
     }
 
-    if (input.quantity > inventory) {
+    if (!isCart && totalQuantity > inventory) {
       const subject = "Stoc indisponibil momentan";
       const body =
         "Momentan nu avem stoc suficient. Va vom contacta imediat ce produsul este disponibil din nou.";
@@ -1835,18 +2267,31 @@ export async function prepareCardCheckout(
     }
 
     const pendingId = crypto.randomUUID();
-    const payloadJson = {
-      customerName: input.customerName,
-      email: input.email,
-      phone: input.phone,
-      billingAddress: input.billingAddress,
-      deliveryAddress: input.deliveryAddress,
-      quantity: input.quantity,
-      paymentMethod: "CARD_STRIPE" as const,
-      shippingCarrier: input.shippingCarrier,
-      shippingCarrierOther: input.shippingCarrierOther ?? null,
-      additionalNotes: input.additionalNotes ?? null,
-    };
+    const payloadJson = isCart
+      ? {
+          customerName: input.customerName,
+          email: input.email,
+          phone: input.phone,
+          billingAddress: input.billingAddress,
+          deliveryAddress: input.deliveryAddress,
+          items: input.items,
+          paymentMethod: "CARD_STRIPE" as const,
+          shippingCarrier: input.shippingCarrier,
+          shippingCarrierOther: input.shippingCarrierOther ?? null,
+          additionalNotes: input.additionalNotes ?? null,
+        }
+      : {
+          customerName: input.customerName,
+          email: input.email,
+          phone: input.phone,
+          billingAddress: input.billingAddress,
+          deliveryAddress: input.deliveryAddress,
+          quantity: totalQuantity,
+          paymentMethod: "CARD_STRIPE" as const,
+          shippingCarrier: input.shippingCarrier,
+          shippingCarrierOther: input.shippingCarrierOther ?? null,
+          additionalNotes: input.additionalNotes ?? null,
+        };
 
     await sql`
       insert into pending_card_checkouts (id, market, payload, total_price)
@@ -2361,7 +2806,10 @@ export async function createOrder(input: {
   phone: string;
   billingAddress: string;
   deliveryAddress: string;
-  quantity: number;
+  /** Legacy shape — RO/HU (and single-item EU) always send this. */
+  quantity?: number;
+  /** EU-cart shape — resolved server-side against product_market_listings. */
+  items?: CartLineItemInput[];
   paymentMethod: Order["paymentMethod"];
   shippingCarrier: ShippingCarrier;
   shippingCarrierOther?: string | null;
@@ -2374,12 +2822,46 @@ export async function createOrder(input: {
     const senderFrom = senderEmailForMarket(market);
     const sql = getSql();
     await ensureSchema(sql);
-    if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 100) {
-      return {
-        ok: false,
-        message: "Neplatny pocet kusu. Zadejte prosim cele cislo od 1 do 100.",
-      };
+
+    const isCart = market === "EU" && Array.isArray(input.items) && input.items.length > 0;
+
+    let lineItems: ResolvedLineItem[];
+    let inventory = 0; // only meaningful for the legacy (non-cart) branch below
+
+    if (isCart) {
+      const resolved = await resolveEuCartLineItems(sql, input.items!);
+      if (!resolved.ok) {
+        return { ok: false, message: resolved.message };
+      }
+      lineItems = resolved.lineItems;
+    } else {
+      const quantity = Number(input.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+        return {
+          ok: false,
+          message: "Neplatny pocet kusu. Zadejte prosim cele cislo od 1 do 100.",
+        };
+      }
+      const defaults = defaultsByMarket[market];
+      inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
+      const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
+      const price = Number.isFinite(options?.fixedItemPrice)
+        ? Math.max(0, Number(options?.fixedItemPrice))
+        : configuredPrice;
+      lineItems = [
+        {
+          productId: null,
+          sku: defaults.sku,
+          name: "FreeStyle Libre 2 Plus",
+          quantity,
+          unitPrice: price,
+          lineTotal: price * quantity,
+        },
+      ];
     }
+
+    const totalQuantity = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+    const itemsTotal = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     if (input.paymentMethod === "CARD_STRIPE" && !getStripe()) {
       return {
@@ -2389,14 +2871,8 @@ export async function createOrder(input: {
       };
     }
 
-    const defaults = defaultsByMarket[market];
-    const inventory = await getSettingNumber(sql, settingKey(market, "inventory"), defaults.inventory);
-    const configuredPrice = await getSettingNumber(sql, settingKey(market, "price"), defaults.price);
-    const configuredShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaults.shipping);
-    const price = Number.isFinite(options?.fixedItemPrice)
-      ? Math.max(0, Number(options?.fixedItemPrice))
-      : configuredPrice;
-    if (input.shippingCarrier === "FINESHIP" && input.quantity < 6) {
+    const configuredShipping = await getSettingNumber(sql, settingKey(market, "shipping"), defaultsByMarket[market].shipping);
+    if (input.shippingCarrier === "FINESHIP" && totalQuantity < 6) {
       return {
         ok: false,
         message: "Fineship este disponibil doar pentru comenzi de minimum 6 senzori.",
@@ -2424,8 +2900,13 @@ export async function createOrder(input: {
     }
     const shippingPrice = Number.isFinite(options?.fixedShippingPrice)
       ? Math.max(0, Number(options?.fixedShippingPrice))
-      : computeShippingPrice(market, input.shippingCarrier, input.quantity, configuredShipping);
-    const totalPrice = input.quantity * price + shippingPrice;
+      : computeShippingPrice(market, input.shippingCarrier, totalQuantity, configuredShipping);
+    const totalPrice = itemsTotal + shippingPrice;
+    // Weighted-average unit price: exact for the legacy single-line case
+    // (the only case for RO/HU, and the common case for EU), an approximation
+    // for multi-item EU baskets. Invoices/exports that need real per-line
+    // detail read `order_items` directly rather than this column.
+    const itemPriceColumn = totalQuantity > 0 ? itemsTotal / totalQuantity : 0;
 
     const carrierOther = null;
 
@@ -2435,7 +2916,7 @@ export async function createOrder(input: {
         and email = ${input.email}
         and phone = ${input.phone}
         and delivery_address = ${input.deliveryAddress}
-        and quantity = ${input.quantity}
+        and quantity = ${totalQuantity}
         and payment_method = ${input.paymentMethod}
         and shipping_carrier = ${input.shippingCarrier}
         and created_at > now() - interval '5 minutes'
@@ -2451,7 +2932,7 @@ export async function createOrder(input: {
       };
     }
 
-    if (input.quantity > inventory) {
+    if (!isCart && totalQuantity > inventory) {
       const subject = "Stoc indisponibil momentan";
       const body =
         "Momentan nu avem stoc suficient. Va vom contacta imediat ce produsul este disponibil din nou.";
@@ -2462,6 +2943,9 @@ export async function createOrder(input: {
       await sendEmail({ to: input.email, subject, text: body, from: senderFrom }).catch(() => undefined);
       return { ok: false, message: "Stoc insuficient. V-am trimis o informare." };
     }
+    // For the cart path, per-line inventory was already checked inside
+    // resolveEuCartLineItems; the atomic decrement below is the final,
+    // race-safe check at the moment of purchase.
 
     const status: OrderStatus =
       input.paymentMethod === "BANK_TRANSFER" || input.paymentMethod === "CARD_STRIPE"
@@ -2488,8 +2972,8 @@ export async function createOrder(input: {
           ) values (
             ${orderId}, ${orderNumber}, ${input.customerName}, ${input.email}, ${input.phone},
             ${input.billingAddress}, ${input.deliveryAddress},
-            ${input.quantity}, ${input.paymentMethod}, ${shippingPrice},
-            ${price}, ${totalPrice}, ${status},
+            ${totalQuantity}, ${input.paymentMethod}, ${shippingPrice},
+            ${itemPriceColumn}, ${totalPrice}, ${status},
             ${input.shippingCarrier}, ${carrierOther}, ${market}, ${additionalNotes || null}
           )
           returning *
@@ -2511,6 +2995,10 @@ export async function createOrder(input: {
       };
     }
     const order = toOrder(insertedRow);
+    await insertOrderItems(sql, order.id, lineItems).catch((err) => {
+      // Never block a placed, paid-for order on this bookkeeping insert.
+      console.error("[createOrder] insertOrderItems failed", { orderId: order.id, error: String(err) });
+    });
     const shouldCreateShipmentImmediately =
       order.paymentMethod === "COD" &&
       (order.shippingCarrier === "PPL" || order.shippingCarrier === "DPD");
@@ -2535,6 +3023,7 @@ export async function createOrder(input: {
           market,
           kind: "PROFORMA",
           total: Number(proforma.amount),
+          lineItems,
         } as const;
         proformaPdf = await renderInvoicePdf(order, invoiceData).catch(() => null);
       }
@@ -2556,7 +3045,12 @@ export async function createOrder(input: {
       }
 
       if (shouldCreateShipmentImmediately) {
-        const consumed = await consumeInventoryAtomic(sql, market, order.quantity);
+        const consumed = isCart
+          ? await consumeListingInventoryAtomicMulti(
+              sql,
+              lineItems.filter((i): i is ResolvedLineItem & { productId: string } => i.productId != null)
+            )
+          : await consumeInventoryAtomic(sql, market, totalQuantity);
         if (consumed) {
           await sql`
             update orders
@@ -2667,6 +3161,19 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     return false;
   }
   const order = toOrder(rows[0] as unknown as Row);
+  // A non-null product_id means this order's inventory lives in
+  // product_market_listings (a real EU cart order), never true for
+  // RO/HU or for pre-catalog orders backfilled with product_id = NULL.
+  const cartItems: CartLineItemInput[] =
+    market === "EU"
+      ? (
+          await sql<{ product_id: string; quantity: number }[]>`
+            select product_id, quantity from order_items
+            where order_id = ${orderId} and product_id is not null
+          `
+        ).map((r) => ({ productId: r.product_id, quantity: Number(r.quantity) }))
+      : [];
+  const isCartOrder = cartItems.length > 0;
   if (!isAllowedStatusTransition(order.status, status)) {
     return false;
   }
@@ -2680,7 +3187,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
     const prepaid =
       order.paymentMethod === "BANK_TRANSFER" || order.paymentMethod === "CARD_STRIPE";
     if (status === "ORDERED_PAID_NOT_SHIPPED" && prepaid && order.status === "ORDERED_NOT_PAID") {
-      const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+      const consumed = isCartOrder
+        ? await consumeListingInventoryAtomicMultiInTx(tx, cartItems)
+        : await consumeInventoryAtomic(tx, market, order.quantity);
       if (!consumed) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
@@ -2711,7 +3220,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
         await tx`update orders set status = 'WAITING_FOR_SHIPPING' where id = ${orderId}`;
         return true;
       }
-      const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+      const consumed = isCartOrder
+        ? await consumeListingInventoryAtomicMultiInTx(tx, cartItems)
+        : await consumeInventoryAtomic(tx, market, order.quantity);
       if (!consumed) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
@@ -2730,7 +3241,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
         return true;
       }
       if (order.status === "WAITING_FOR_SHIPPING") {
-        const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+        const consumed = isCartOrder
+          ? await consumeListingInventoryAtomicMultiInTx(tx, cartItems)
+          : await consumeInventoryAtomic(tx, market, order.quantity);
         if (!consumed) {
           await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
           return true;
@@ -2749,7 +3262,9 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       order.paymentMethod === "COD" &&
       order.status === "WAITING_FOR_SHIPPING"
     ) {
-      const consumed = await consumeInventoryAtomic(tx, market, order.quantity);
+      const consumed = isCartOrder
+        ? await consumeListingInventoryAtomicMultiInTx(tx, cartItems)
+        : await consumeInventoryAtomic(tx, market, order.quantity);
       if (!consumed) {
         await tx`update orders set status = 'CANCELLED_QUANTITY' where id = ${orderId}`;
         return true;
@@ -2778,6 +3293,15 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
       if (shouldIssueFinalInvoice) {
         try {
           const finalInvoice = await createInvoiceRecord(sql, refreshed, market, "FINAL");
+          const orderItemRows = await sql<
+            { product_name: string; quantity: number; unit_price: string; line_total: string }[]
+          >`select product_name, quantity, unit_price, line_total from order_items where order_id = ${orderId}`;
+          const finalLineItems = orderItemRows.map((r) => ({
+            name: r.product_name,
+            quantity: Number(r.quantity),
+            unitPrice: Number(r.unit_price),
+            lineTotal: Number(r.line_total),
+          }));
           const invoiceData = {
             invoiceNo: finalInvoice.invoice_no,
             sequenceNo: Number(finalInvoice.sequence_no),
@@ -2788,6 +3312,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, ma
             market,
             kind: "FINAL",
             total: Number(finalInvoice.amount),
+            lineItems: finalLineItems.length > 0 ? finalLineItems : undefined,
           } as const;
           const invoiceHtml = renderInvoiceHtml(refreshed, {
             invoiceNo: finalInvoice.invoice_no,

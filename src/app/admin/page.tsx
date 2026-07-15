@@ -1,7 +1,9 @@
 import { AdminOrdersList } from "@/components/admin-orders-list";
+import { AdminProductListings } from "@/components/admin-product-listings";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import {
   autoCancelExpiredOrders,
+  addProductToMarket,
   cancelDpdPickupOrder,
   cancelDpdShipmentForOrder,
   cancelPplShipmentForOrder,
@@ -12,6 +14,7 @@ import {
   getPplBulkLabelForOrders,
   getPplShipmentsAdmin,
   listFailedStripeWebhookEvents,
+  listListingsForMarket,
   listPendingCardCheckoutsForRecovery,
   orderDpdPickup,
   orderPplPickup,
@@ -19,8 +22,10 @@ import {
   resetDpdShipmentForOrder,
   resetPplShipmentForOrder,
   readStore,
+  updateMarketShipping,
   updateMarketStoreSettings,
   updateOrderStatus,
+  upsertProductListing,
 } from "@/lib/store";
 import { formatOrderNumber } from "@/lib/order-format";
 import { ORDER_STATUSES } from "@/lib/types";
@@ -49,17 +54,43 @@ async function updateStatus(formData: FormData) {
   }
 }
 
-async function updateEuStoreSettingsAction(formData: FormData) {
+async function updateEuShippingAction(formData: FormData) {
   "use server";
-  const inventory = Number(formData.get("inventory"));
-  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
   const shipping = Number(String(formData.get("shipping") ?? "").replace(",", "."));
-  const res = await updateMarketStoreSettings("EU", { inventory, price, shipping });
+  const res = await updateMarketShipping("EU", shipping);
   revalidatePath("/admin");
   if (!res.ok) {
     redirect(`/admin?ok=0&msg=${encodeURIComponent(res.message)}`);
   }
-  redirect(`/admin?ok=1&msg=${encodeURIComponent("Nastaveni obchodu (EU) ulozeno.")}`);
+  redirect(`/admin?ok=1&msg=${encodeURIComponent("Doprava (EU) ulozena.")}`);
+}
+
+async function updateEuListingAction(formData: FormData) {
+  "use server";
+  const productId = String(formData.get("productId") || "");
+  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
+  const inventory = Number(formData.get("inventory"));
+  const isActive = formData.get("isActive") === "on";
+  const res = await upsertProductListing("EU", productId, { price, inventory, isActive });
+  revalidatePath("/admin");
+  if (!res.ok) {
+    redirect(`/admin?ok=0&msg=${encodeURIComponent(res.message)}`);
+  }
+  redirect(`/admin?ok=1&msg=${encodeURIComponent("Produkt (EU) ulozen.")}`);
+}
+
+async function addEuProductAction(formData: FormData) {
+  "use server";
+  const sku = String(formData.get("sku") || "");
+  const name = String(formData.get("name") || "");
+  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
+  const inventory = Number(formData.get("inventory"));
+  const res = await addProductToMarket("EU", { sku, name, price, inventory });
+  revalidatePath("/admin");
+  if (!res.ok) {
+    redirect(`/admin?ok=0&msg=${encodeURIComponent(res.message)}`);
+  }
+  redirect(`/admin?ok=1&msg=${encodeURIComponent("Novy produkt (EU) pridan.")}`);
 }
 
 async function updateStoreSettingsAction(formData: FormData) {
@@ -205,10 +236,11 @@ export default async function AdminPage({
 }) {
   await autoCancelExpiredOrders();
   const cardEmail = String(searchParams?.cardEmail || "").trim();
-  const [store, euStore, pplShipments, pickups, dpdShipments, dpdPickups, pendingCards, failedStripeWebhooks] =
+  const [store, euStore, euListings, pplShipments, pickups, dpdShipments, dpdPickups, pendingCards, failedStripeWebhooks] =
     await Promise.all([
     readStore(),
     readStore("EU"),
+    listListingsForMarket("EU"),
     getPplShipmentsAdmin("RO", 100),
     getPplPickups("RO", 20),
     getDpdShipmentsAdmin("RO", 100),
@@ -427,24 +459,25 @@ export default async function AdminPage({
 
       <h2 className="mt-16 text-2xl font-semibold text-[#0a2624]">Trh EU (kupitsensor.eu)</h2>
       <p className="mt-1 text-sm text-[#1a4d47]">
-        Sklad {euStore.inventory} ks · cena {euStore.price} EUR · doprava {euStore.shipping} EUR · Fineship 30 EUR (od 6 ks)
+        Doprava {euStore.shipping} EUR · Fineship 30 EUR (od 6 ks) · sklad a ceny nyni per produkt nize
       </p>
-      <form action={updateEuStoreSettingsAction} className="mt-4 max-w-xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#0a2624]">Sklad a ceny (EU)</h3>
-        <label className="block text-sm font-medium text-[#0a2624]">
-          <span className="mb-1 block text-[#1a4d47]">Sklad (ks)</span>
-          <input name="inventory" type="number" min={0} defaultValue={euStore.inventory} className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2" />
-        </label>
-        <label className="block text-sm font-medium text-[#0a2624]">
-          <span className="mb-1 block text-[#1a4d47]">Cena za kus (EUR)</span>
-          <input name="price" type="number" min={0.01} step={0.01} defaultValue={euStore.price} className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2" />
-        </label>
+      <form action={updateEuShippingAction} className="mt-4 max-w-xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h3 className="text-lg font-semibold text-[#0a2624]">Doprava (EU)</h3>
         <label className="block text-sm font-medium text-[#0a2624]">
           <span className="mb-1 block text-[#1a4d47]">Standardni doprava PPL/DPD pod 5 ks (EUR)</span>
           <input name="shipping" type="number" min={0} step={0.01} defaultValue={euStore.shipping} className="w-full rounded-lg border-2 border-[#0d4f4a]/20 p-2" />
         </label>
-        <button type="submit" className="rounded-lg bg-[#0f766e] px-4 py-2 text-white">Ulozit nastaveni EU</button>
+        <button type="submit" className="rounded-lg bg-[#0f766e] px-4 py-2 text-white">Ulozit dopravu EU</button>
       </form>
+
+      <h3 className="mt-8 text-lg font-semibold text-[#0a2624]">Produkty a sklad (EU)</h3>
+      <AdminProductListings
+        market="EU"
+        listings={euListings}
+        updateListingAction={updateEuListingAction}
+        addProductAction={addEuProductAction}
+      />
+
       <div className="mt-6">
         <AdminOrdersList orders={euStore.orders} locale="de-DE" currency="EUR" />
       </div>

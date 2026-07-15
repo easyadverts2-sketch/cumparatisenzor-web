@@ -8,6 +8,13 @@ export type InvoiceKind = "PROFORMA" | "FINAL";
 
 export type InvoiceCurrency = "RON" | "HUF" | "EUR";
 
+export type InvoiceLineItem = {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
 export type InvoiceData = {
   invoiceNo: string;
   sequenceNo: number;
@@ -18,7 +25,21 @@ export type InvoiceData = {
   market: Market;
   kind: InvoiceKind;
   total: number;
+  /** Omitted for every legacy single-product order — falls back to one line built from order.quantity/itemPrice. */
+  lineItems?: InvoiceLineItem[];
 };
+
+function resolveInvoiceLineItems(order: Order, data: InvoiceData): InvoiceLineItem[] {
+  if (data.lineItems && data.lineItems.length > 0) return data.lineItems;
+  return [
+    {
+      name: "FreeStyle Libre 2 Plus",
+      quantity: order.quantity,
+      unitPrice: order.itemPrice,
+      lineTotal: order.itemPrice * order.quantity,
+    },
+  ];
+}
 
 export function marketCurrency(market: Market): InvoiceCurrency {
   if (market === "HU") return "HUF";
@@ -236,6 +257,12 @@ export function renderInvoiceText(order: Order, data: InvoiceData): string {
   const dueDate = humanDate(data.dueDateIso);
   const L = invoiceLabels(data.market);
   const title = invoiceTitle(L, data.kind);
+  const items = resolveInvoiceLineItems(order, data);
+  const itemsTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  const itemLines = items.flatMap((item) => [
+    `${L.product}: ${item.name}`,
+    `${L.quantity}: ${item.quantity}`,
+  ]);
   return [
     `${title}: ${data.invoiceNo}`,
     `${L.orderNumber}: ${String(order.orderNumber)}`,
@@ -247,9 +274,8 @@ export function renderInvoiceText(order: Order, data: InvoiceData): string {
     `${L.phone}: ${order.phone}`,
     `${L.billingAddress}: ${order.billingAddress.replace(/\n/g, ", ")}`,
     `${L.deliveryAddress}: ${order.deliveryAddress.replace(/\n/g, ", ")}`,
-    `${L.product}: FreeStyle Libre 2 Plus`,
-    `${L.quantity}: ${order.quantity}`,
-    `${L.itemsTotal}: ${order.itemPrice * order.quantity} ${data.currency}`,
+    ...itemLines,
+    `${L.itemsTotal}: ${itemsTotal} ${data.currency}`,
     `${L.shipping}: ${order.shippingPrice} ${data.currency}`,
     `${L.totalToPay}: ${data.total} ${data.currency}`,
     "",
@@ -395,9 +421,13 @@ export async function renderInvoicePdf(order: Order, data: InvoiceData): Promise
 
   y -= 6;
   sectionTitle(L.orderSummary);
-  row(L.product, "FreeStyle Libre 2 Plus");
-  row(L.quantity, String(order.quantity));
-  row(L.itemsTotal, `${order.itemPrice * order.quantity} ${data.currency}`);
+  const lineItems = resolveInvoiceLineItems(order, data);
+  const itemsTotal = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  for (const item of lineItems) {
+    row(L.product, item.name);
+    row(L.quantity, String(item.quantity));
+  }
+  row(L.itemsTotal, `${itemsTotal} ${data.currency}`);
   row(L.shipping, `${order.shippingPrice} ${data.currency}`);
   row(L.totalToPay, `${data.total} ${data.currency}`);
 

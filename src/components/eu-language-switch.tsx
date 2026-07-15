@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEuLocale } from "@/lib/eu-locale-client";
 
 // Russian and Ukrainian pages use different slugs (their content differs, not
 // just the language), so switching languages mid-page needs an explicit map
@@ -21,7 +22,8 @@ const UA_TO_RU: Record<string, string> = Object.fromEntries(
   Object.entries(RU_TO_UA).map(([ru, ua]) => [ua, ru])
 );
 
-export function EuLanguageSwitch({ locale }: { locale: "ru" | "uk" }) {
+export function EuLanguageSwitch() {
+  const locale = useEuLocale();
   const pathname = usePathname() || "/eu";
   const otherHref = locale === "ru" ? RU_TO_UA[pathname] || "/eu/ua" : UA_TO_RU[pathname] || "/eu";
   const currentHref = pathname;
