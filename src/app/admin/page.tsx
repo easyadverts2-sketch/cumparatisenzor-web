@@ -1,6 +1,7 @@
 import { AdminOrdersList } from "@/components/admin-orders-list";
 import { AdminProductListings } from "@/components/admin-product-listings";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { EuAdminPage } from "@/components/eu-admin-page";
 import {
   autoCancelExpiredOrders,
   addProductToMarket,
@@ -31,6 +32,7 @@ import { formatOrderNumber } from "@/lib/order-format";
 import { ORDER_STATUSES } from "@/lib/types";
 import { revalidatePath } from "next/cache";
 import { clearAdminSessionCookie } from "@/lib/auth";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -234,6 +236,10 @@ export default async function AdminPage({
 }: {
   searchParams?: { ok?: string; msg?: string; cardEmail?: string };
 }) {
+  if (headers().get("x-site-variant") === "eu") {
+    return <EuAdminPage searchParams={searchParams} />;
+  }
+
   await autoCancelExpiredOrders();
   const cardEmail = String(searchParams?.cardEmail || "").trim();
   const [store, euStore, euListings, pplShipments, pickups, dpdShipments, dpdPickups, pendingCards, failedStripeWebhooks] =

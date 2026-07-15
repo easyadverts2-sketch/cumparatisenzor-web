@@ -3032,15 +3032,23 @@ export async function createOrder(input: {
       if (internalRecipients.length > 0) {
         const internalAlert = buildInternalOrderAlertEmail(order, market);
         await Promise.all(
-          internalRecipients.map((to) =>
-            sendEmail({
+          internalRecipients.map(async (to) => {
+            const result = await sendEmail({
               to,
               subject: internalAlert.subject,
               text: internalAlert.text,
               html: internalAlert.html,
               from: senderFrom,
-            }).catch(() => undefined)
-          )
+            });
+            if (!result.sent) {
+              console.error("[createOrder] internal email not sent", {
+                market,
+                orderNumber: order.orderNumber,
+                to,
+                reason: result.reason,
+              });
+            }
+          })
         );
       }
 
@@ -3068,7 +3076,7 @@ export async function createOrder(input: {
         insert into notifications (id, type, recipient, subject, body)
         values (${crypto.randomUUID()}, 'ORDER_CONFIRMATION', ${input.email}, ${createdEmail.subject}, ${createdEmail.text})
       `;
-      await sendEmail({
+      const customerMailResult = await sendEmail({
         to: input.email,
         subject: createdEmail.subject,
         text: createdEmail.text,
@@ -3084,7 +3092,15 @@ export async function createOrder(input: {
                 },
               ]
             : undefined,
-      }).catch(() => undefined);
+      });
+      if (!customerMailResult.sent) {
+        console.error("[createOrder] customer email not sent", {
+          market,
+          orderNumber: order.orderNumber,
+          to: input.email,
+          reason: customerMailResult.reason,
+        });
+      }
     } catch (postProcessError) {
       console.error("[createOrder] post-process warning", {
         market,

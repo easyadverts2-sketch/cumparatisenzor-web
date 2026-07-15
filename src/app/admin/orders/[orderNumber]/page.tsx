@@ -7,9 +7,10 @@ import {
   updateOrderTrackingNumber,
   updateOrderStatus,
 } from "@/lib/store";
-import { ORDER_STATUSES, OrderStatus } from "@/lib/types";
+import { ORDER_STATUSES, OrderStatus, type Market } from "@/lib/types";
 import { formatOrderNumber } from "@/lib/order-format";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -39,9 +40,10 @@ async function updateStatus(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
   const orderNo = String(formData.get("orderNumber") || "");
+  const market = (String(formData.get("market") || "RO") as Market) || "RO";
   const status = String(formData.get("status") || "") as OrderStatus;
   if (ORDER_STATUSES.includes(status)) {
-    await updateOrderStatus(orderId, status);
+    await updateOrderStatus(orderId, status, market);
   }
   revalidatePath("/admin");
   if (orderNo) {
@@ -53,9 +55,10 @@ async function updateTracking(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
   const orderNo = String(formData.get("orderNumber") || "");
+  const market = (String(formData.get("market") || "RO") as Market) || "RO";
   const trackingNumber = String(formData.get("trackingNumber") || "");
   if (orderId && trackingNumber.trim()) {
-    await updateOrderTrackingNumber(orderId, trackingNumber);
+    await updateOrderTrackingNumber(orderId, trackingNumber, market);
   }
   revalidatePath("/admin");
   if (orderNo) revalidatePath(`/admin/orders/${orderNo}`);
@@ -65,8 +68,9 @@ async function triggerShipment(formData: FormData) {
   "use server";
   const orderId = String(formData.get("orderId") || "");
   const orderNo = String(formData.get("orderNumber") || "");
+  const market = (String(formData.get("market") || "RO") as Market) || "RO";
   if (orderId) {
-    await triggerShipmentCreation(orderId, "RO");
+    await triggerShipmentCreation(orderId, market);
   }
   revalidatePath("/admin");
   if (orderNo) revalidatePath(`/admin/orders/${orderNo}`);
@@ -80,8 +84,12 @@ export default async function AdminOrderDetailPage({
   await autoCancelExpiredOrders();
   const num = parseInt(params.orderNumber, 10);
   if (!Number.isFinite(num)) notFound();
-  const order = await getOrderByNumber(num);
+  const preferEu = headers().get("x-site-variant") === "eu";
+  const order = preferEu
+    ? (await getOrderByNumber(num, "EU")) || (await getOrderByNumber(num, "RO"))
+    : (await getOrderByNumber(num, "RO")) || (await getOrderByNumber(num, "EU"));
   if (!order) notFound();
+  const currency = order.market === "EU" ? "EUR" : order.market === "HU" ? "HUF" : "RON";
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -89,7 +97,8 @@ export default async function AdminOrderDetailPage({
         ← Zpět na seznam objednávek
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-[#0a2624]">
-        Objednávka {formatOrderNumber(order.orderNumber)}
+        Objednávka {formatOrderNumber(order.orderNumber)}{" "}
+        <span className="text-base font-semibold text-[#1a4d47]">({order.market})</span>
       </h1>
       <p className="mt-1 text-sm text-[#1a4d47]">
         {new Date(order.createdAt).toLocaleString("cs-CZ")} · Interní ID:{" "}
@@ -129,10 +138,10 @@ export default async function AdminOrderDetailPage({
             <strong className="text-[#0a2624]">Dopravce:</strong> {formatShippingLine(order)}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Celkem:</strong> {order.totalPrice} RON
+            <strong className="text-[#0a2624]">Celkem:</strong> {order.totalPrice} {currency}
           </p>
           <p className="text-[#1a4d47]">
-            <strong className="text-[#0a2624]">Doprava:</strong> {order.shippingPrice} RON
+            <strong className="text-[#0a2624]">Doprava:</strong> {order.shippingPrice} {currency}
           </p>
           <p className="text-[#1a4d47]">
             <strong className="text-[#0a2624]">Tracking:</strong> {order.trackingNumber || "-"}
@@ -163,6 +172,7 @@ export default async function AdminOrderDetailPage({
         <form action={updateStatus} className="flex flex-wrap items-end gap-3 border-t border-[#0d4f4a]/10 pt-6">
           <input type="hidden" name="orderId" value={order.id} />
           <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
+          <input type="hidden" name="market" value={order.market} />
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-[#0f766e]">Stav</span>
             <select name="status" defaultValue={order.status} className="rounded-lg border-2 border-[#0d4f4a]/20 px-3 py-2">
@@ -181,6 +191,7 @@ export default async function AdminOrderDetailPage({
         <form action={updateTracking} className="flex flex-wrap items-end gap-3 border-t border-[#0d4f4a]/10 pt-4">
           <input type="hidden" name="orderId" value={order.id} />
           <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
+          <input type="hidden" name="market" value={order.market} />
           <label className="flex min-w-[260px] flex-col gap-1">
             <span className="text-xs font-medium text-[#0f766e]">Číslo zásilky / tracking</span>
             <input
@@ -197,6 +208,7 @@ export default async function AdminOrderDetailPage({
         <form action={triggerShipment} className="flex items-center gap-3 border-t border-[#0d4f4a]/10 pt-4">
           <input type="hidden" name="orderId" value={order.id} />
           <input type="hidden" name="orderNumber" value={String(order.orderNumber)} />
+          <input type="hidden" name="market" value={order.market} />
           <button type="submit" className="rounded-lg bg-[#0f766e] px-4 py-2 font-medium text-white">
             Test odeslání zásilky (PPL/DPD)
           </button>

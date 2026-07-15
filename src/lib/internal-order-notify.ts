@@ -38,7 +38,7 @@ export function internalOrderNotificationEmails(market: Market): string[] {
     out.push(email);
   }
 
-  if (market === "RO" || market === "HU") {
+  if (market === "RO" || market === "HU" || market === "EU") {
     add(process.env.INTERNAL_ORDER_EMAIL_OPERATOR?.trim() || DEFAULT_OPERATOR_ORDER_EMAIL);
   }
 
