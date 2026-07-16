@@ -15,11 +15,13 @@ export function EuHomePage({ locale }: { locale: EuLocale }) {
           title: "Libre 2 і Libre 2 Plus",
           compare: "Порівняння Libre 2 vs Libre 2 Plus",
           faq: "Часті запитання про доставку в DE, PL, AT",
+          reviews: "Залишити відгук",
         }
       : {
           title: "Libre 2 и Libre 2 Plus",
           compare: "Сравнение Libre 2 vs Libre 2 Plus",
           faq: "Частые вопросы о доставке в DE, PL, AT",
+          reviews: "Оставить отзыв",
         };
 
   return (
@@ -94,6 +96,9 @@ export function EuHomePage({ locale }: { locale: EuLocale }) {
               </Link>
               <Link href={paths.faq} className="font-semibold text-[#be3f6f] underline">
                 {seoLinks.faq}
+              </Link>
+              <Link href={paths.reviews} className="font-semibold text-[#be3f6f] underline">
+                {seoLinks.reviews}
               </Link>
             </div>
           </div>

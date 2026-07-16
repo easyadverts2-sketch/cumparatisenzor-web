@@ -10,8 +10,22 @@ export function EuFooter() {
   const isUa = locale === "uk";
 
   const t = isUa
-    ? { terms: "Умови", privacy: "Конфіденційність", contact: "Контакти", operator: "Оператор", address: "Адреса" }
-    : { terms: "Условия", privacy: "Конфиденциальность", contact: "Контакты", operator: "Оператор", address: "Адрес" };
+    ? {
+        terms: "Умови",
+        privacy: "Конфіденційність",
+        contact: "Контакти",
+        reviews: "Відгуки",
+        operator: "Оператор",
+        address: "Адреса",
+      }
+    : {
+        terms: "Условия",
+        privacy: "Конфиденциальность",
+        contact: "Контакты",
+        reviews: "Отзывы",
+        operator: "Оператор",
+        address: "Адрес",
+      };
 
   return (
     <footer className="mt-16 border-t border-[#ffb174]/30 bg-gradient-to-r from-[#6f2147] via-[#a22d53] to-[#df5b42] text-white">
@@ -28,6 +42,9 @@ export function EuFooter() {
           </Link>
           <Link href={paths.contact} className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20">
             {t.contact}
+          </Link>
+          <Link href={paths.reviews} className="rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-white no-underline hover:bg-white/20">
+            {t.reviews}
           </Link>
         </div>
       </div>

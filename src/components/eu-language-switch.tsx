@@ -16,6 +16,7 @@ const RU_TO_UA: Record<string, string> = {
   "/eu/prilozheniya": "/eu/ua/dodatky",
   "/eu/libre-2-vs-libre-2-plus": "/eu/ua/libre-2-vs-libre-2-plus",
   "/eu/voprosy-o-libre": "/eu/ua/zapytannya-pro-libre",
+  "/eu/otzyvy": "/eu/ua/vidhuky",
   "/eu/kontakt": "/eu/ua/kontakt",
   "/eu/usloviya": "/eu/ua/umovy",
   "/eu/konfidencialnost": "/eu/ua/konfidentsiynist",

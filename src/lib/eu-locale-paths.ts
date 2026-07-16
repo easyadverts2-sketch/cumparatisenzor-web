@@ -10,6 +10,7 @@ export function euPaths(locale: EuLocale) {
     apps: locale === "uk" ? "/eu/ua/dodatky" : "/eu/prilozheniya",
     compare: `${base}/libre-2-vs-libre-2-plus`,
     faq: locale === "uk" ? "/eu/ua/zapytannya-pro-libre" : "/eu/voprosy-o-libre",
+    reviews: locale === "uk" ? "/eu/ua/vidhuky" : "/eu/otzyvy",
     order: `${base}/comanda`,
     contact: `${base}/kontakt`,
     terms: locale === "uk" ? "/eu/ua/umovy" : "/eu/usloviya",
