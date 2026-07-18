@@ -76,6 +76,7 @@ function isStaticAssetPath(pathname: string) {
     // them to /hu/* or /eu/* points at routes that don't exist and 404s.
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
+    pathname === "/llms.txt" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/opengraph-image" ||
     pathname === "/twitter-image"

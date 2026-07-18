@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua/pro-nas",
     languages: {
-      uk: "https://kupitsensor.eu/ua/pro-nas",
-      ru: "https://kupitsensor.eu/o-nas",
+      uk: "https://www.kupitsensor.eu/ua/pro-nas",
+      ru: "https://www.kupitsensor.eu/o-nas",
     },
   },
 };

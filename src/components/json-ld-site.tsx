@@ -1,4 +1,4 @@
-import { getPublicSiteUrl } from "@/lib/site-url";
+import { EU_SITE_ORIGIN, getPublicSiteUrl } from "@/lib/site-url";
 import { SEO_DEFAULT_OG_IMAGE_PATH, SITE_NAME } from "@/lib/seo-config";
 
 type SiteVariant = "ro" | "hu" | "eu";
@@ -6,7 +6,7 @@ type SiteVariant = "ro" | "hu" | "eu";
 const VARIANT_CONFIG: Record<SiteVariant, { url: string; name: string; email: string }> = {
   ro: { url: "https://cumparatisenzor.ro", name: SITE_NAME, email: "info@cumparatisenzor.ro" },
   hu: { url: "https://szenzorvasarlas.hu", name: "Szenzorvasarlas.hu", email: "info@szenzorvasarlas.hu" },
-  eu: { url: "https://kupitsensor.eu", name: "kupitsensor.eu", email: "info@kupitsensor.eu" },
+  eu: { url: EU_SITE_ORIGIN, name: "kupitsensor.eu", email: "info@kupitsensor.eu" },
 };
 
 /**

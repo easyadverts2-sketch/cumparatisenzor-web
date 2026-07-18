@@ -10,16 +10,16 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua",
     languages: {
-      uk: "https://kupitsensor.eu/ua",
-      ru: "https://kupitsensor.eu/",
-      "x-default": "https://kupitsensor.eu/",
+      uk: "https://www.kupitsensor.eu/ua",
+      ru: "https://www.kupitsensor.eu/",
+      "x-default": "https://www.kupitsensor.eu/",
     },
   },
   openGraph: {
     type: "website",
     locale: "uk_UA",
     siteName: "kupitsensor.eu",
-    url: "https://kupitsensor.eu/ua",
+    url: "https://www.kupitsensor.eu/ua",
     title: c.metaTitle,
     description: c.metaDescription,
   },

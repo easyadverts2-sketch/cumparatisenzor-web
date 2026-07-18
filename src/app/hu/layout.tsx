@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     languages: {
       "hu-HU": "https://szenzorvasarlas.hu/",
       "ro-RO": "https://cumparatisenzor.ro/",
-      ru: "https://kupitsensor.eu/",
+      ru: "https://www.kupitsensor.eu/",
       "x-default": "https://cumparatisenzor.ro/",
     },
   },

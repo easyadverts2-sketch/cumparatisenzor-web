@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua/kontakt",
     languages: {
-      uk: "https://kupitsensor.eu/ua/kontakt",
-      ru: "https://kupitsensor.eu/kontakt",
+      uk: "https://www.kupitsensor.eu/ua/kontakt",
+      ru: "https://www.kupitsensor.eu/kontakt",
     },
   },
 };

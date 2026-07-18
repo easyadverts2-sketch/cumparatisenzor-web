@@ -10,15 +10,15 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/voprosy-o-libre",
     languages: {
-      ru: "https://kupitsensor.eu/voprosy-o-libre",
-      uk: "https://kupitsensor.eu/ua/zapytannya-pro-libre",
+      ru: "https://www.kupitsensor.eu/voprosy-o-libre",
+      uk: "https://www.kupitsensor.eu/ua/zapytannya-pro-libre",
     },
   },
   openGraph: {
     locale: "ru_RU",
     title: c.metaTitle,
     description: c.metaDescription,
-    url: "https://kupitsensor.eu/voprosy-o-libre",
+    url: "https://www.kupitsensor.eu/voprosy-o-libre",
   },
 };
 

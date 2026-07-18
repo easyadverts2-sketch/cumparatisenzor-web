@@ -1,9 +1,18 @@
 export type SiteVariant = "ro" | "hu" | "eu";
 
+/** Canonical production origin for kupitsensor.eu (Search Console uses www). */
+export const EU_SITE_ORIGIN = "https://www.kupitsensor.eu";
+
+/** Absolute public URL on kupitsensor.eu (always www in production). */
+export function euSiteUrl(path = "/"): string {
+  if (!path || path === "/") return EU_SITE_ORIGIN;
+  return `${EU_SITE_ORIGIN}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 const DOMAIN_BY_VARIANT: Record<SiteVariant, string> = {
   ro: "https://cumparatisenzor.ro",
   hu: "https://szenzorvasarlas.hu",
-  eu: "https://kupitsensor.eu",
+  eu: EU_SITE_ORIGIN,
 };
 
 /**

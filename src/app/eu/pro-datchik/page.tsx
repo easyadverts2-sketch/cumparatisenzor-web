@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/pro-datchik",
     languages: {
-      ru: "https://kupitsensor.eu/pro-datchik",
-      uk: "https://kupitsensor.eu/ua/pro-sensor",
+      ru: "https://www.kupitsensor.eu/pro-datchik",
+      uk: "https://www.kupitsensor.eu/ua/pro-sensor",
     },
   },
 };

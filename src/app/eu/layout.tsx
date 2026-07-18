@@ -18,9 +18,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
     languages: {
-      ru: "https://kupitsensor.eu/",
-      uk: "https://kupitsensor.eu/ua",
-      "x-default": "https://kupitsensor.eu/",
+      ru: "https://www.kupitsensor.eu/",
+      uk: "https://www.kupitsensor.eu/ua",
+      "x-default": "https://www.kupitsensor.eu/",
     },
   },
   openGraph: {
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     title: "Купить Libre 2 Plus — доставка в DE, PL, AT",
     description:
       "FreeStyle Libre 2 Plus — заказ с доставкой в Германию, Польшу и Австрию. Поддержка на русском и украинском.",
-    url: "https://kupitsensor.eu",
+    url: "https://www.kupitsensor.eu",
     images: [
       {
         url: "/libre-user.png",

@@ -1,5 +1,6 @@
 import { getBankDetails, marketCurrency } from "./billing";
 import { formatOrderNumber } from "./order-format";
+import { euSiteUrl } from "./site-url";
 import type { Market, Order } from "./types";
 
 const PRODUCT_NAME = "FreeStyle Libre 2 Plus";
@@ -16,7 +17,7 @@ function siteName(market: Market) {
 
 function siteUrl(market: Market) {
   if (market === "HU") return "https://szenzorvasarlas.hu";
-  if (market === "EU") return "https://kupitsensor.eu";
+  if (market === "EU") return euSiteUrl();
   return "https://cumparatisenzor.ro";
 }
 

@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua/konfidentsiynist",
     languages: {
-      uk: "https://kupitsensor.eu/ua/konfidentsiynist",
-      ru: "https://kupitsensor.eu/konfidencialnost",
+      uk: "https://www.kupitsensor.eu/ua/konfidentsiynist",
+      ru: "https://www.kupitsensor.eu/konfidencialnost",
     },
   },
 };

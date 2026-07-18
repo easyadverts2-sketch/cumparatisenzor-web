@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua/umovy",
     languages: {
-      uk: "https://kupitsensor.eu/ua/umovy",
-      ru: "https://kupitsensor.eu/usloviya",
+      uk: "https://www.kupitsensor.eu/ua/umovy",
+      ru: "https://www.kupitsensor.eu/usloviya",
     },
   },
 };

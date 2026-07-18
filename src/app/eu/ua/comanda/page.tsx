@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua/comanda",
     languages: {
-      uk: "https://kupitsensor.eu/ua/comanda",
-      ru: "https://kupitsensor.eu/comanda",
+      uk: "https://www.kupitsensor.eu/ua/comanda",
+      ru: "https://www.kupitsensor.eu/comanda",
     },
   },
 };

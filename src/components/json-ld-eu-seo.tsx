@@ -1,6 +1,5 @@
 import { SEO_DEFAULT_OG_IMAGE_PATH } from "@/lib/seo-config";
-
-const EU_SITE = "https://kupitsensor.eu";
+import { euSiteUrl } from "@/lib/site-url";
 /** Fallback list price; live checkout may differ via admin settings. */
 const EU_LIST_PRICE_EUR = "60.00";
 /** Standard PPL/DPD shipping under 5 units (matches EU store default). */
@@ -26,12 +25,12 @@ export function JsonLdEuProduct({ locale }: { locale: "ru" | "uk" }) {
     name: productName,
     alternateName: ["Libre 2 Plus", "Libre 2", "FreeStyle Libre 2"],
     description,
-    image: `${EU_SITE}${SEO_DEFAULT_OG_IMAGE_PATH}`,
+    image: `${euSiteUrl()}${SEO_DEFAULT_OG_IMAGE_PATH}`,
     brand: { "@type": "Brand", name: "Abbott" },
     sku: "LIBRE-2-PLUS",
     offers: {
       "@type": "Offer",
-      url: `${EU_SITE}${orderPath}`,
+      url: `${euSiteUrl(orderPath)}`,
       priceCurrency: "EUR",
       price: EU_LIST_PRICE_EUR,
       availability: "https://schema.org/InStock",
@@ -71,12 +70,12 @@ export function JsonLdEuProduct({ locale }: { locale: "ru" | "uk" }) {
         merchantReturnDays: 14,
         returnMethod: "https://schema.org/ReturnByMail",
         returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
-        url: `${EU_SITE}${termsPath}`,
+        url: `${euSiteUrl(termsPath)}`,
       },
       seller: {
         "@type": "Organization",
         name: "kupitsensor.eu",
-        url: EU_SITE,
+        url: euSiteUrl(),
       },
     },
   };

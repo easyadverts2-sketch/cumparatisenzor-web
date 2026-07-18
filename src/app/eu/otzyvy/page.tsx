@@ -9,8 +9,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/otzyvy",
     languages: {
-      ru: "https://kupitsensor.eu/otzyvy",
-      uk: "https://kupitsensor.eu/ua/vidhuky",
+      ru: "https://www.kupitsensor.eu/otzyvy",
+      uk: "https://www.kupitsensor.eu/ua/vidhuky",
     },
   },
 };

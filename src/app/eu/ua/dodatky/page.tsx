@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/ua/dodatky",
     languages: {
-      uk: "https://kupitsensor.eu/ua/dodatky",
-      ru: "https://kupitsensor.eu/prilozheniya",
+      uk: "https://www.kupitsensor.eu/ua/dodatky",
+      ru: "https://www.kupitsensor.eu/prilozheniya",
     },
   },
 };

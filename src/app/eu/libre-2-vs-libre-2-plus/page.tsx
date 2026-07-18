@@ -10,15 +10,15 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/libre-2-vs-libre-2-plus",
     languages: {
-      ru: "https://kupitsensor.eu/libre-2-vs-libre-2-plus",
-      uk: "https://kupitsensor.eu/ua/libre-2-vs-libre-2-plus",
+      ru: "https://www.kupitsensor.eu/libre-2-vs-libre-2-plus",
+      uk: "https://www.kupitsensor.eu/ua/libre-2-vs-libre-2-plus",
     },
   },
   openGraph: {
     locale: "ru_RU",
     title: c.metaTitle,
     description: c.metaDescription,
-    url: "https://kupitsensor.eu/libre-2-vs-libre-2-plus",
+    url: "https://www.kupitsensor.eu/libre-2-vs-libre-2-plus",
   },
 };
 
